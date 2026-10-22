@@ -30,7 +30,11 @@
   const fit = () => { const rest = st.offsetHeight - (plan.hidden ? 0 : plan.offsetHeight) + ft.offsetHeight; hero.style.height = Math.max(420, innerHeight - rest) + 'px'; };
   fit(); addEventListener('resize', fit); if (document.fonts) document.fonts.ready.then(fit);
   new IntersectionObserver(es => es.forEach(e => { window.__heroVisible = e.isIntersecting; })).observe(document.getElementById('top'));
-  const v = document.getElementById('heroVideo');
-  v.addEventListener('loadeddata', () => { v.hidden = false; document.getElementById('heroCanvas').style.visibility = 'hidden'; v.play().catch(() => {}); });
-  try { v.load(); } catch (e) {}
+  /* video first; the live 3D scene only renders if the video can't load */
+  const v = document.getElementById('heroVideo'), hc = document.getElementById('heroCanvas');
+  window.__heroVideoOn = true; hc.style.visibility = 'hidden';
+  const fallback = () => { window.__heroVideoOn = false; v.hidden = true; hc.style.visibility = ''; };
+  v.querySelector('source').addEventListener('error', fallback); v.addEventListener('error', fallback);
+  v.addEventListener('loadeddata', () => { v.play().catch(() => {}); });
+  new IntersectionObserver(es => es.forEach(e => { if (!v.hidden) e.isIntersecting ? v.play().catch(() => {}) : v.pause(); })).observe(hero);
 })();

@@ -11,8 +11,8 @@
 </header>
 
 <section class="hero" id="top">
-  <!-- 실제 촬영/제작 영상이 준비되면 같은 폴더에 hero.mp4 로 넣으면 아래 3D 장면 대신 영상이 재생됩니다 -->
-  <video id="heroVideo" muted loop playsinline autoplay preload="auto" hidden><source src="hero.mp4" type="video/mp4"></video>
+  <!-- 메인 배경 영상: 같은 폴더의 hero.mp4 (없거나 재생 실패 시 실시간 3D 장면으로 대체) -->
+  <video id="heroVideo" muted loop playsinline autoplay preload="auto" poster="hero-poster.jpg"><source src="hero.mp4" type="video/mp4"></video>
   <canvas id="heroCanvas" aria-hidden="true"></canvas>
   <div class="copy wrap">
     <p class="kicker">KORENS × ONE AUTOMATION</p>

@@ -1351,7 +1351,7 @@ function frame(now) {
   if (cfg.follow && !camAnim) { const T = ST.robots[0].tcpW(TOOL_G); controls.target.lerp(new THREE.Vector3(T[3], T[7], T[11]), 0.08); }
   controls.update();
   if (now - hudT > 100) { hud(); hudT = now; }
-  if (!HERO || window.__heroVisible !== false) renderer.render(scene, camera);
+  if (!HERO || (window.__heroVisible !== false && !window.__heroVideoOn)) renderer.render(scene, camera);
   if (viewer && viewer.active) renderViewer();
   requestAnimationFrame(frame);
 }
