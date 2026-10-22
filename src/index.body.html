@@ -1,0 +1,86 @@
+<header class="nav" id="nav">
+  <div class="wrap">
+    <button class="burger" id="burger" aria-label="메뉴 열기">≡</button>
+    <a class="logo" href="#top"><img src="{{LOGO}}" alt="ONE AUTOMATION"></a>
+    <ul class="menu" id="menu">
+      <li><a href="#station" id="stationLink">STATION</a></li>
+      <li><a href="#about" id="aboutLink">ABOUT US</a></li>
+    </ul>
+    <div class="util"><span class="lang"><b>KR</b> | EN</span></div>
+  </div>
+</header>
+
+<section class="hero" id="top">
+  <!-- 실제 촬영/제작 영상이 준비되면 같은 폴더에 hero.mp4 로 넣으면 아래 3D 장면 대신 영상이 재생됩니다 -->
+  <video id="heroVideo" muted loop playsinline autoplay preload="auto" hidden><source src="hero.mp4" type="video/mp4"></video>
+  <canvas id="heroCanvas" aria-hidden="true"></canvas>
+  <div class="copy wrap">
+    <p class="kicker">KORENS × ONE AUTOMATION</p>
+    <h1>EGR 쿨러 <span>니켈 페이스트</span> 자동 도포</h1>
+  </div>
+</section>
+
+<section class="station" id="station">
+  <div class="wrap">
+    <a class="open" href="console.html">STATION CONSOLE <span>→</span></a>
+
+    <div id="planWrap" hidden>
+    <div class="viewer">
+      <div class="vbox">
+        <canvas id="stationCanvas" aria-label="ONE STATION 3D 모델"></canvas>
+        <div class="hot" id="hot"></div>
+        <span class="hint">드래그해서 돌려보기</span>
+      </div>
+      <ol class="legend" id="legend"></ol>
+    </div>
+    <p class="note">지그 → DMC 판독 → 계량 → 포지셔너 장착 → 시린지 도포 → 재계량 → 지그 복귀. 지금 보이는 장면은 실제 사이클이 돌아가는 모습입니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="about" id="about" hidden>
+  <div class="wrap">
+    <div class="about-head">
+      <p class="eyebrow">About Us · Contact</p>
+      <h2>당신의 현장에<br><em>지능을 더할 시간입니다.</em></h2>
+      <p class="lead">코렌스의 EGR 쿨러 라인과 원오토메이션의 자동화 설비가 만나는 자리입니다. 문의는 아래 연락처로 바로 연결됩니다.</p>
+    </div>
+    <div class="duo">
+      <article class="co">
+        <div class="co-top"><img src="{{LOGO}}" alt="ONE AUTOMATION" class="co-logo"><span class="role">System Integrator</span></div>
+        <p class="co-name">주식회사 원오토메이션</p>
+        <dl>
+          <dt>Address</dt><dd>경남 창원시 마산회원구 봉암공단8길 46 A동</dd>
+          <dt>Phone</dt><dd class="mono sel">055-253-6067</dd>
+          <dt>Fax</dt><dd class="mono sel">055-253-6068</dd>
+          <dt>E-mail</dt><dd class="mono"><span class="sel" id="mail">one@oneauto.co.kr</span> <button class="copybtn" id="copyMail" type="button">복사</button></dd>
+        </dl>
+        <a class="maplink" href="https://map.naver.com/p/search/%EA%B2%BD%EB%82%A8%20%EC%B0%BD%EC%9B%90%EC%8B%9C%20%EB%A7%88%EC%82%B0%ED%9A%8C%EC%9B%90%EA%B5%AC%20%EB%B4%89%EC%95%94%EA%B3%B5%EB%8B%A88%EA%B8%B8%2046" target="_blank" rel="noopener">지도에서 보기 ↗</a>
+      </article>
+      <div class="x" aria-hidden="true">×</div>
+      <article class="co">
+        <div class="co-top"><span class="wordmark">KORENS</span><span class="role">Customer · Thermal Management</span></div>
+        <p class="co-name">주식회사 코렌스</p>
+        <dl>
+          <dt>Address</dt><dd>경상남도 양산시 어곡공단로 116 (어곡동)</dd>
+          <dt>Phone</dt><dd class="mono sel">055-371-6700</dd>
+          <dt>Fax</dt><dd class="mono sel">055-383-8480</dd>
+          <dt>Business No.</dt><dd class="mono sel">621-81-22590</dd>
+          <dt>CEO</dt><dd>하영대</dd>
+        </dl>
+        <a class="maplink" href="https://map.naver.com/p/search/%EA%B2%BD%EC%83%81%EB%82%A8%EB%8F%84%20%EC%96%91%EC%82%B0%EC%8B%9C%20%EC%96%B4%EA%B3%A1%EA%B3%B5%EB%8B%A8%EB%A1%9C%20116" target="_blank" rel="noopener">지도에서 보기 ↗</a>
+      </article>
+    </div>
+  </div>
+</section>
+
+<footer id="foot">
+  <div class="wrap">
+    <img src="{{LOGO}}" alt="ONE AUTOMATION">
+    <span>© 2026 ONE AUTOMATION × KORENS</span>
+  </div>
+</footer>
+<script>window.ONE_LOGO = "{{LOGO}}";</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
