@@ -23,3 +23,6 @@
 ```bash
 python3 build.py   # src/ → dist/local/(단독 실행용), dist/artifact/
 ```
+
+## 배포 (Vercel)
+`vercel.json`이 `site/` 폴더를 그대로 정적 배포하도록 설정되어 있습니다. Vercel에서 이 레포를 Import하고 설정을 바꾸지 않은 채 Deploy하면 됩니다.
