@@ -37,6 +37,10 @@ a{color:inherit}
 .contact:hover{border-color:var(--cyan);color:var(--cyan)}
 .burger{display:none;background:none;border:0;color:#fff;font-size:24px;cursor:pointer;position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:26px}
 .copy{position:absolute;left:0;right:0;top:50%;transform:translateY(-35%);z-index:2;text-align:center}
+.copy{transition:opacity .45s ease,transform .45s ease}
+.hero.outro .copy{opacity:0;transform:translateY(-30%);pointer-events:none}
+.hero.outro::after{opacity:.35;transition:opacity .45s}
+.hero::after{transition:opacity .6s}
 .kicker{font-family:var(--mono);font-size:12.5px;letter-spacing:.24em;color:var(--cyan);margin:0 0 14px}
 .hero h1{margin:0;font-size:clamp(32px,5.2vw,68px);font-weight:600;letter-spacing:-.035em;line-height:1.12;text-wrap:balance;text-shadow:0 4px 30px rgba(0,0,0,.5)}
 .hero h1 span{font-weight:300}

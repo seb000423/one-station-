@@ -36,5 +36,13 @@
   const fallback = () => { window.__heroVideoOn = false; v.hidden = true; hc.style.visibility = ''; };
   v.querySelector('source').addEventListener('error', fallback); v.addEventListener('error', fallback);
   v.addEventListener('loadeddata', () => { v.play().catch(() => {}); });
+  /* the video ends on its own ONE AUTOMATION × KORENS title card (~12.9 s → end):
+     hide the overlaid headline then, bring it back once the loop has faded in again */
+  const OUTRO = 12.85, BACK = 0.35;
+  const tick = () => {
+    if (!v.hidden && !v.paused) hero.classList.toggle('outro', v.currentTime >= OUTRO || v.currentTime < BACK);
+    (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick));
+  };
+  v.requestVideoFrameCallback ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
   new IntersectionObserver(es => es.forEach(e => { if (!v.hidden) e.isIntersecting ? v.play().catch(() => {}) : v.pause(); })).observe(hero);
 })();
