@@ -186,6 +186,15 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 .ronote{font-size:11.5px;color:var(--mute);border:1px dashed var(--line);padding:8px 10px;margin:0 0 4px;line-height:1.6}
 .ronote code{font-family:var(--mono);color:var(--accent)}
 #syncNote{font-size:11.5px;color:var(--mute);line-height:1.6}
+.side .scroll > .sec{min-width:0}
+.savepick{display:flex;gap:6px;min-width:0}
+#savePick{width:100%;text-overflow:ellipsis}
+.ronote{overflow-wrap:anywhere}
+#savePick{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
+#savePick:focus{outline:none;border-color:var(--accent)}
+#saveDel{background:var(--panel2);border:1px solid var(--line);color:var(--mute);padding:0 12px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px}
+#saveDel:hover{color:var(--ng);border-color:var(--ng)}
+#saveInfo{font-family:var(--mono)}
 @media (max-width: 900px){
   .view .tl{left:14px;right:14px;top:auto;bottom:56px}
   .view .tr{left:56px;right:92px}
@@ -236,7 +245,11 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     <aside class="side" aria-label="파라미터">
       <div class="scroll">
         <div class="sec">
-          <p class="ronote">콘솔 2는 콘솔 1에서 녹화한 사이클을 재생합니다. 제품·지그 수·파라미터를 바꾸려면 콘솔 1에서 바꾼 뒤 <code>node tools/export-station-glb.cjs</code> 로 모델을 다시 만들어야 해서, 아래 설정은 표시만 됩니다.</p>
+          <div class="field">
+            <div class="lbl">모니터링 대상 <small id="saveInfo"></small></div>
+            <div class="savepick"><select id="savePick" aria-label="저장된 스테이션"><option value="">기본 스테이션 (튜브형 · 지그 6개)</option></select><button type="button" id="saveDel" hidden>삭제</button></div>
+          </div>
+          <p class="ronote">콘솔 2는 콘솔 1에서 녹화한 사이클을 재생합니다. 설정을 바꾸려면 콘솔 1에서 바꾼 뒤 <b>저장</b>하고 여기서 불러오세요. 아래 설정은 불러온 스테이션의 값이며 표시만 됩니다.</p>
         </div>
         <div class="sec ro">
           <h3>제품 (Product)</h3>
@@ -325,13 +338,17 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 (() => {
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
   const PHASE_KO = { idle: '대기', loading: '로딩', closing: '도어 닫힘', running: '사이클 진행', opening: '도어 열림', done: '완료' };
-  // console 1's station and recorded cycle, exported by tools/export-station-glb.cjs; ?glb= needs an absolute URL
-  const GLB = new URL('realvirtual-models/station.glb', location.href).href;
-  const TIMELINE = new URL('realvirtual-models/station-timeline.json', location.href).href;
-  const URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
+  // the station on screen: the default export (tools/export-station-glb.cjs) or a save from console 1's 저장 (api/saves)
+  const DEFAULT = { glb: new URL('realvirtual-models/station.glb', location.href).href, timeline: new URL('realvirtual-models/station-timeline.json', location.href).href };
+  let GLB, TIMELINE, URL_RV;
   const frame = $('#rv'), off = $('#offline');
-  $('#rvLink').href = URL_RV; $('#rvLink').textContent = '스테이션 뷰어';
-  let TL = null;
+  let TL = null, lastF = -1, lastRes = null, viewer = null;
+  function setTarget(t) {
+    GLB = t.glb; TIMELINE = t.timeline; // ?glb= needs an absolute URL
+    URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
+    $('#rvLink').href = URL_RV; $('#rvLink').textContent = '스테이션 뷰어';
+    TL = null; lastF = -1; lastRes = null; viewer = null;
+  }
 
   const load = () => {
     Promise.all([fetch(GLB, { method: 'HEAD', cache: 'no-store' }), fetch(TIMELINE).then(r => r.ok ? r.json() : null)])
@@ -343,6 +360,37 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
       .catch(() => { off.hidden = false; });
   };
   $('#retry').addEventListener('click', load);
+
+  /* ---------- saved stations ---------- */
+  let saves = [];
+  const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
+  const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };
+  function choose(id) {
+    const s = saves.find(x => x.id === id);
+    setTarget(s ? { glb: s.glb, timeline: s.timeline } : DEFAULT);
+    $('#savePick').value = s ? s.id : '';
+    $('#saveDel').hidden = !s;
+    const m = s && s.summary;
+    $('#saveInfo').textContent = m && m.cycleTotal ? `C/T ${(m.cycleTotal / m.parts).toFixed(1)} s · OK ${m.ok} / NOK ${m.ng}` : '';
+    const u = new URL(location.href); if (s) u.searchParams.set('save', s.id); else u.searchParams.delete('save'); history.replaceState(null, '', u);
+    load();
+  }
+  async function loadSaves() {
+    try {
+      const r = await fetch('api/saves', { cache: 'no-store' });
+      if (!r.ok) return;
+      saves = (await r.json()).saves || [];
+      $('#savePick').innerHTML = '<option value="">기본 스테이션 (튜브형 · 지그 6개)</option>' + saves.map(s => `<option value="${s.id}">${label(s).replace(/[<>&"]/g, '')}</option>`).join('');
+    } catch (e) { /* no API (local file / not deployed): default station only */ }
+  }
+  $('#savePick').addEventListener('change', e => choose(e.target.value));
+  $('#saveDel').addEventListener('click', async () => {
+    const s = saves.find(x => x.id === $('#savePick').value); if (!s) return;
+    const password = prompt(`"${s.name}" 저장본을 삭제합니다. 저장 비밀번호를 입력하세요.`); if (!password) return;
+    const r = await fetch('api/saves', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, password }) });
+    if (!r.ok) return alert('삭제 실패: ' + ((await r.json().catch(() => ({}))).error || r.status));
+    await loadSaves(); choose('');
+  });
 
   /* ---------- static panel content (captured from console 1 by the exporter) ---------- */
   function initPanels() {
@@ -362,7 +410,6 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
      realvirtual WEB exposes no host API for the full viewer, so the frame is read from its own
      playback object: the same-origin iframe's toolbar clock (data-testid="sim-clock") is a React
      component that receives the viewer as a prop. Falls back to the clock (1x) if that changes. */
-  let viewer = null;
   function findViewer() {
     try {
       const doc = frame.contentDocument, el = doc && doc.querySelector('[data-testid="sim-clock"]');
@@ -387,7 +434,6 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   /* ---------- HUD + results at a recorded frame (same rendering as console 1) ---------- */
   const at = (segs, f) => { let lo = 0, hi = segs.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (segs[m][0] <= f) lo = m; else hi = m - 1; } return segs[lo][1]; };
   const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0'); };
-  let lastF = -1, lastRes = null;
   function render(f) {
     if (!TL || f === lastF) return; lastF = f;
     const phase = at(TL.phase, f), results = at(TL.results, f), N = TL.parts, step = at(TL.step, f);
@@ -440,7 +486,9 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     $$('[data-view]').forEach(x => x.classList.toggle('on', x === b));
   }));
 
-  load();
+  setTarget(DEFAULT);
+  const wanted = new URL(location.href).searchParams.get('save');
+  loadSaves().then(() => { if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else load(); });
 })();
 </script>
 </body>
