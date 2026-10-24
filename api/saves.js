@@ -1,4 +1,5 @@
 // GET: list saved stations (newest first). DELETE {id, password}: remove one save.
+// POST {action: "check", password}: verify the save password before console 1 records.
 import { list, del } from '@vercel/blob';
 import { PREFIX, ID_RE, checkPassword, sendJson } from './_lib.js';
 
@@ -33,7 +34,11 @@ export default async function handler(req, res) {
       if (blobs.length) await del(blobs.map(b => b.url));
       return sendJson(res, 200, { removed: blobs.length });
     }
-    sendJson(res, 405, { error: 'GET or DELETE' });
+    if (req.method === 'POST' && (req.body || {}).action === 'check') {
+      checkPassword(req.body.password);
+      return sendJson(res, 200, { ok: true });
+    }
+    sendJson(res, 405, { error: 'GET, POST check or DELETE' });
   } catch (e) {
     sendJson(res, /password/.test(e.message) ? 401 : 500, { error: e.message });
   }

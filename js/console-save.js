@@ -59,6 +59,9 @@ function dialog() {
       const health = await fetch('api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
       if (!health.uploadMode) throw new Error('저장소(Vercel Blob)가 연결되지 않았습니다');
       if (!health.savePassword) throw new Error('SAVE_PASSWORD not configured');
+      const chk = await fetch('api/saves', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'check', password }) });
+      if (chk.status === 401) throw new Error('wrong password');
+      if (!chk.ok) throw new Error('비밀번호 확인 실패 (' + chk.status + ')');
       say('사이클 녹화 중… (몇 초 걸립니다)');
       await new Promise(r => setTimeout(r, 60)); // let the message paint before the synchronous recording
       const { glb, timeline } = await window.StationExport.exportStation();
