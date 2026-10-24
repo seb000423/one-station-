@@ -41,6 +41,36 @@
     return c;
   }
 
+  const FACTORY_DEFAULT = { width: 12, depth: 10, height: 5 };
+  const layoutOf = S => ({ factory: window.LayoutEditor ? window.LayoutEditor.factory() : { ...FACTORY_DEFAULT }, ...(S.layoutParams ? S.layoutParams() : {}) });
+
+  // steps console 1's cycle from START at fixed H; onFrame() runs every SUB steps; returns whether it finished
+  function runCycle(S, onFrame) {
+    let t = 0, tail = 0;
+    S.startCycle();
+    while (tail < 1 / DT && t < 3600) {
+      for (let k = 0; k < SUB; k++) { t += H; S.sim.t += H; if (S.sim.dir) S.sim.dir.step(H); if (S.sim.phase === 'running') S.sim.execs.forEach(e => e.step(H)); }
+      onFrame();
+      if (S.sim.phase === 'done') tail++;
+    }
+    return S.sim.phase === 'done';
+  }
+  const holdParts = S => S.ST.parts.forEach(p => { if (p.held) p.setPose(mulRM(p.held.robot.tcpW(TOOL_G), p.held.off)); else if (p.mount === 'pos') p.setPose(S.posePart(S.ST.pos.A, S.ST.pos.C)); });
+
+  // "도달 검사": one full cycle on the current layout without exporting; console 1 is reset afterwards
+  function checkCycle() {
+    const S = window.__station;
+    if (!(S.sim.phase === 'idle' || S.sim.phase === 'done')) throw new Error('사이클 중에는 검사할 수 없습니다');
+    const simSpeed = S.cfg.sim;
+    S.resetAll(); S.cfg.sim = 0;
+    let completed;
+    try { completed = runCycle(S, () => { S.ST.robots.forEach(r => r.update()); S.ST.pos.update(); holdParts(S); }); }
+    finally { S.cfg.sim = simSpeed; }
+    const res = { completed, cycleTotal: S.sim.cycleTotal || S.sim.t, parts: S.ST.parts.length, ikFail: S.ST.robots.reduce((a, r) => a + r.ikFail, 0), reason: completed ? '' : `${(S.sim.t / 60).toFixed(0)}분 시뮬레이션 후에도 진행 중` };
+    S.resetAll();
+    return res;
+  }
+
   async function exportStation() {
     const S = window.__station;
     if (!S || !S.ST) throw new Error('console 1 station not ready');
@@ -55,7 +85,7 @@
       cellDesc: $('#cellDesc').textContent, beadV: $('#beadV').textContent, speedV: $('#speedV').textContent,
       tolV: $('#tolV').textContent, faultV: $('#faultV').textContent, kTgt: $('#kTgt').textContent,
       jointList: $('#jointList').innerHTML, variant: S.cfg.variant, slots: S.cfg.slots, beadW: S.cfg.beadW, speed: S.cfg.speed, tol: S.cfg.tol, fault: S.cfg.fault,
-      joints: [...S.cfg.joints]
+      joints: [...S.cfg.joints], layout: layoutOf(S)
     };
     // HUD state exactly as console.html hud() derives it
     const hudState = () => {
@@ -86,8 +116,8 @@
       v.Positioner_A_Tilt = ST.pos.tilt.rotation.x; v.Positioner_C_Rotary = ST.pos.rot.rotation.y;
       ST.pos.clamps.forEach((c, i) => v[`Positioner_Clamp_${i + 1}`] = c.rotation.x);
       ST.leaves.forEach((l, i) => v[i ? 'Door_Leaf_R' : 'Door_Leaf_L'] = l.position.x);
+      holdParts(S);
       ST.parts.forEach((p, i) => {
-        if (p.held) p.setPose(mulRM(p.held.robot.tcpW(TOOL_G), p.held.off)); else if (p.mount === 'pos') p.setPose(S.posePart(ST.pos.A, ST.pos.C));
         const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
         rowMajor(p.pose).decompose(pos, q, sc);
         const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
@@ -98,20 +128,15 @@
       return v;
     };
     S.cfg.sim = 0; // console 1's own loop keeps rendering but does not step while we record
-    let rec, cycleSec;
+    let rec, cycleSec, completed;
     try {
       rec = [sample()];
-      S.startCycle();
-      let t = 0, tail = 0;
-      while (tail < 1 / DT && t < 3600) {
-        for (let k = 0; k < SUB; k++) { t += H; S.sim.t += H; if (S.sim.dir) S.sim.dir.step(H); if (S.sim.phase === 'running') S.sim.execs.forEach(e => e.step(H)); }
-        rec.push(sample());
-        if (S.sim.phase === 'done') tail++;
-      }
+      completed = runCycle(S, () => rec.push(sample()));
       cycleSec = S.sim.cycleTotal;
     } finally {
       S.cfg.sim = simSpeed;
     }
+    if (!completed) { S.resetAll(); throw new Error('사이클이 끝나지 않는 배치입니다. 레이아웃 편집의 "도달 검사"로 확인하세요'); }
     const hiddenFrames = rec.filter(v => v.__hidden).length;
     // console.html's '홈 복귀' segment overrides begin() without setting dq, so R1's joints turn NaN
     // from there to the end of the cycle. Replay what it intends: ease back to the home pose over
@@ -154,7 +179,13 @@
     });
     ST.group.updateMatrixWorld(true);
     const root = new THREE.Group(); root.name = 'ONE_STATION';
-    const group = cloneWithMap(ST.group, map); root.add(group);
+    const lay = panel.layout;
+    root.add(buildFactory(lay.factory));
+    // the cell carries the station's placement in the factory; everything recorded is in cell coordinates
+    const cellG = new THREE.Group(); cellG.name = 'Cell';
+    if (lay.cell) { cellG.position.set(lay.cell.x, 0, lay.cell.z); cellG.rotation.y = lay.cell.rot || 0; }
+    root.add(cellG);
+    const group = cloneWithMap(ST.group, map); cellG.add(group);
     const parts = ST.parts.map(p => cloneWithMap(p.obj, map));
     const name = (o, n) => { if (o) o.name = n; };
     const meshesWith = mat => { const out = []; group.traverse(o => { if (o.isMesh && o.material === mat) out.push(o); }); return out; };
@@ -203,7 +234,7 @@
       const obj = parts[i], pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
       rowMajor(p.pose).decompose(pos, q, sc);
       const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
-      let parent = root;
+      let parent = cellG;
       const chain = [['TX', n => n.position.x = pos.x], ['TY', n => n.position.y = pos.y], ['TZ', n => n.position.z = pos.z], ['RY', n => n.rotation.y = e.y], ['RX', n => n.rotation.x = e.x], ['RZ', n => n.rotation.z = e.z]];
       chain.forEach(([k, set]) => { const n = new THREE.Group(); n.name = `Part${i + 1}_${k}`; set(n); parent.add(n); parent = n; });
       name(obj, `Part${i + 1}_${p.code}`);
@@ -260,5 +291,20 @@
     return { glb, timeline, info: { nanFramesFixed: nanFrames, frames: rec.length, playbackSec: +(rec.length * DT).toFixed(1), cycleSec, drives: D.length, hiddenFrames, linkPoseError: maxErr } };
   }
 
-  window.StationExport = { exportStation };
+  // factory shell for the export: floor, edge marking, corner columns and ceiling outline
+  function buildFactory(f) {
+    const { width: W, depth: D, height: Hh } = f || FACTORY_DEFAULT, g = new THREE.Group(); g.name = 'Factory';
+    const mat = (color, o) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.7, metalness: 0.2 }, o));
+    const floorM = mat(0x2a2f36, { roughness: 0.9, metalness: 0 }), beam = mat(0x59636e), curb = mat(0xd6b21a);
+    const box = (n, w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.name = n; b.position.set(x, y, z); g.add(b); };
+    box('Factory_Floor', W, 0.004, D, floorM, 0, 0.002, 0);
+    [[W, 0.06, 0, -D / 2], [W, 0.06, 0, D / 2], [0.06, D, -W / 2, 0], [0.06, D, W / 2, 0]].forEach(([w, d, x, z], i) => {
+      box('Factory_Edge_' + i, w, 0.02, d, curb, x, 0.01, z);
+      box('Factory_Ceiling_' + i, Math.max(w, 0.08), 0.08, Math.max(d, 0.08), beam, x, Hh, z);
+    });
+    [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]].forEach(([x, z], i) => box('Factory_Column_' + i, 0.16, Hh, 0.16, beam, x, Hh / 2, z));
+    return g;
+  }
+
+  window.StationExport = { exportStation, checkCycle };
 })();

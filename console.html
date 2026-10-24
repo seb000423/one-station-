@@ -426,7 +426,8 @@ if (typeof module !== 'undefined') module.exports = KIN;
 const K = KIN, D2R = Math.PI / 180, Y = new THREE.Vector3(0, 1, 0);
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const HERO = !!window.HERO_MODE;
-const TABLE_Y = 0.85, BASE_Y = 0.95, JIG_Z = 0.45, NEST_TOP = 0.91;
+const TABLE_Y = 0.85, BASE_Y = 0.95, NEST_TOP = 0.91;
+let JIG_Z = 0.45, RAIL_Z = -0.12; // jig row and R1 rail line (layout editor: js/layout-editor.js)
 const ST_Z = { dmc: -0.58, scale: -0.62 };
 const TOOL_G = K.trans(0, 0, 0.155);
 const TOOL_N = K.trans(0, 0, 0.237);            // syringe needle tip (dispensing FR5)
@@ -479,6 +480,9 @@ const fill = new THREE.DirectionalLight(0xbfd4ff, 0.45); fill.position.set(-4, 3
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({ color: 0x0c0e11, roughness: 0.9, envMapIntensity: 0.1 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 const grid = new THREE.GridHelper(40, 80, 0x2c323b, 0x1b1f25); grid.position.y = 0.002; scene.add(grid);
+// the station (and its parts) sits in a cell that the layout editor places in the factory
+const CELL = new THREE.Group(); CELL.name = 'cell'; scene.add(CELL);
+scene.add(sun.target);
 // floor safety marking
 {
   const m = new THREE.MeshBasicMaterial({ color: 0xd6b21a });
@@ -772,7 +776,7 @@ function buildPartMesh(variant, code) {
 function makePart(variant, slotIdx, code) {
   const V = VARIANTS[variant];
   const obj = buildPartMesh(variant, code);
-  obj.matrixAutoUpdate = false; scene.add(obj);
+  obj.matrixAutoUpdate = false; CELL.add(obj);
   const joints = V.joints().filter(j => cfg.joints.has(j.id));
   const r = cfg.beadW / 2000 * 1.5; // visual radius (exaggerated for legibility)
   let target = 0;
@@ -822,7 +826,7 @@ function layout() {
   const slotsX = [...Array(n)].map((_, i) => +((i - (n - 1) / 2) * sp).toFixed(3));
   const xs = slotsX.concat([LAYOUT_X.dmc, LAYOUT_X.scale, POS.x]);
   const robots = [
-    { name: 'R1', kind: 'handler', x: 0, z: -0.12, rail: true, railRange: [Math.min(...xs), Math.max(...xs)], dmcX: LAYOUT_X.dmc, scaleX: LAYOUT_X.scale, slots: slotsX.map((_, i) => i) },
+    { name: 'R1', kind: 'handler', x: 0, z: RAIL_Z, rail: true, railRange: [Math.min(...xs), Math.max(...xs)], dmcX: LAYOUT_X.dmc, scaleX: LAYOUT_X.scale, slots: slotsX.map((_, i) => i) },
     { name: 'R2', kind: 'dispenser', x: R2_AT.x, z: R2_AT.z, rail: false }
   ];
   // enclosure sized so both arms' swept volume (measured over full cycles) stays inside the glass
@@ -844,7 +848,7 @@ function disposeGroup(g) {
 function buildStation() {
   if (ST) { disposeGroup(ST.group); ST.parts.forEach(p => disposeGroup(p.obj)); }
   const LY = layout();
-  const g = new THREE.Group(); scene.add(g);
+  const g = new THREE.Group(); CELL.add(g);
   const { W, D, zc } = LY, x0 = -W / 2, x1 = W / 2, z0 = zc - D / 2, z1 = zc + D / 2;
   { const fw = W + 1.6, fd = D + 1.6;
     for (const [w, d, x, z] of [[fw, 0.05, 0, zc + fd / 2], [fw, 0.05, 0, zc - fd / 2], [0.05, fd, -fw / 2, zc], [0.05, fd, fw / 2, zc]]) {
@@ -1603,6 +1607,24 @@ function startCycle() {
   sim.dir = d; sim.phase = 'loading';
 }
 
+/* ---------- layout (cell placement + station equipment positions), see js/layout-editor.js ---------- */
+const LAYOUT_DEFAULT = { cell: { x: 0, z: 0, rot: 0 }, positioner: { x: 0.30, z: -0.66 }, r2: { x: 0.90, z: -0.66 }, dmc: { x: -0.66, z: -0.58 }, scale: { x: -0.24, z: -0.62 }, jig: { z: 0.45 }, rail: { z: -0.12 } };
+function layoutParams() {
+  return { cell: { x: CELL.position.x, z: CELL.position.z, rot: CELL.rotation.y }, positioner: { x: POS.x, z: POS.z }, r2: { x: R2_AT.x, z: R2_AT.z },
+    dmc: { x: LAYOUT_X.dmc, z: ST_Z.dmc }, scale: { x: LAYOUT_X.scale, z: ST_Z.scale }, jig: { z: JIG_Z }, rail: { z: RAIL_Z } };
+}
+function applyLayout(L) {
+  if (busy()) return false;
+  const v = Object.assign({}, LAYOUT_DEFAULT, L || {});
+  CELL.position.set(v.cell.x, 0, v.cell.z); CELL.rotation.set(0, v.cell.rot || 0, 0); CELL.updateMatrixWorld(true);
+  POS.x = v.positioner.x; POS.z = v.positioner.z; R2_AT.x = v.r2.x; R2_AT.z = v.r2.z;
+  LAYOUT_X.dmc = v.dmc.x; ST_Z.dmc = v.dmc.z; LAYOUT_X.scale = v.scale.x; ST_Z.scale = v.scale.z;
+  JIG_Z = v.jig.z; RAIL_Z = v.rail.z;
+  sun.position.set(CELL.position.x + 3, 6, CELL.position.z + 4); sun.target.position.copy(CELL.position);
+  resetAll();
+  return true;
+}
+
 function resetAll() { sim.phase = 'idle'; sim.dir = null; sim.execs = []; sim.t = 0; sim.cycleTotal = null; buildStation(); updateUI(); }
 
 /* =========================================================
@@ -1696,7 +1718,8 @@ function setView(v) {
     scale: [[POS.x - 0.55, 1.65, -0.05], [POS.x + 0.1, 1.15, -0.66]],
     follow: [[camera.position.x, camera.position.y, camera.position.z], [controls.target.x, controls.target.y, controls.target.z]]
   }[v];
-  camAnim = { p0: camera.position.clone(), t0: controls.target.clone(), p1: new THREE.Vector3(...V[0]), t1: new THREE.Vector3(...V[1]), f: 0 };
+  const inCell = (a, own) => own ? new THREE.Vector3(...a) : new THREE.Vector3(...a).applyMatrix4(CELL.matrixWorld);
+  camAnim = { p0: camera.position.clone(), t0: controls.target.clone(), p1: inCell(V[0], v === 'follow'), t1: inCell(V[1], v === 'follow'), f: 0 };
 }
 
 /* ---------- HUD ---------- */
@@ -1771,7 +1794,7 @@ function frame(now) {
     if (camAnim.f >= 1) camAnim = null;
   }
   if (HERO) heroDirector(rawDt);
-  if (cfg.follow && !camAnim) { const T = ST.robots[0].tcpW(TOOL_G); controls.target.lerp(new THREE.Vector3(T[3], T[7], T[11]), 0.08); }
+  if (cfg.follow && !camAnim) { const T = ST.robots[0].tcpW(TOOL_G); controls.target.lerp(new THREE.Vector3(T[3], T[7], T[11]).applyMatrix4(CELL.matrixWorld), 0.08); }
   controls.update();
   if (now - hudT > 100) { hud(); hudT = now; }
   if (!HERO || (window.__heroVisible !== false && !window.__heroVideoOn)) renderer.render(scene, camera);
@@ -1846,12 +1869,13 @@ requestAnimationFrame(frame);
 if (document.fonts && document.fonts.load) document.fonts.load('600 50px "Bodoni Moda"').then(() => ST_plate && ST_plate.draw()).catch(() => {});
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { ST_plate && ST_plate.draw(); renderTable(); ST.parts.length; });
 function fastForward(sec) { const h = 0.02; for (let k = 0; k < sec / h && busy(); k++) { sim.t += h; sim.dir.step(h); if (sim.phase === 'running') sim.execs.forEach(e => e.step(h)); } }
-window.__station = { envInfo, envHit, collideInfo, readyPose, planPass, get PASS_CACHE() { return PASS_CACHE; }, collides, collBoxes, robotSamples, mountViewer, get viewer() { return viewer; }, R2_AT, POS, TUNE, choosePosList, posePart, VARIANTS, chainIK, TOOL_N, camera, controls, setView, sim, cfg, get ST() { return ST; }, startCycle, fastForward, resetAll };
+window.__station = { applyLayout, layoutParams, LAYOUT_DEFAULT, CELL, scene, floor, grid, renderer, envInfo, envHit, collideInfo, readyPose, planPass, get PASS_CACHE() { return PASS_CACHE; }, collides, collBoxes, robotSamples, mountViewer, get viewer() { return viewer; }, R2_AT, POS, TUNE, choosePosList, posePart, VARIANTS, chainIK, TOOL_N, camera, controls, setView, sim, cfg, get ST() { return ST; }, startCycle, fastForward, resetAll };
 })();
 
 </script>
 
 <script src="js/station-export.js"></script>
+<script src="js/layout-editor.js"></script>
 <script type="module" src="js/console-save.js"></script>
 </body>
 </html>

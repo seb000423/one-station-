@@ -72,6 +72,7 @@ function dialog() {
       const P = timeline.panel, last = timeline.results[timeline.results.length - 1][1];
       const meta = { name, created: new Date().toISOString(), summary: {
         variant: P.variant, slots: P.slots, beadW: P.beadW, speed: P.speed, tol: P.tol, fault: P.fault, joints: P.joints,
+        layout: P.layout,
         parts: timeline.parts, cycleTotal: timeline.cycleTotal, ok: last.filter(r => r.ok === true).length, ng: last.filter(r => r.ok === false).length
       } };
       await put('station.glb', new Blob([glb], { type: 'model/gltf-binary' }), 'model/gltf-binary');
