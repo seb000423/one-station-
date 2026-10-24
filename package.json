@@ -1,0 +1,9 @@
+{
+  "name": "one-station",
+  "private": true,
+  "type": "module",
+  "description": "ONE STATION site: static pages plus Vercel functions (api/) that save and list console 1 stations in Vercel Blob",
+  "dependencies": {
+    "@vercel/blob": "2.8.1"
+  }
+}
