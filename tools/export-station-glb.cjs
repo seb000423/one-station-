@@ -9,6 +9,11 @@
 // clamps, door leaves and gripper fingers become drives, and each product gets a 6-axis
 // (XYZ + YXZ rotation) rig so it follows the gripper and the positioner.
 //
+// The same run also writes station-timeline.json next to the GLB: what console 1's HUD and
+// result table show at every recorded frame, plus the static panel content, so console2.html
+// can show console 1's panels in sync with the realvirtual playback. Math.random is seeded,
+// so the DMC codes, weights and simulated faults are the same on every export.
+//
 // Usage (needs Node and Playwright; Microsoft Edge is used as the browser):
 //   node tools/export-station-glb.cjs [path/to/playwright] [out.glb]
 // The playwright path defaults to ../realvirtual-WEB/node_modules/playwright.
@@ -17,6 +22,8 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const PW = process.argv[2] || path.resolve(ROOT, '../realvirtual-WEB/node_modules/playwright');
 const OUT = path.resolve(process.argv[3] || path.join(ROOT, 'realvirtual-models/station.glb'));
+const TIMELINE = OUT.replace(/.glb$/i, '') + '-timeline.json';
+const SEED = 20261024;
 const EXPORTER = 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/exporters/GLTFExporter.js';
 const { chromium } = require(PW);
 
@@ -48,6 +55,31 @@ async function exportInPage() {
   const mulRM = (A, B) => { const C = new Array(16); for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) C[r * 4 + c] = A[r * 4] * B[c] + A[r * 4 + 1] * B[4 + c] + A[r * 4 + 2] * B[8 + c] + A[r * 4 + 3] * B[12 + c]; return C; };
   const DEG = 180 / Math.PI;
 
+  // ---------- 0. static panel content, as console 1 renders it ----------
+  const $ = q => document.querySelector(q);
+  const panel = {
+    cellDesc: $('#cellDesc').textContent, beadV: $('#beadV').textContent, speedV: $('#speedV').textContent,
+    tolV: $('#tolV').textContent, faultV: $('#faultV').textContent, kTgt: $('#kTgt').textContent,
+    jointList: $('#jointList').innerHTML, variant: S.cfg.variant, slots: S.cfg.slots, beadW: S.cfg.beadW, speed: S.cfg.speed, tol: S.cfg.tol, fault: S.cfg.fault
+  };
+  // same strings as console.html STEPS (used by its HUD outside the running phase)
+  const STEPS = ['지그 로딩·센서 확인', 'START·도어 닫힘', '파트 픽업', 'DMC 판독', '계량 (도포 전)', '포지셔너 회전 · Ni 페이스트 도포', '계량 (도포 후)', '지그 복귀', '판정·도어 열림'];
+  // HUD state exactly as console.html hud() derives it
+  const hudState = () => {
+    const sim = S.sim, ST = S.ST; let curStep = 0;
+    const labels = ST.robots.map((r, i) => {
+      const ex = sim.execs[i], c = ex && ex.cur; let lbl = '대기';
+      if (sim.phase === 'running') lbl = c ? c.label || '' : (ex && ex.doneAll ? '완료' : '');
+      else if (sim.dir && sim.dir.cur && sim.dir.cur.step) lbl = STEPS[sim.dir.cur.step - 1];
+      if (i === 0) curStep = sim.phase === 'running' ? (c && c.step) || 0 : (sim.dir && sim.dir.cur ? sim.dir.cur.step || 0 : 0);
+      return lbl;
+    });
+    const results = JSON.stringify(sim.results.map(r => ({ code: r.code, seen: !!r.seen, w0: r.w0 ?? null, d: r.d ?? null, dev: r.dev ?? null, ok: r.ok ?? null, fault: r.fault ? { joint: r.fault.joint, kind: r.fault.kind } : null })));
+    const R = ST.robots, jr = R.map(r => r.q.map(v => v * DEG)).flat().concat([R[0].s * 1000, ST.pos.A * DEG, ST.pos.C * DEG]);
+    return { phase: sim.phase, t: sim.t, r1: labels[0], r2: labels[1], step: curStep, results, ik: R.reduce((a, b) => a + b.ikFail, 0), jr };
+  };
+  const hudRec = [];
+
   // ---------- 1. record console 1's cycle (values only) ----------
   const H = 0.02, SPEED = 4, DT = 0.04, SUB = Math.round(DT * SPEED / H); // simulate at 20 ms, one 40 ms frame per 160 ms of sim time
   const sample = () => {
@@ -70,6 +102,7 @@ async function exportInPage() {
       Object.assign(v, { [`Part${i + 1}_TX`]: pos.x, [`Part${i + 1}_TY`]: pos.y, [`Part${i + 1}_TZ`]: pos.z, [`Part${i + 1}_RY`]: e.y, [`Part${i + 1}_RX`]: e.x, [`Part${i + 1}_RZ`]: e.z });
       if (!p.obj.visible) v.__hidden = (v.__hidden || 0) + 1;
     });
+    hudRec.push(hudState());
     return v;
   };
   S.cfg.sim = 0;
@@ -82,6 +115,29 @@ async function exportInPage() {
     if (S.sim.phase === 'done') tail++;
   }
   const cycleSec = S.sim.cycleTotal, hiddenFrames = rec.filter(v => v.__hidden).length;
+  // console.html's '홈 복귀' segment overrides begin() without setting dq, so R1's joints turn NaN
+  // from there to the end of the cycle. Replay what it intends: ease back to the home pose over
+  // that segment's frames, then hold it.
+  let nanFrames = 0;
+  Object.keys(rec[0]).forEach(key => {
+    for (let a = 0; a < rec.length; a++) {
+      if (!Number.isNaN(rec[a][key])) continue;
+      let b = a; while (b + 1 < rec.length && Number.isNaN(rec[b + 1][key])) b++;
+      let k = 0; while (a + k <= b && hudRec[a + k].r1 === '홈 복귀') k++;
+      const from = a ? rec[a - 1][key] : rec[0][key], to = rec[0][key];
+      for (let i = a; i <= b; i++) { const t = k ? Math.min(1, (i - a + 1) / k) : 1, e = t * t * (3 - 2 * t); rec[i][key] = from + (to - from) * e; nanFrames++; }
+      a = b;
+    }
+  });
+  hudRec.forEach((h, f) => S.ST.robots.forEach((r, ri) => { for (let i = 0; i < 6; i++) h.jr[ri * 6 + i] = rec[f][`${r.name}_J${i + 1}`] * DEG; }));
+  // change points only, except the joint readout (every 2nd frame)
+  const seg = key => { const out = []; hudRec.forEach((h, f) => { if (!out.length || out[out.length - 1][1] !== h[key]) out.push([f, h[key]]); }); return out; };
+  const timeline = {
+    version: 1, frames: hudRec.length, fixedDeltaTime: DT, simPerFrame: H * SUB, parts: S.ST.parts.length, cycleTotal: cycleSec, steps: STEPS, panel,
+    phase: seg('phase'), r1: seg('r1'), r2: seg('r2'), step: seg('step'), ik: seg('ik'),
+    results: seg('results').map(([f, r]) => [f, JSON.parse(r)]),
+    jreadEvery: 2, jread: hudRec.filter((h, f) => f % 2 === 0).map(h => h.jr.map(v => v.toFixed(0)).join(','))
+  };
 
   // ---------- 2. rebuild the idle station and give it real hierarchies ----------
   S.resetAll();
@@ -200,7 +256,7 @@ async function exportInPage() {
   const glb = await new Promise((ok, fail) => new THREE.GLTFExporter().parse(root, ok, fail, { binary: true, onlyVisible: true }));
   const bytes = new Uint8Array(glb); let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return { glb: btoa(s), info: { frames: rec.length, playbackSec: +(rec.length * DT).toFixed(1), cycleSec, drives: D.length, hiddenFrames, linkPoseError: maxErr } };
+  return { glb: btoa(s), timeline: JSON.stringify(timeline), info: { nanFramesFixed: nanFrames, frames: rec.length, playbackSec: +(rec.length * DT).toFixed(1), cycleSec, drives: D.length, hiddenFrames, linkPoseError: maxErr } };
 }
 
 (async () => {
@@ -208,13 +264,16 @@ async function exportInPage() {
   const browser = await chromium.launch({ channel: 'msedge' });
   try {
     const page = await browser.newPage();
+    // deterministic console 1 run (DMC codes, weights, simulated faults)
+    await page.addInitScript(seed => { let a = seed >>> 0; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }, SEED);
     await page.goto(`http://localhost:${srv.address().port}/console.html`);
     await page.waitForFunction(() => window.__station && window.__station.ST, null, { timeout: 30000 });
     await page.addScriptTag({ url: EXPORTER });
-    const { glb, info } = await page.evaluate(exportInPage);
+    const { glb, timeline, info } = await page.evaluate(exportInPage);
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, Buffer.from(glb, 'base64'));
-    console.log(`wrote ${OUT} (${(fs.statSync(OUT).size / 1024).toFixed(0)} KB)`, JSON.stringify(info));
+    fs.writeFileSync(TIMELINE, timeline);
+    console.log(`wrote ${OUT} (${(fs.statSync(OUT).size / 1024).toFixed(0)} KB), ${TIMELINE} (${(fs.statSync(TIMELINE).size / 1024).toFixed(0)} KB)`, JSON.stringify(info));
   } finally {
     await browser.close();
     srv.close();

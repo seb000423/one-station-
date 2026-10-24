@@ -18,4 +18,13 @@ What the export contains:
 - Not included: paste beads (console 1 grows them with drawRange), tower lamp / START button
   light states, the scale LCD values, and console 1's floor, grid and lights.
 
-It is kept outside `realvirtual/` so updating the realvirtual WEB build does not overwrite it.
+`station-timeline.json` comes from the same recording run: what console 1's HUD and result table
+show at every frame (phase, robot step labels, current step, clock, joint readout, results) plus the
+static panel content. console2.html reads realvirtual's playback frame from the iframe and renders
+console 1's panels from it. Math.random is seeded in the export, so DMC codes, weights and simulated
+faults are the same on every run.
+
+console.html's '홈 복귀' segment leaves R1's joints NaN at the end of the cycle (its begin() never
+sets dq); the export eases R1 back to the home pose there instead.
+
+They are kept outside `realvirtual/` so updating the realvirtual WEB build does not overwrite them.

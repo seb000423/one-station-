@@ -7,12 +7,13 @@
 <title>콘솔 2 (realvirtual)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* Same header as console.html; main area opens console 1's station (realvirtual-models/station.glb) in the bundled realvirtual WEB viewer. */
+/* Copied from console.html (console 1) so both consoles look the same. */
+/* Layout: full-bleed 3D viewport left, parameter rail right (POLYTWIN-style console). Single dark look by design. */
 :root{
-  --bg:#0b0d10; --panel:#101317; --line:#232930; --fg:#e6e8eb; --mute:#8a929c;
-  --accent:#00e8d0; --accent-ink:#021a18;
+  --bg:#0b0d10; --panel:#101317; --panel2:#151a1f; --line:#232930; --fg:#e6e8eb; --mute:#8a929c; --dim:#5a626c;
+  --accent:#00e8d0; --accent-ink:#021a18; --ok:#3ddc84; --ng:#ff4d4f; --warn:#ffb020; --brand:#006282;
   --sans:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   color-scheme:dark;
@@ -20,24 +21,175 @@
 html,body{height:100%}
 body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden;word-break:keep-all}
 *{box-sizing:border-box}
+button{font:inherit;color:inherit}
 .app{height:100%;display:grid;grid-template-rows:auto 1fr}
-.top{position:relative;display:flex;align-items:center;gap:16px;height:52px;border-bottom:1px solid var(--line);background:var(--bg);
+.top{display:flex;align-items:center;gap:16px;height:52px;border-bottom:1px solid var(--line);background:var(--bg);
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .back{color:var(--fg);text-decoration:none;border:1px solid var(--line);padding:5px 10px;font-size:12px;border-radius:3px;white-space:nowrap}
 .back:hover,.back:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
-.crumb{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:calc(50% - 230px)}
+.crumb{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.crumb{max-width:calc(50% - 230px)}
 .logo{position:absolute;left:50%;transform:translateX(-50%);font-family:var(--mono);font-weight:600;letter-spacing:.42em;font-size:17px;white-space:nowrap;color:#fff;padding-left:.42em}
-.lang{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--mute);white-space:nowrap}
+.logo i{width:6px;height:6px;background:var(--accent);border-radius:50%;display:block}
+.top{position:relative}
+.lang{margin-left:auto}
+.logo img{height:22px;width:auto;display:block}
+.logo em{font-style:normal;color:var(--accent)}
+.lang{font-family:var(--mono);font-size:12px;color:var(--mute);white-space:nowrap}
 .lang b{color:var(--fg)}
-main{position:relative;min-height:0}
+main{display:grid;grid-template-columns:minmax(0,1fr) 372px;min-height:0}
+.view{position:relative;min-width:0;min-height:0;overflow:hidden}
+#c{display:block;width:100%;height:100%;cursor:grab}
+#c:active{cursor:grabbing}
+.hud{position:absolute;pointer-events:none}
+.hud > *{pointer-events:auto}
+.card{background:rgba(13,16,20,.82);border:1px solid var(--line);backdrop-filter:blur(6px);border-radius:4px}
+.tl{top:14px;left:14px;width:300px}
+.status{padding:12px 14px;display:grid;gap:10px}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);text-transform:uppercase}
+.srow{display:flex;align-items:center;gap:10px}
+#phase{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:3px 8px;border-radius:2px;background:#20262d;color:var(--fg)}
+#phase[data-p="running"],#phase[data-p="closing"],#phase[data-p="loading"]{background:var(--warn);color:#1a1200}
+#phase[data-p="done"]{background:var(--accent);color:var(--accent-ink)}
+#clock{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums;margin-left:auto}
+#tw{display:flex;gap:4px}
+#tw i{width:9px;height:9px;border-radius:50%;background:#2a3038;display:block}
+#tw i.red.on{background:var(--ng);box-shadow:0 0 8px var(--ng)}
+#tw i.amber.on{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+#tw i.green.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.bar{height:3px;background:#20262d;position:relative}
+#progBar{position:absolute;inset:0 auto 0 0;background:var(--accent);width:0;transition:width .3s}
+.rline{display:flex;gap:10px;font-size:12.5px;align-items:baseline}
+.rline b{font-family:var(--mono);color:var(--accent);font-weight:600;min-width:20px}
+.rline span{color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ikwarn{font-size:11.5px;color:var(--warn)}
+.tr{top:14px;right:14px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:60%}
+.chip{background:rgba(13,16,20,.82);border:1px solid var(--line);color:var(--mute);padding:6px 10px;font-size:12px;border-radius:3px;cursor:pointer}
+.chip:hover{color:var(--fg)}
+.chip.on{border-color:var(--accent);color:var(--accent)}
+.chip:focus-visible{outline:1px solid var(--accent)}
+.bl{left:14px;bottom:62px}
+#jread{display:block;line-height:1.9;padding:8px 12px;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;max-width:560px}
+#jread i{font-style:normal;color:var(--dim);margin-right:5px}
+#jread span{margin-right:12px}
+.bc{left:14px;right:14px;bottom:14px}
+#steps{list-style:none;margin:0;padding:0;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+#steps li{flex:1 0 auto;padding:7px 10px;font-size:11.5px;color:var(--dim);background:rgba(13,16,20,.82);border-top:2px solid #20262d;white-space:nowrap}
+#steps li b{font-family:var(--mono);margin-right:6px;font-weight:500}
+#steps li.cur{color:var(--fg);border-top-color:var(--accent)}
+#steps li.cur b{color:var(--accent)}
+#toast{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:var(--warn);color:#1a1200;padding:8px 14px;font-size:12.5px;border-radius:3px;font-weight:600}
+
+/* side panel */
+.side{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.scroll{overflow-y:auto;flex:1;min-height:0}
+.sec{padding:16px 18px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.sec h3{margin:0;font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
+.vgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.vcard{text-align:left;background:var(--panel2);border:1px solid var(--line);padding:10px 11px;border-radius:3px;cursor:pointer;display:grid;gap:3px}
+.vcard strong{font-size:13px;font-weight:600}
+.vcard span{font-size:11.5px;color:var(--mute)}
+.vcard.on{border-color:var(--accent);background:#0a1c1b}
+.vcard.on strong{color:var(--accent)}
+.lbl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline;font-size:12.5px;color:var(--fg)}
+.lbl small{font-family:var(--mono);color:var(--mute);font-size:11px}
+.lbl output{font-family:var(--mono);color:var(--accent);font-size:12px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+.seg button{background:var(--panel2);border:1px solid var(--line);padding:8px 4px;font-size:12px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.seg button.on{border-color:var(--accent);color:var(--accent);background:#0a1c1b;font-weight:600}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+.seg button:focus-visible,.vcard:focus-visible{outline:1px solid var(--accent)}
+.cellchips{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.cellchips span{background:var(--panel2);border:1px solid var(--line);padding:7px 6px;font-size:11px;border-radius:3px;text-align:center;line-height:1.35}
+.cellchips b{display:block}
+.cellchips b{font-family:var(--mono);color:var(--accent);margin-right:4px}
+#jread b{font-family:var(--mono);color:var(--accent);margin-right:8px}
+.desc{font-size:12px;color:var(--mute);line-height:1.6;margin:0}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.field{display:grid;gap:4px}
+.jrow{display:grid;grid-template-columns:auto 28px 1fr auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed #1e242a;cursor:pointer}
+.jrow:last-child{border-bottom:0}
+.jrow input{accent-color:var(--accent);margin:0}
+.jid{font-family:var(--mono);color:var(--accent);font-size:11.5px}
+.jname{font-size:12.5px;min-width:0}
+.jmeta{font-family:var(--mono);font-size:11px;color:var(--mute);white-space:nowrap}
+.tg{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;cursor:pointer}
+.tg input{appearance:none;width:34px;height:18px;border-radius:10px;background:#2a3038;position:relative;cursor:pointer;margin:0;transition:background .2s}
+.tg input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#e6e8eb;transition:left .2s}
+.tg input:checked{background:var(--accent)}
+.tg input:checked::after{left:18px;background:var(--accent-ink)}
+.tg input:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.kpi{background:var(--panel2);padding:9px 10px;display:grid;gap:2px}
+.kpi span{font-size:10.5px;color:var(--mute);font-family:var(--mono);letter-spacing:.06em}
+.kpi b{font-family:var(--mono);font-size:17px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi b.ok{color:var(--ok)} .kpi b.ng{color:var(--ng)}
+#kTot{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+th{font-family:var(--mono);font-weight:500;color:var(--mute);text-align:right;font-size:10.5px;padding:5px 4px;border-bottom:1px solid var(--line);letter-spacing:.04em}
+td{text-align:right;padding:5px 4px;border-bottom:1px solid #1a1f25;font-family:var(--mono)}
+th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
+td.code{color:var(--fg)}
+.dim{color:var(--dim)}
+tr.ngrow td{background:rgba(255,77,79,.07)}
+.pill{font-size:10px;padding:2px 6px;border-radius:2px;font-weight:600;letter-spacing:.04em}
+.pill.ok{background:var(--ok);color:#03210f}.pill.ng{background:var(--ng);color:#2a0405}
+.pill.idle{background:#20262d;color:var(--mute)}.pill.run{background:var(--warn);color:#1a1200}
+#ngNote{font-size:11.5px;color:var(--ng);margin:0;min-height:0}
+#ngNote:empty{display:none}
+.foot{border-top:1px solid var(--line);padding:12px 18px 14px;display:grid;gap:10px;background:var(--panel)}
+.simrow{display:flex;align-items:center;gap:8px}
+.simrow span{font-size:11px;font-family:var(--mono);color:var(--mute);letter-spacing:.1em}
+.simrow .seg{flex:1}
+.simrow .seg button{padding:5px 0;font-family:var(--mono);font-size:11.5px}
+.actions{display:grid;grid-template-columns:1fr auto;gap:6px}
+#start{background:#0a1716;border:1px solid var(--accent);color:var(--accent);padding:13px;font-weight:700;letter-spacing:.14em;font-size:13px;border-radius:3px;cursor:pointer}
+#start:hover{background:var(--accent);color:var(--accent-ink)}
+#start:disabled{opacity:.4;cursor:wait;background:#0a1716;color:var(--accent)}
+#reset{background:var(--panel2);border:1px solid var(--line);padding:0 16px;border-radius:3px;cursor:pointer;color:var(--mute)}
+#reset:hover{color:var(--fg)}
+.spec{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;margin:0}
+.spec dt{color:var(--mute)} .spec dd{margin:0;font-family:var(--mono);font-size:11.5px;text-align:right}
+@media (max-width: 900px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%}
+  main{grid-template-columns:1fr}
+  .view{height:62vh;min-height:380px}
+  .side{border-left:0;border-top:1px solid var(--line)}
+  .scroll{overflow:visible}
+  .crumb{display:none}
+  .logo{letter-spacing:.18em;font-size:11.5px;margin-right:0}
+  .tl{width:auto;right:14px;top:auto;bottom:14px}
+  .status{padding:10px 12px;gap:8px}
+  .tr{left:14px;right:14px;top:10px;max-width:none;justify-content:flex-start}
+  .chip{padding:5px 8px;font-size:11.5px}
+  .bl,.bc{display:none}
+}
+@media (prefers-reduced-motion: reduce){ #progBar{transition:none} }
+</style>
+<style>
+/* Console 2: the 3D view is console 1's station replayed in realvirtual WEB (iframe); the HUD sits around
+   realvirtual's own toolbar (top-left), view cube (top-right) and AGPL watermark (bottom-right). */
 #rv{display:block;width:100%;height:100%;border:0;background:var(--bg)}
+.view .tl{top:46px;left:56px}
+.view .tr{right:92px}
+.view .bl{left:56px}
+.view .bc{left:56px;right:300px}
 .offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)}
-.offline .card{max-width:440px;background:var(--panel);border:1px solid var(--line);padding:24px;line-height:1.7}
+.offline .card{max-width:440px;padding:24px;line-height:1.7}
 .offline h2{margin:0 0 8px;font-size:16px}
-.offline code{font-family:var(--mono);background:#000;padding:2px 6px;color:var(--accent)}
 .offline a{color:var(--accent)}
 .offline button{margin-top:14px;font:inherit;background:var(--accent);color:var(--accent-ink);border:0;padding:8px 16px;font-weight:600;cursor:pointer}
-@media (max-width:640px){.crumb{display:none}}
+.side .ro{opacity:.55}
+.side .ro *{cursor:not-allowed}
+.ronote{font-size:11.5px;color:var(--mute);border:1px dashed var(--line);padding:8px 10px;margin:0 0 4px;line-height:1.6}
+.ronote code{font-family:var(--mono);color:var(--accent)}
+#syncNote{font-size:11.5px;color:var(--mute);line-height:1.6}
+@media (max-width: 900px){
+  .view .tl{left:14px;right:14px;top:auto;bottom:56px}
+  .view .tr{left:56px;right:92px}
+}
 </style>
 </head>
 <body>
@@ -49,30 +201,245 @@ main{position:relative;min-height:0}
     <div class="lang"><b>KR</b> · EN</div>
   </header>
   <main>
-    <iframe id="rv" title="realvirtual WEB 스테이션 뷰어" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
-    <div class="offline" id="offline" hidden>
-      <div class="card">
-        <h2>realvirtual 스테이션을 불러오지 못했습니다</h2>
-        <p>잠시 후 다시 시도하거나 <a id="rvLink" target="_blank" rel="noopener"></a> 를 새 탭에서 열어 보세요.</p>
-        <button type="button" id="retry">다시 시도</button>
+    <section class="view" aria-label="스테이션 3D 뷰 (realvirtual WEB)">
+      <iframe id="rv" title="realvirtual WEB 스테이션 뷰어" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+      <div class="hud tl">
+        <div class="card status">
+          <div class="srow"><span class="eyebrow">ONE STATION · Ni Paste</span><div id="tw" style="margin-left:auto"></div></div>
+          <div class="srow"><span id="phase" data-p="idle">대기</span><span class="eyebrow" id="prog">0 / 6</span><span id="clock">00:00.0</span></div>
+          <div class="bar"><div id="progBar"></div></div>
+          <div id="rlines"></div>
+          <div id="ikwarn" hidden></div>
+        </div>
       </div>
-    </div>
+      <div class="hud tr">
+        <button class="chip on" data-view="all">전체</button>
+        <button class="chip" data-view="front">정면</button>
+        <button class="chip" data-view="top">상면</button>
+        <button class="chip" data-view="scale">계량·도포부</button>
+      </div>
+      <div class="hud bl"><div class="card" id="jread"></div></div>
+      <div class="hud bc">
+        <ol id="steps">
+          <li><b>1</b>지그 로딩·센서</li><li><b>2</b>START·도어 닫힘</li><li><b>3</b>픽업</li><li><b>4</b>DMC 판독</li><li><b>5</b>계량 (전)</li><li><b>6</b>Ni 페이스트 도포</li><li><b>7</b>계량 (후)</li><li><b>8</b>지그 복귀</li><li><b>9</b>판정·도어 열림</li>
+        </ol>
+      </div>
+      <div class="offline" id="offline" hidden>
+        <div class="card">
+          <h2>realvirtual 스테이션을 불러오지 못했습니다</h2>
+          <p>잠시 후 다시 시도하거나 <a id="rvLink" target="_blank" rel="noopener"></a> 를 새 탭에서 열어 보세요.</p>
+          <button type="button" id="retry">다시 시도</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side" aria-label="파라미터">
+      <div class="scroll">
+        <div class="sec">
+          <p class="ronote">콘솔 2는 콘솔 1에서 녹화한 사이클을 재생합니다. 제품·지그 수·파라미터를 바꾸려면 콘솔 1에서 바꾼 뒤 <code>node tools/export-station-glb.cjs</code> 로 모델을 다시 만들어야 해서, 아래 설정은 표시만 됩니다.</p>
+        </div>
+        <div class="sec ro">
+          <h3>제품 (Product)</h3>
+          <div class="vgrid">
+            <button class="vcard" data-variant="tube" disabled><strong>튜브형 EGR 쿨러</strong><span>쉘&amp;튜브 · 도포 7개소</span></button>
+            <button class="vcard" data-variant="plate" disabled><strong>플레이트형 커버</strong><span>프레스 커버 · 도포 4개소</span></button>
+          </div>
+        </div>
+
+        <div class="sec ro">
+          <h3>Parameters</h3>
+          <div class="field">
+            <div class="lbl">로봇 셀 구성 <small>FAIRINO FR5 · 922 mm · 5 kg</small></div>
+            <div class="cellchips"><span><b>R1</b> 핸들링 FR5 · 레일</span><span><b>R2</b> 도포 FR5 · 시린지</span><span><b>P</b> 2축 포지셔너</span></div>
+            <p class="desc" id="cellDesc"></p>
+          </div>
+          <div class="field">
+            <div class="lbl">지그 수량 <small>동시 적재</small></div>
+            <div class="seg">
+              <button data-slots="4" disabled>4개</button><button data-slots="6" disabled>6개</button><button data-slots="8" disabled>8개</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="lbl">비드 폭 <output id="beadV"></output></div>
+            <input type="range" id="bead" min="1" max="3" step="0.1" disabled>
+          </div>
+          <div class="field">
+            <div class="lbl">도포 속도 (TCP) <output id="speedV"></output></div>
+            <input type="range" id="speed" min="10" max="60" step="1" disabled>
+          </div>
+          <div class="field">
+            <div class="lbl">도포량 허용 편차 <output id="tolV"></output></div>
+            <input type="range" id="tol" min="3" max="15" step="1" disabled>
+          </div>
+          <div class="field">
+            <div class="lbl">이상 발생률 (시뮬레이션) <output id="faultV"></output></div>
+            <input type="range" id="fault" min="0" max="30" step="1" disabled>
+          </div>
+        </div>
+
+        <div class="sec">
+          <h3>도포 포인트 (Braze joints)</h3>
+          <div id="jointList" class="ro"></div>
+          <p class="desc">공정: 픽업 → DMC 판독 → 저울 안착 → 계량 → 로봇 장착 디스펜서로 니켈 페이스트 도포 (저울 위 실시간 계량) → 재계량 → 지그 복귀. 목표 도포량은 비드 길이 × 단면적 × 페이스트 밀도 4.6 g/cm³ 기준.</p>
+        </div>
+
+        <div class="sec">
+          <h3>사이클 결과</h3>
+          <div class="kpis">
+            <div class="kpi"><span>개당 C/T</span><b id="kCt">—</b></div>
+            <div class="kpi"><span>UPH</span><b id="kUph">—</b></div>
+            <div class="kpi"><span>목표/개</span><b id="kTgt">—</b></div>
+            <div class="kpi"><span>OK</span><b class="ok" id="kOk">0</b></div>
+            <div class="kpi"><span>NOK</span><b class="ng" id="kNg">0</b></div>
+            <div class="kpi"><span>기준</span><b style="font-size:12px">Temex 60 s</b></div>
+          </div>
+          <div id="kTot"></div>
+          <div class="tbl">
+            <table>
+              <thead><tr><th>#</th><th>DMC</th><th>도포 전 g</th><th>ΔW g</th><th>편차</th><th>판정</th></tr></thead>
+              <tbody id="resBody"></tbody>
+            </table>
+          </div>
+          <p id="ngNote"></p>
+        </div>
+
+        <div class="sec">
+          <h3>스테이션 사양 (가안)</h3>
+          <dl class="spec">
+            <dt>로봇</dt><dd>FAIRINO FR5 (6축 협동로봇)</dd>
+            <dt>반복 정밀도</dt><dd>±0.02 mm</dd>
+            <dt>엔드이펙터</dt><dd>평행 그리퍼 + Ni 페이스트 밸브 (Z-슬라이드)</dd>
+            <dt>추적성</dt><dd>DMC 리더 → MES 연동</dd>
+            <dt>계량</dt><dd>정밀 저울 0.01 g, 도포 전·후</dd>
+            <dt>신호</dt><dd>3색 타워램프 · START · 비상정지</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="foot">
+        <p id="syncNote">재생·일시정지·리셋·속도는 3D 화면 왼쪽 위 realvirtual 툴바에서 조작합니다. 1x 재생 = 콘솔 1의 SIM 4x 속도.</p>
+      </div>
+    </aside>
   </main>
 </div>
 <script>
 (() => {
-  // console 1's station, exported by tools/export-station-glb.cjs; ?glb= needs an absolute URL
+  const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
+  const PHASE_KO = { idle: '대기', loading: '로딩', closing: '도어 닫힘', running: '사이클 진행', opening: '도어 열림', done: '완료' };
+  // console 1's station and recorded cycle, exported by tools/export-station-glb.cjs; ?glb= needs an absolute URL
   const GLB = new URL('realvirtual-models/station.glb', location.href).href;
+  const TIMELINE = new URL('realvirtual-models/station-timeline.json', location.href).href;
   const URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
-  const frame = document.getElementById('rv'), off = document.getElementById('offline');
-  const link = document.getElementById('rvLink');
-  link.href = URL_RV; link.textContent = '스테이션 뷰어';
+  const frame = $('#rv'), off = $('#offline');
+  $('#rvLink').href = URL_RV; $('#rvLink').textContent = '스테이션 뷰어';
+  let TL = null;
+
   const load = () => {
-    fetch(GLB, { method: 'HEAD', cache: 'no-store' })
-      .then(r => { if (!r.ok) throw 0; off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV; })
+    Promise.all([fetch(GLB, { method: 'HEAD', cache: 'no-store' }), fetch(TIMELINE).then(r => r.ok ? r.json() : null)])
+      .then(([g, tl]) => {
+        if (!g.ok) throw 0;
+        off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV;
+        if (tl) { TL = tl; initPanels(); }
+      })
       .catch(() => { off.hidden = false; });
   };
-  document.getElementById('retry').addEventListener('click', load);
+  $('#retry').addEventListener('click', load);
+
+  /* ---------- static panel content (captured from console 1 by the exporter) ---------- */
+  function initPanels() {
+    const P = TL.panel;
+    $$('[data-variant]').forEach(b => b.classList.toggle('on', b.dataset.variant === P.variant));
+    $$('[data-slots]').forEach(b => b.classList.toggle('on', +b.dataset.slots === P.slots));
+    $('#cellDesc').textContent = P.cellDesc;
+    $('#beadV').textContent = P.beadV; $('#speedV').textContent = P.speedV; $('#tolV').textContent = P.tolV; $('#faultV').textContent = P.faultV;
+    $('#bead').value = P.beadW; $('#speed').value = P.speed; $('#tol').value = P.tol; $('#fault').value = P.fault;
+    $('#jointList').innerHTML = P.jointList;
+    $$('#jointList input').forEach(i => i.disabled = true);
+    $('#kTgt').textContent = P.kTgt;
+    render(0);
+  }
+
+  /* ---------- realvirtual playback position ----------
+     realvirtual WEB exposes no host API for the full viewer, so the frame is read from its own
+     playback object: the same-origin iframe's toolbar clock (data-testid="sim-clock") is a React
+     component that receives the viewer as a prop. Falls back to the clock (1x) if that changes. */
+  let viewer = null;
+  function findViewer() {
+    try {
+      const doc = frame.contentDocument, el = doc && doc.querySelector('[data-testid="sim-clock"]');
+      if (!el) return null;
+      const key = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
+      for (let f = key && el[key], d = 0; f && d < 60; f = f.return, d++) {
+        const p = f.memoizedProps; if (p && p.viewer && 'playback' in p.viewer) return p.viewer;
+      }
+    } catch (e) {}
+    return null;
+  }
+  function currentFrame() {
+    if (!viewer || !viewer.playback) viewer = findViewer();
+    if (viewer && viewer.playback) return viewer.playback.frame;
+    try {
+      const t = frame.contentDocument.querySelector('[data-testid="sim-clock"]').textContent.split(':').map(Number);
+      const sec = t.reduce((a, v) => a * 60 + v, 0);
+      return Math.floor(sec / TL.fixedDeltaTime) % TL.frames;
+    } catch (e) { return 0; }
+  }
+
+  /* ---------- HUD + results at a recorded frame (same rendering as console 1) ---------- */
+  const at = (segs, f) => { let lo = 0, hi = segs.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (segs[m][0] <= f) lo = m; else hi = m - 1; } return segs[lo][1]; };
+  const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0'); };
+  let lastF = -1, lastRes = null;
+  function render(f) {
+    if (!TL || f === lastF) return; lastF = f;
+    const phase = at(TL.phase, f), results = at(TL.results, f), N = TL.parts, step = at(TL.step, f);
+    const judged = results.filter(r => r.ok != null), ok = judged.filter(r => r.ok).length, ng = judged.length - ok, anyNg = results.some(r => r.ok === false);
+    $('#phase').textContent = PHASE_KO[phase]; $('#phase').dataset.p = phase;
+    $('#prog').textContent = `${judged.length} / ${N}`;
+    $('#progBar').style.width = (judged.length / N * 100) + '%';
+    $('#clock').textContent = fmtT(f === 0 ? 0 : f * TL.simPerFrame);
+    $('#rlines').innerHTML = [['R1', at(TL.r1, f)], ['R2', at(TL.r2, f)]].map(([n, l]) => `<div class="rline"><b>${n}</b><span>${l}</span></div>`).join('');
+    $$('#steps li').forEach((li, i) => li.classList.toggle('cur', i + 1 === step));
+    const J = TL.jread[Math.min(TL.jread.length - 1, Math.round(f / TL.jreadEvery))].split(','), jl = o => J.slice(o, o + 6).map((v, i) => `<span><i>J${i + 1}</i>${v}°</span>`).join('');
+    $('#jread').innerHTML = `<b>R1</b>${jl(0)}<span><i>RAIL</i>${J[12]}</span><br><b>R2</b>${jl(6)}<span><i>A/C</i>${J[13]}° / ${J[14]}°</span>`;
+    const fails = at(TL.ik, f); $('#ikwarn').hidden = !fails; $('#ikwarn').textContent = `도달 한계 근접 포즈 ${fails}건`;
+    // tower lamp as console 1 drives it (blinking red/start omitted)
+    const tw = { red: anyNg, amber: phase === 'running' || phase === 'closing', green: (phase === 'done' && !anyNg) || phase === 'idle' };
+    $('#tw').innerHTML = ['red', 'amber', 'green'].map(k => `<i class="${k} ${tw[k] ? 'on' : ''}"></i>`).join('');
+    // result table
+    if (results !== lastRes || phase === 'done' || phase === 'idle') {
+      lastRes = results;
+      $('#resBody').innerHTML = results.map((r, i) => {
+        const st = r.ok == null ? (r.w0 != null ? '<span class="pill run">계량중</span>' : '<span class="pill idle">대기</span>') : (r.ok ? '<span class="pill ok">OK</span>' : '<span class="pill ng">NOK</span>');
+        const fm = v => v == null ? '<span class="dim">—</span>' : v.toFixed(2);
+        return `<tr${r.ok === false ? ' class="ngrow"' : ''}><td>${i + 1}</td><td class="code">${r.seen ? r.code.slice(-9) : '<span class="dim">미판독</span>'}</td><td>${fm(r.w0)}</td><td>${fm(r.d)}</td><td>${r.dev == null ? '<span class="dim">—</span>' : (r.dev > 0 ? '+' : '') + r.dev.toFixed(1) + '%'}</td><td>${st}</td></tr>`;
+      }).join('');
+      $('#kOk').textContent = ok; $('#kNg').textContent = ng;
+      if (phase === 'done' && TL.cycleTotal) {
+        const per = TL.cycleTotal / N;
+        $('#kCt').textContent = per.toFixed(1) + ' s'; $('#kUph').textContent = Math.round(3600 / per);
+        $('#kTot').textContent = '총 ' + TL.cycleTotal.toFixed(1) + ' s / ' + N + '개';
+      } else { $('#kCt').textContent = '—'; $('#kUph').textContent = '—'; $('#kTot').textContent = 'START 후 계산'; }
+      const notes = results.map((r, i) => r.ok === false ? `#${i + 1} ${r.fault ? r.fault.joint + ' ' + r.fault.kind : '편차 초과'}` : null).filter(Boolean);
+      $('#ngNote').textContent = notes.length ? 'NOK 원인 (시뮬레이션): ' + notes.join(' · ') : '';
+    }
+  }
+  setInterval(() => { if (TL) render(currentFrame()); }, 100);
+
+  /* ---------- camera views (console 1's presets, applied to realvirtual's camera) ---------- */
+  const POS_X = 0.30;
+  const VIEWS = {
+    all: [[3.3, 2.7, 3.7], [0, 1.0, -0.1]],
+    front: [[0, 1.55, 3.3], [0, 1.0, 0]],
+    top: [[0.01, 4.2, 0.4], [0, 0.9, -0.05]],
+    scale: [[POS_X - 0.55, 1.65, -0.05], [POS_X + 0.1, 1.15, -0.66]]
+  };
+  $$('[data-view]').forEach(b => b.addEventListener('click', () => {
+    if (!viewer) viewer = findViewer();
+    const v = VIEWS[b.dataset.view]; if (!viewer || !viewer.camera || !v) return;
+    const V3 = viewer.camera.position.constructor;
+    if (viewer.animateCameraTo) viewer.animateCameraTo(new V3(...v[0]), new V3(...v[1]), 0.8);
+    $$('[data-view]').forEach(x => x.classList.toggle('on', x === b));
+  }));
+
   load();
 })();
 </script>
