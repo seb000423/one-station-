@@ -1,0 +1,2 @@
+/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */const n=Symbol("rv-dialog-auto-dismiss");//! No editor dialogs exist, so the MCP dialog policy has nothing to intercept.
+function t(o){return null}function i(){return[]}function r(){return null}function e(o){return()=>{}}export{n as DIALOG_AUTO_DISMISS,r as getPendingDialog,t as setDialogAutoResponder,e as subscribeEditorDialogs,i as takeDialogAutoLog};

@@ -1,0 +1,1 @@
+/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */function r(e){return new Worker(""+new URL("json.worker-MyEhrfQg.js",import.meta.url).href,{type:"module",name:e?.name})}export{r as default};

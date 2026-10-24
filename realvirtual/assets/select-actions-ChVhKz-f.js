@@ -1,0 +1,1 @@
+/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */const t=()=>{},o=()=>{},e=()=>{},s=()=>{},n=()=>{},a=()=>{};export{t as computeIdenticalPaths,o as computeInvertPaths,e as computeSameMaterialPaths,s as expandToUniverseMeshes,n as geometrySignature,a as signaturesMatch};

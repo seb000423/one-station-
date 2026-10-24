@@ -1,0 +1,1 @@
+/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */const o={},t=[],c=()=>{},e=()=>{},i=()=>{},n=()=>{},a=()=>{};export{t as LOGIC_STEP_PALETTE,c as addLogicStep,e as convertSignalType,i as createKinematicWithGroup,n as createSignalNode,o as default,a as toggleSignalDirection};

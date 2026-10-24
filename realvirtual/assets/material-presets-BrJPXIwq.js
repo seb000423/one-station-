@@ -1,0 +1,1 @@
+/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */const s={},t=()=>{},o=()=>{};export{t as BUILTIN_MATERIAL_PRESETS,s as default,o as loadCustomPresets};

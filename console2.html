@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* Same header as console.html; main area embeds the local realvirtual WEB planner. */
+/* Same header as console.html; main area embeds the bundled realvirtual WEB planner (realvirtual/). */
 :root{
   --bg:#0b0d10; --panel:#101317; --line:#232930; --fg:#e6e8eb; --mute:#8a929c;
   --accent:#00e8d0; --accent-ink:#021a18;
@@ -52,10 +52,8 @@ main{position:relative;min-height:0}
     <iframe id="rv" title="realvirtual WEB 플래너" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
     <div class="offline" id="offline" hidden>
       <div class="card">
-        <h2>realvirtual WEB 서버에 연결할 수 없습니다</h2>
-        <p>realvirtual-WEB 폴더에서 <code>npm run dev</code> 를 실행한 뒤 다시 시도하세요.<br>
-        브라우저가 "로컬 네트워크 기기 액세스"를 물으면 <b>허용</b>을 눌러야 합니다.<br>
-        주소: <a id="rvLink" target="_blank" rel="noopener"></a></p>
+        <h2>realvirtual 플래너를 불러오지 못했습니다</h2>
+        <p>잠시 후 다시 시도하거나 <a id="rvLink" target="_blank" rel="noopener"></a> 를 새 탭에서 열어 보세요.</p>
         <button type="button" id="retry">다시 시도</button>
       </div>
     </div>
@@ -63,13 +61,13 @@ main{position:relative;min-height:0}
 </div>
 <script>
 (() => {
-  const URL_RV = 'http://localhost:5173/?mode=planner';
+  const URL_RV = new URL('realvirtual/?mode=planner', location.href).href;
   const frame = document.getElementById('rv'), off = document.getElementById('offline');
   const link = document.getElementById('rvLink');
-  link.href = URL_RV; link.textContent = URL_RV;
+  link.href = URL_RV; link.textContent = '플래너';
   const load = () => {
-    fetch('http://localhost:5173/', { mode: 'no-cors', cache: 'no-store' })
-      .then(() => { off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV; })
+    fetch('realvirtual/index.html', { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw 0; off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV; })
       .catch(() => { off.hidden = false; });
   };
   document.getElementById('retry').addEventListener('click', load);

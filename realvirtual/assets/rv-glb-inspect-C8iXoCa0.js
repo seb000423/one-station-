@@ -1,0 +1,1 @@
+import{b0 as e}from"./index-BJA5YrME.js";import"./three-DU3Pq3qW.js";/*! @license realvirtual WEB | AGPL-3.0-only | Copyright (C) 2025 realvirtual GmbH | https://realvirtual.io */function r(n){return e(n).json}function s(n){return{nodeCount:(n.nodes??[]).length,meshCount:(n.meshes??[]).length}}export{s as glbNodeCensus,r as readGlbJson};
