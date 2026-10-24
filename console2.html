@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* Same header as console.html; main area embeds the bundled realvirtual WEB planner (realvirtual/). */
+/* Same header as console.html; main area opens console 1's station (realvirtual-models/station.glb) in the bundled realvirtual WEB viewer. */
 :root{
   --bg:#0b0d10; --panel:#101317; --line:#232930; --fg:#e6e8eb; --mute:#8a929c;
   --accent:#00e8d0; --accent-ink:#021a18;
@@ -44,15 +44,15 @@ main{position:relative;min-height:0}
 <div class="app">
   <header class="top">
     <a class="back" href="index.html">← 뒤로</a>
-    <span class="crumb">EGR 쿨러 · 니켈 브레이징 페이스트 도포 스테이션 · realvirtual 플래너</span>
+    <span class="crumb">EGR 쿨러 · 니켈 브레이징 페이스트 도포 스테이션 · realvirtual 스테이션 뷰어</span>
     <div class="logo">ONE STATION</div>
     <div class="lang"><b>KR</b> · EN</div>
   </header>
   <main>
-    <iframe id="rv" title="realvirtual WEB 플래너" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+    <iframe id="rv" title="realvirtual WEB 스테이션 뷰어" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
     <div class="offline" id="offline" hidden>
       <div class="card">
-        <h2>realvirtual 플래너를 불러오지 못했습니다</h2>
+        <h2>realvirtual 스테이션을 불러오지 못했습니다</h2>
         <p>잠시 후 다시 시도하거나 <a id="rvLink" target="_blank" rel="noopener"></a> 를 새 탭에서 열어 보세요.</p>
         <button type="button" id="retry">다시 시도</button>
       </div>
@@ -61,12 +61,14 @@ main{position:relative;min-height:0}
 </div>
 <script>
 (() => {
-  const URL_RV = new URL('realvirtual/?mode=planner', location.href).href;
+  // console 1's station, exported by tools/export-station-glb.cjs; ?glb= needs an absolute URL
+  const GLB = new URL('realvirtual-models/station.glb', location.href).href;
+  const URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
   const frame = document.getElementById('rv'), off = document.getElementById('offline');
   const link = document.getElementById('rvLink');
-  link.href = URL_RV; link.textContent = '플래너';
+  link.href = URL_RV; link.textContent = '스테이션 뷰어';
   const load = () => {
-    fetch('realvirtual/index.html', { cache: 'no-store' })
+    fetch(GLB, { method: 'HEAD', cache: 'no-store' })
       .then(r => { if (!r.ok) throw 0; off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV; })
       .catch(() => { off.hidden = false; });
   };
