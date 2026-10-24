@@ -1,4 +1,6 @@
-// Exports the station console.html is showing (its current settings) for realvirtual WEB:
+// Exports console 1 for realvirtual WEB. recordCell() records the station console.html is simulating
+// (the active cell, its current settings); buildFactoryGlb() merges recorded cells of a factory built in
+// js/factory-builder.js with its building elements into one model. Per cell:
 //   - glb: the station with real joint hierarchies, realvirtual Drives and console 1's full cycle
 //     embedded as a drive recording (extras.realvirtual DrivesRecorder + DrivesRecording_compact)
 //   - timeline: what console 1's HUD and result table show at every recorded frame, plus the
@@ -42,7 +44,7 @@
   }
 
   const FACTORY_DEFAULT = { width: 12, depth: 10, height: 5 };
-  const layoutOf = S => ({ factory: window.LayoutEditor ? window.LayoutEditor.factory() : { ...FACTORY_DEFAULT }, ...(S.layoutParams ? S.layoutParams() : {}) });
+  const layoutOf = S => ({ factory: window.FactoryBuilder ? window.FactoryBuilder.factory() : { ...FACTORY_DEFAULT }, ...(S.layoutParams ? S.layoutParams() : {}) });
 
   // steps console 1's cycle from START at fixed H; onFrame() runs every SUB steps; returns whether it finished
   function runCycle(S, onFrame) {
@@ -71,11 +73,13 @@
     return res;
   }
 
-  async function exportStation() {
+  // Records the active cell: its cycle (values per frame + console 1 HUD timeline) and an export-ready
+  // clone of the idle station with joint hierarchies. Drives come back as node references, so several
+  // cells can be merged before names and paths are fixed.
+  function recordCell() {
     const S = window.__station;
     if (!S || !S.ST) throw new Error('console 1 station not ready');
     if (!(S.sim.phase === 'idle' || S.sim.phase === 'done')) throw new Error('사이클 중에는 저장할 수 없습니다');
-    await loadExporter();
     const $ = q => document.querySelector(q);
     const simSpeed = S.cfg.sim;
     S.resetAll();
@@ -178,13 +182,10 @@
       });
     });
     ST.group.updateMatrixWorld(true);
-    const root = new THREE.Group(); root.name = 'ONE_STATION';
     const lay = panel.layout;
-    root.add(buildFactory(lay.factory));
     // the cell carries the station's placement in the factory; everything recorded is in cell coordinates
     const cellG = new THREE.Group(); cellG.name = 'Cell';
     if (lay.cell) { cellG.position.set(lay.cell.x, 0, lay.cell.z); cellG.rotation.y = lay.cell.rot || 0; }
-    root.add(cellG);
     const group = cloneWithMap(ST.group, map); cellG.add(group);
     const parts = ST.parts.map(p => cloneWithMap(p.obj, map));
     const name = (o, n) => { if (o) o.name = n; };
@@ -256,39 +257,68 @@
     ST.parts.forEach((p, i) => [['TX', 'LinearX', true, lin], ['TY', 'LinearY', false, lin], ['TZ', 'LinearZ', false, lin], ['RY', 'RotationY', true, rot], ['RX', 'RotationX', false, rot], ['RZ', 'RotationZ', true, rot]]
       .forEach(([k, dir, rev, u]) => D.push([`Part${i + 1}_${k}`, `Part${i + 1}_${k}`, dir, rev, u])));
 
-    // unique names everywhere: the glTF loader renames duplicates, which would break drive paths
-    const seen = new Set();
-    root.traverse(o => { let n = o.name || (o.isMesh ? 'mesh' : 'node'), k = 1; if (seen.has(n)) { while (seen.has(`${n}_${k}`)) k++; n = `${n}_${k}`; } o.name = n; seen.add(n); });
-    const byName = n => root.getObjectByName(n);
-    const pathOf = o => { const p = []; for (let c = o; c; c = c.parent) p.unshift(c.name); return p.join('/'); };
-
     // drive extras replace whatever userData the clones carried over
-    root.traverse(o => { o.userData = {}; });
-    const drives = D.map(([key, n, dir, rev], id) => {
-      const node = byName(n);
-      node.userData = { realvirtual: { Drive: { Direction: dir, ReverseDirection: rev, TargetSpeed: 1000, UseLimits: false } } };
-      return { id, path: pathOf(node), key };
+    cellG.traverse(o => { o.userData = {}; });
+    const nodeOf = n => { let hit = null; cellG.traverse(o => { if (!hit && o.name === n) hit = o; }); return hit; };
+    // per drive: node, Direction, ReverseDirection and the delta series (mm / deg) from the idle pose
+    const drives = D.map(([key, n, dir, rev, u]) => {
+      const series = new Array(rec.length);
+      for (let f = 0; f < rec.length; f++) {
+        let d = rec[f][key] - rec[0][key];
+        if (u === rot) d = Math.atan2(Math.sin(d), Math.cos(d));
+        series[f] = u === lin ? Math.round(d * 10000) / 10 : Math.round(d * DEG * 100) / 100;
+      }
+      // keep rotary channels continuous across ±180°
+      if (u === rot) for (let f = 1; f < rec.length; f++) { let v = series[f]; while (v - series[f - 1] > 180) v -= 360; while (v - series[f - 1] < -180) v += 360; series[f] = Math.round(v * 100) / 100; }
+      return { node: nodeOf(n), dir, rev, series };
     });
-    // rotary deltas wrapped to the nearest turn, then kept continuous across ±180°
-    const positions = [];
-    rec.forEach(v => D.forEach(([key, , , , u]) => {
-      let d = v[key] - rec[0][key];
-      if (u === rot) d = Math.atan2(Math.sin(d), Math.cos(d));
-      positions.push(u === lin ? Math.round(d * 10000) / 10 : Math.round(d * DEG * 100) / 100);
-    }));
-    for (let j = 0; j < D.length; j++) if (D[j][4] === rot) for (let f = 1; f < rec.length; f++) {
-      const a = positions[(f - 1) * D.length + j]; let b = positions[f * D.length + j];
-      while (b - a > 180) b -= 360; while (b - a < -180) b += 360; positions[f * D.length + j] = Math.round(b * 100) / 100;
-    }
-    root.userData = { realvirtual: {
+    return { group: cellG, drives, timeline, info: { nanFramesFixed: nanFrames, frames: rec.length, playbackSec: +(rec.length * DT).toFixed(1), cycleSec, drives: D.length, hiddenFrames, linkPoseError: maxErr } };
+  }
+
+  // Merges recorded cells and static building elements into one GLB with one looping drive recording.
+  // cells: [{ id, rec: recordCell() result }]; building: [THREE.Object3D]; factory: { width, depth, height }.
+  // Shorter cell cycles hold their last (idle) frame until the longest one ends; then everything loops.
+  async function buildFactoryGlb(factory, cells, building) {
+    await loadExporter();
+    const root = new THREE.Group(); root.name = 'ONE_STATION';
+    root.add(window.FactoryElements ? window.FactoryElements.buildShell(factory, { walls: false }) : buildFactory(factory));
+    const bg = new THREE.Group(); bg.name = 'Building'; building.forEach(o => bg.add(o)); root.add(bg);
+    cells.forEach(c => { c.rec.group.name = 'Cell_' + c.id; root.add(c.rec.group); });
+    // unique, path-safe names everywhere: the glTF loader renames duplicates, which would break drive paths
+    const seen = new Set();
+    root.traverse(o => {
+      let n = (o.name || (o.isMesh ? 'mesh' : 'node')).replace(/[\/.:\[\]\s]+/g, '_'), k = 1;
+      if (seen.has(n)) { while (seen.has(n + '_' + k)) k++; n = n + '_' + k; }
+      o.name = n; seen.add(n);
+    });
+    const pathOf = o => { const p = []; for (let c = o; c; c = c.parent) p.unshift(c.name); return p.join('/'); };
+    const all = cells.flatMap(c => c.rec.drives), frames = cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : 1;
+    all.forEach(d => { d.node.userData = { realvirtual: { Drive: { Direction: d.dir, ReverseDirection: d.rev, TargetSpeed: 1000, UseLimits: false } } }; });
+    const positions = new Array(frames * all.length);
+    all.forEach((d, j) => { const s = d.series, n = s.length; for (let f = 0; f < frames; f++) positions[f * all.length + j] = s[f < n ? f : n - 1]; });
+    if (all.length) root.userData = { realvirtual: {
       _formatVersion: '1.0',
       DrivesRecorder: { PlayOnStart: true, Loop: true },
-      DrivesRecording_compact: { fixedDeltaTime: DT, numberFrames: rec.length, driveCount: D.length, drives: drives.map(({ id, path }) => ({ id, path })), sequences: [{ name: 'Cycle', startFrame: 0, endFrame: rec.length - 1 }], positions }
+      DrivesRecording_compact: { fixedDeltaTime: DT, numberFrames: frames, driveCount: all.length, drives: all.map((d, id) => ({ id, path: pathOf(d.node) })), sequences: [{ name: 'Cycle', startFrame: 0, endFrame: frames - 1 }], positions }
     } };
     root.updateMatrixWorld(true);
-
     const glb = await new Promise((ok, fail) => new THREE.GLTFExporter().parse(root, ok, fail, { binary: true, onlyVisible: true }));
-    return { glb, timeline, info: { nanFramesFixed: nanFrames, frames: rec.length, playbackSec: +(rec.length * DT).toFixed(1), cycleSec, drives: D.length, hiddenFrames, linkPoseError: maxErr } };
+    return { glb, frames, drives: all.length };
+  }
+
+  // timeline v2: one console-1 timeline per cell, all aligned to frame 0
+  const factoryTimeline = (factory, objects, cells, frames) => ({
+    version: 2, frames, fixedDeltaTime: DT, simPerFrame: H * SUB, factory, objects,
+    cells: cells.map(c => ({ id: c.id, name: c.name, x: c.x, z: c.z, rot: c.rot, timeline: c.rec.timeline }))
+  });
+
+  // The station console 1 is showing, as a one-cell factory (tools/export-station-glb.cjs).
+  async function exportStation() {
+    const rec = recordCell(), lay = rec.timeline.panel.layout;
+    const cell = { id: '1', name: '원스테이션 셀 1', x: lay.cell.x, z: lay.cell.z, rot: lay.cell.rot, rec };
+    const { glb, frames } = await buildFactoryGlb(lay.factory, [cell], []);
+    const objects = [{ id: '1', type: 'station', name: cell.name, x: cell.x, z: cell.z, rot: cell.rot }];
+    return { glb, timeline: factoryTimeline(lay.factory, objects, [cell], frames), info: rec.info };
   }
 
   // factory shell for the export: floor, edge marking, corner columns and ceiling outline
@@ -306,5 +336,5 @@
     return g;
   }
 
-  window.StationExport = { exportStation, checkCycle };
+  window.StationExport = { recordCell, buildFactoryGlb, factoryTimeline, exportStation, checkCycle, DT };
 })();

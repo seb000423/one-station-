@@ -201,6 +201,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 #saveList button.on{border-color:var(--accent)}
 #saveList b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #saveList span{font-size:11px;color:var(--mute);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cellPick{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
 #saveList .empty{font-size:11.5px;color:var(--dim);line-height:1.5}
 @media (max-width: 900px){
   .view .tl{left:14px;right:14px;top:auto;bottom:56px}
@@ -257,6 +258,10 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
             <div class="savepick"><select id="savePick" aria-label="저장된 스테이션"><option value="">기본 스테이션 (튜브형 · 지그 6개)</option></select><button type="button" id="saveDel" hidden>삭제</button></div>
           </div>
           <div id="saveList" aria-label="저장 목록"></div>
+          <div class="field" id="cellPickWrap" hidden>
+            <div class="lbl">셀 선택 <small id="cellInfo"></small></div>
+            <select id="cellPick" aria-label="패널에 표시할 셀"></select>
+          </div>
           <p class="ronote">콘솔 2는 콘솔 1에서 녹화한 사이클을 재생합니다. 설정을 바꾸려면 콘솔 1에서 바꾼 뒤 <b>저장</b>하고 여기서 불러오세요. 아래 설정은 불러온 스테이션의 값이며 표시만 됩니다.</p>
         </div>
         <div class="sec ro">
@@ -355,12 +360,14 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   const DEFAULT = { glb: new URL('realvirtual-models/station.glb', location.href).href, timeline: new URL('realvirtual-models/station-timeline.json', location.href).href };
   let GLB, TIMELINE, URL_RV;
   const frame = $('#rv'), off = $('#offline');
-  let TL = null, lastF = -1, lastRes = null, viewer = null;
+  // ROOT: the loaded timeline (v2 factory: one console-1 timeline per cell; v1: a single station).
+  // TL: the timeline the panels show (the chosen cell).
+  let ROOT = null, TL = null, lastF = -1, lastRes = null, viewer = null;
   function setTarget(t) {
     GLB = t.glb; TIMELINE = t.timeline; // ?glb= needs an absolute URL
     URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
     $('#rvLink').href = URL_RV; $('#rvLink').textContent = '스테이션 뷰어';
-    TL = null; lastF = -1; lastRes = null; viewer = null;
+    ROOT = null; TL = null; lastF = -1; lastRes = null; viewer = null;
   }
 
   const load = () => {
@@ -368,7 +375,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
       .then(([g, tl]) => {
         if (!g.ok) throw 0;
         off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV;
-        if (tl) { TL = tl; initPanels(); }
+        if (tl) { ROOT = tl; chooseCell(new URL(location.href).searchParams.get('cell')); }
       })
       .catch(() => { off.hidden = false; });
   };
@@ -403,7 +410,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     const cur = $('#savePick').value, card = (id, name, sub) => `<button type="button" data-id="${id}" class="${id === cur ? 'on' : ''}"><b>${esc(name)}</b><span>${esc(sub)}</span></button>`;
     $('#saveList').innerHTML = card('', '기본 스테이션', '튜브형 · 지그 6개 · 기본 배치') + (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
-      return card(s.id, s.name, [d, VARIANT_KO[m.variant] || m.variant, m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '));
+      return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · 셀 ' + m.cells + ' · 객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '));
     }).join('') : '<p class="empty">아직 저장본이 없습니다. 콘솔 1에서 "저장 · 콘솔 2로 보내기"로 저장하면 여기에 나타납니다.</p>');
     $('#saveList').querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => choose(b.dataset.id)));
   }
@@ -417,6 +424,19 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   });
 
   /* ---------- static panel content (captured from console 1 by the exporter) ---------- */
+  const FRAMES = () => (ROOT && ROOT.frames) || (TL && TL.frames) || 1;
+  function chooseCell(id) {
+    const cells = ROOT.version === 2 ? ROOT.cells : null;
+    $('#cellPickWrap').hidden = !cells || cells.length < 2;
+    if (!cells) { TL = ROOT; initPanels(); return; }
+    if (!cells.length) { TL = null; $('#cellInfo').textContent = '셀 없음'; return; }
+    const cell = cells.find(x => x.id === id) || cells[0];
+    $('#cellPick').innerHTML = cells.map(x => `<option value="${x.id}">${String(x.name).replace(/[<>&"]/g, '')}</option>`).join('');
+    $('#cellPick').value = cell.id;
+    $('#cellInfo').textContent = `${cells.length}개 셀 · 공장 ${ROOT.factory.width}×${ROOT.factory.depth} m`;
+    TL = cell.timeline; lastF = -1; lastRes = null; initPanels();
+  }
+  $('#cellPick').addEventListener('change', e => chooseCell(e.target.value));
   function initPanels() {
     const P = TL.panel;
     $$('[data-variant]').forEach(b => b.classList.toggle('on', b.dataset.variant === P.variant));
@@ -427,12 +447,14 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     $('#jointList').innerHTML = P.jointList;
     $$('#jointList input').forEach(i => i.disabled = true);
     $('#kTgt').textContent = P.kTgt;
-    const L = P.layout;
+    const L = P.layout, fac = ROOT && ROOT.version === 2 ? ROOT.factory : L && L.factory;
+    const objs = ROOT && ROOT.version === 2 ? ROOT.objects : null, cnt = t => objs.filter(o => o.type === t).length;
     $('#layoutSec').hidden = !L;
     if (L) {
       const f = L.factory, xz = o => `X ${o.x.toFixed(2)} · Z ${o.z.toFixed(2)} m`;
       $('#layoutSpec').innerHTML = [
-        ['공장', `${f.width} × ${f.depth} m · 높이 ${f.height} m`],
+        ['공장', `${fac.width} × ${fac.depth} m · 높이 ${fac.height} m`],
+        ...(objs ? [['구성', `셀 ${cnt('station')} · 기둥 ${cnt('column')} · 벽 ${cnt('wall')} · 출입문 ${cnt('door')} · 계단 ${cnt('stairs')} · 보행로 ${cnt('walkway')} · 구역 ${cnt('zone')}`]] : []),
         ['셀 위치', `${xz(L.cell)} · ${Math.round(L.cell.rot * 180 / Math.PI)}°`],
         ['포지셔너', xz(L.positioner)], ['도포 로봇 R2', xz(L.r2)], ['DMC 리더', xz(L.dmc)], ['저울', xz(L.scale)],
         ['지그 열 / R1 레일', `Z ${L.jig.z.toFixed(2)} / ${L.rail.z.toFixed(2)} m`]
@@ -462,7 +484,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     try {
       const t = frame.contentDocument.querySelector('[data-testid="sim-clock"]').textContent.split(':').map(Number);
       const sec = t.reduce((a, v) => a * 60 + v, 0);
-      return Math.floor(sec / TL.fixedDeltaTime) % TL.frames;
+      return Math.floor(sec / TL.fixedDeltaTime) % FRAMES();
     } catch (e) { return 0; }
   }
 

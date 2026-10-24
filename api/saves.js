@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       const saves = await Promise.all(Object.values(byId).filter(s => s['station.glb'] && s['timeline.json'] && s['meta.json']).map(async s => {
         let meta = {};
         try { meta = await (await fetch(s['meta.json'], { cache: 'no-store' })).json(); } catch (e) {}
-        return { id: s.id, name: meta.name || s.id, created: meta.created || null, summary: meta.summary || null, glb: s['station.glb'], timeline: s['timeline.json'] };
+        return { id: s.id, name: meta.name || s.id, created: meta.created || null, kind: meta.kind || 'station', summary: meta.summary || null, glb: s['station.glb'], timeline: s['timeline.json'], factory: s['factory.json'] || null };
       }));
       saves.sort((a, b) => String(b.created).localeCompare(String(a.created)));
       return sendJson(res, 200, { saves });
