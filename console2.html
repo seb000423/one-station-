@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>콘솔 2 (realvirtual)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Same header as console.html; main area embeds the local realvirtual WEB planner. */
+:root{
+  --bg:#0b0d10; --panel:#101317; --line:#232930; --fg:#e6e8eb; --mute:#8a929c;
+  --accent:#00e8d0; --accent-ink:#021a18;
+  --sans:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden;word-break:keep-all}
+*{box-sizing:border-box}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr}
+.top{position:relative;display:flex;align-items:center;gap:16px;height:52px;border-bottom:1px solid var(--line);background:var(--bg);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.back{color:var(--fg);text-decoration:none;border:1px solid var(--line);padding:5px 10px;font-size:12px;border-radius:3px;white-space:nowrap}
+.back:hover,.back:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+.crumb{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:calc(50% - 230px)}
+.logo{position:absolute;left:50%;transform:translateX(-50%);font-family:var(--mono);font-weight:600;letter-spacing:.42em;font-size:17px;white-space:nowrap;color:#fff;padding-left:.42em}
+.lang{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--mute);white-space:nowrap}
+.lang b{color:var(--fg)}
+main{position:relative;min-height:0}
+#rv{display:block;width:100%;height:100%;border:0;background:var(--bg)}
+.offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)}
+.offline .card{max-width:440px;background:var(--panel);border:1px solid var(--line);padding:24px;line-height:1.7}
+.offline h2{margin:0 0 8px;font-size:16px}
+.offline code{font-family:var(--mono);background:#000;padding:2px 6px;color:var(--accent)}
+.offline a{color:var(--accent)}
+.offline button{margin-top:14px;font:inherit;background:var(--accent);color:var(--accent-ink);border:0;padding:8px 16px;font-weight:600;cursor:pointer}
+@media (max-width:640px){.crumb{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="back" href="index.html">← 뒤로</a>
+    <span class="crumb">EGR 쿨러 · 니켈 브레이징 페이스트 도포 스테이션 · realvirtual 플래너</span>
+    <div class="logo">ONE STATION</div>
+    <div class="lang"><b>KR</b> · EN</div>
+  </header>
+  <main>
+    <iframe id="rv" title="realvirtual WEB 플래너" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+    <div class="offline" id="offline" hidden>
+      <div class="card">
+        <h2>realvirtual WEB 서버에 연결할 수 없습니다</h2>
+        <p>realvirtual-WEB 폴더에서 <code>npm run dev</code> 를 실행한 뒤 다시 시도하세요.<br>
+        주소: <a id="rvLink" target="_blank" rel="noopener"></a></p>
+        <button type="button" id="retry">다시 시도</button>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+(() => {
+  const URL_RV = 'http://localhost:5173/?mode=planner';
+  const frame = document.getElementById('rv'), off = document.getElementById('offline');
+  const link = document.getElementById('rvLink');
+  link.href = URL_RV; link.textContent = URL_RV;
+  const load = () => {
+    fetch('http://localhost:5173/', { mode: 'no-cors', cache: 'no-store' })
+      .then(() => { off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV; })
+      .catch(() => { off.hidden = false; });
+  };
+  document.getElementById('retry').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>
