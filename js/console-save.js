@@ -55,13 +55,14 @@ function dialog() {
     const buttons = form.querySelectorAll('button');
     buttons.forEach(b => b.disabled = true);
     try {
+      // fail fast, before the recording, when the server cannot take saves
+      const health = await fetch('api/health', { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+      if (!health.uploadMode) throw new Error('저장소(Vercel Blob)가 연결되지 않았습니다');
+      if (!health.savePassword) throw new Error('SAVE_PASSWORD not configured');
       say('사이클 녹화 중… (몇 초 걸립니다)');
       await new Promise(r => setTimeout(r, 60)); // let the message paint before the synchronous recording
       const { glb, timeline } = await window.StationExport.exportStation();
       say('업로드 중…');
-      const health = await (await fetch('api/health', { cache: 'no-store' })).json().catch(() => ({}));
-      if (!health.uploadMode) throw new Error('저장소(Vercel Blob)가 연결되지 않았습니다');
-      if (!health.savePassword) throw new Error('SAVE_PASSWORD not configured');
       const blob = await import(BLOB_CLIENT), upload = health.uploadMode === 'presigned' ? blob.uploadPresigned : blob.upload;
       const id = newId(), clientPayload = JSON.stringify({ password });
       const put = (file, body, contentType) => upload(`saves/${id}/${file}`, body, { access: 'public', handleUploadUrl: 'api/upload', clientPayload, contentType, multipart: body.size > 5 * 1024 * 1024 });
