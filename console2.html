@@ -338,7 +338,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
         </div>
 
         <div class="sec" id="motionSec" hidden>
-          <h3>AMR · 작업자 · 안전</h3>
+          <h3>AMR · 작업자 · 컨베이어 · 안전</h3>
           <div id="motionList"></div>
         </div>
 
@@ -439,15 +439,17 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   /* ---------- static panel content (captured from console 1 by the exporter) ---------- */
   // AMRs, workers and safety warnings recorded with a factory save (timeline.motion / timeline.safety)
   function renderMotion(f) {
-    const M = ROOT && ROOT.motion, has = !!(M && (Object.keys(M.amr).length || Object.keys(M.worker).length));
+    const M = ROOT && ROOT.motion, CV = ROOT && ROOT.flow ? ROOT.flow.conveyors : {}, has = !!(M && (Object.keys(M.amr).length || Object.keys(M.worker).length)) || Object.keys(CV).length > 0;
     $('#motionSec').hidden = !has;
     const warns = ROOT && ROOT.safety ? String(at(ROOT.safety, f)).split('|').filter(Boolean) : [];
     $('#safeWarn').hidden = !warns.length; $('#safeWarn').textContent = warns.length ? '⚠ ' + warns.join(' · ') : '';
     if (!has) return;
     const e = t => String(t).replace(/[<>&"]/g, '');
-    const amr = Object.values(M.amr).map(a => `<div class="mrow"><b>${e(a.name)}</b><span class="st">${a.ok ? `${e(at(a.state, f))} · 운반 ${at(a.trips, f)}회` : `<span class="ng">${e(a.error || '경로 없음')}</span>`}</span>${a.ok ? `<span></span><span class="st">${e(a.from)} → ${e(a.to)} · 왕복 ${a.period.toFixed(0)} s</span>` : ''}</div>`).join('');
-    const wk = Object.values(M.worker).map(w => { const bad = warns.some(x => x.startsWith(w.name + ' ↔')); return `<div class="mrow"><b>${e(w.name)}</b><span class="${bad ? 'ng' : 'st'}">${e(at(w.state, f))}${bad ? ' · ⚠ 가동범위 안' : ''}</span></div>`; }).join('');
-    $('#motionList').innerHTML = (amr ? '<h4>AMR</h4>' + amr : '') + (wk ? '<h4>작업자</h4>' + wk : '') + '<h4>안전 경고</h4>' + (warns.length ? warns.map(w => `<div class="ng">⚠ ${e(w)}</div>`).join('') : '<div class="ok">위험 없음</div>');
+    const amr = Object.values((M && M.amr) || {}).map(a => `<div class="mrow"><b>${e(a.name)}</b><span class="st">${a.ok ? `${e(at(a.state, f))} · 운반 ${at(a.trips, f)}회` : `<span class="ng">${e(a.error || '경로 없음')}</span>`}</span>${a.ok ? `<span></span><span class="st">${e(a.from)} → ${e(a.to)} · 왕복 ${a.period.toFixed(0)} s</span>` : ''}</div>`).join('');
+    const wk = Object.values((M && M.worker) || {}).map(w => { const bad = warns.some(x => x.startsWith(w.name + ' ↔')); return `<div class="mrow"><b>${e(w.name)}</b><span class="${bad ? 'ng' : 'st'}">${e(at(w.state, f))}${bad ? ' · ⚠ 가동범위 안' : ''}</span></div>`; }).join('');
+    // conveyors: state, items put on / taken off so far
+    const cv = Object.values(CV).map(c => { const made = at(c.made, f), done = at(c.done, f), st = String(at(c.state, f)); return `<div class="mrow"><b>${e(c.name)}</b><span class="${st.startsWith('정체') ? 'ng' : 'st'}">${e(st)}${made ? ` · 투입 ${made}` : ''}${done ? ` · 배출 ${done}` : ''}</span></div>`; }).join('');
+    $('#motionList').innerHTML = (amr ? '<h4>AMR</h4>' + amr : '') + (wk ? '<h4>작업자</h4>' + wk : '') + (cv ? '<h4>컨베이어</h4>' + cv : '') + '<h4>안전 경고</h4>' + (warns.length ? warns.map(w => `<div class="ng">⚠ ${e(w)}</div>`).join('') : '<div class="ok">위험 없음</div>');
   }
   const FRAMES = () => (ROOT && ROOT.frames) || (TL && TL.frames) || 1;
   function chooseCell(id) {

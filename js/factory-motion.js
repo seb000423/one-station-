@@ -37,7 +37,7 @@
       if (perm(o, 'amr')) continue;
       if (o.type === 'station') { const [cx, cz] = local2world(o, 0, -0.275); out.push(Object.assign(rect(o, CELL_FOOT[0], CELL_FOOT[1], CELL_MARGIN), { cx, cz })); } // enclosure centre sits 0.275 m behind the cell origin
       else if (o.type === 'robot') out.push({ kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: p.reach });
-      else if (o.type === 'conveyor') out.push(rect(o, p.length, p.width + 0.1, 0.15));
+      else if (o.type === 'conveyor') { const [w, d] = FE().conveyorPath(p).size; out.push(rect(o, w, d, 0.15)); }
       else if (o.type === 'rack') out.push(rect(o, p.bays * p.bayWidth, p.depth, 0.15));
       else if (o.type === 'column') out.push(rect(o, p.w, p.d, 0.2));
       else if (o.type === 'wall') out.push(rect(o, p.length, p.thickness, 0.2));
@@ -76,7 +76,7 @@
     switch (o.type) {
       case 'station': { const [cx, cz] = local2world(o, 0, -0.275); return Object.assign(rect(o, CELL_FOOT[0], CELL_FOOT[1]), { cx, cz }); }
       case 'robot': return { kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: p.reach };
-      case 'conveyor': return rect(o, p.length, p.width + 0.1);
+      case 'conveyor': { const [w, d] = FE().conveyorPath(p).size; return rect(o, w, d); }
       case 'rack': return rect(o, p.bays * p.bayWidth, p.depth);
       case 'column': return rect(o, p.w, p.d);
       case 'wall': return rect(o, p.length, p.thickness);

@@ -51,7 +51,10 @@
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
     walkway: [['length', '길이 (m)', 0.5, 0.5, 200], ['width', '폭 (m)', 0.1, 0.6, 6]],
     zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color']],
-    conveyor: [['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]], ['length', '길이 (m)', 0.5, 0.5, 60], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3]],
+    conveyor: [['shape', '모양', 'select', [['straight', '직선'], ['curve', '90° 곡선 (L자)'], ['uturn', '180° U턴']]], ['turn', '꺾는 방향', 'select', [['left', '왼쪽'], ['right', '오른쪽']], null, p => p.shape !== 'straight'],
+      ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
+      ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
+      ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
     robot: [['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
     amr: [['from', '출발 지점', 'place'], ['to', '도착 지점', 'place'], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
@@ -87,7 +90,7 @@
   let motionCache = null, motionKey = '';
   function motion() {
     const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params]));
-    if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); }
+    if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
     return motionCache;
   }
   function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
@@ -198,6 +201,7 @@
       tc.addEventListener('objectChange', () => {
         if (helper) helper.update(); refreshTransformFields();
         const o = selectedId && byId(selectedId), g = o && !innerSel && groupOf(o.id);
+        if (g && o.type === 'conveyor') { const sn = FF().snap(doc, Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); if (sn) { g.position.set(sn.x, 0, sn.z); g.rotation.set(0, sn.rot, 0); if (helper) helper.update(); } snapNote = sn ? sn.text : ''; }
         if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); helper.material.color.set(why ? 0xff3b30 : 0x00e8d0); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
       });
       s.scene.add(tc);
@@ -233,11 +237,12 @@
       if (innerSel === 'jig' || innerSel === 'rail') L[innerSel].z = v(p.z, ZMIN, ZMAX); else L[innerSel] = { x: v(p.x, XMIN, XMAX), z: v(p.z, ZMIN, ZMAX) };
       s.applyLayout(L); o.params = engineCellParams(); store(); select(o.id, innerSel); return;
     }
-    const g = groupOf(o.id), next = Object.assign({}, o, { x: r2(g.position.x), z: r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
+    const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, next = Object.assign({}, o, { x: exact ? g.position.x : r2(g.position.x), z: exact ? g.position.z : r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
     const why = blockedBy(next);
     if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0x00e8d0); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
     o.x = next.x; o.z = next.z; o.rot = next.rot; placeObjectGroup(o);
     store(); if (helper) helper.update(); renderProps(); renderTree();
+    if (o.type === 'conveyor') conveyorNote(o, snapNote); snapNote = '';
   }
   function onPick(e) {
     if (placing || (tc && tc.dragging)) return;
@@ -332,20 +337,83 @@
   function cancelPlacing() { cancelDrawing(); if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
   function moveGhost(e) {
     if (drawing) { const p = floorPoint(e); if (p) redrawPreview(snapToNode(p)); return; }
-    if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z;
-    const why = blockedBy(candidate(placing, p)), bad = !!why;
+    if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true;
+    const cand = candidate(placing, p); ghost.position.set(cand.x, ghost.position.y, cand.z); ghost.rotation.y = cand.rot;
+    const why = blockedBy(cand), bad = !!why;
     if (bad !== ghost.userData.bad) { ghost.userData.bad = bad; ghost.traverse(o => { if (o.isMesh) { if (!o.userData.c0) o.userData.c0 = o.material.color.clone(); o.material.color.copy(bad ? new THREE.Color(0xff3b30) : o.userData.c0); } }); }
     if (bad) note(`여기에는 놓을 수 없습니다: ${why}`, true);
   }
-  const candidate = (type, p) => ({ id: '__ghost', type, name: TYPE_LABEL[type], x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) });
+  const candidate = (type, p) => {
+    const c = { id: '__ghost', type, name: TYPE_LABEL[type], x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
+    if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
+    return c;
+  };
   function placeAt(type, p) {
-    const why = blockedBy(candidate(type, p)); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
+    const cand = candidate(type, p), why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
     pushUndo();
-    const o = { id: newId(), type, name: nextName(type), x: p.x, z: p.z, rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
-    syncLabel(o); clampToFactory(o); doc.objects.push(o);
+    const o = { id: newId(), type, name: nextName(type), x: cand.x, z: cand.z, rot: cand.rot, params: cand.params };
+    syncLabel(o); if (!cand.snapped) clampToFactory(o); doc.objects.push(o);
     if (type !== 'station') buildView(o);
     select(o.id); if (type === 'station') placeObjectGroup(o);
-    store(); note(`${o.name}을(를) 놓았습니다`);
+    store(); if (type === 'conveyor') conveyorNote(o, cand.snapped, true); else note(`${o.name}을(를) 놓았습니다`);
+  }
+  /* ---------- conveyors: links, live items ---------- */
+  const FF = () => window.FactoryFlow;
+  let snapNote = '', flowSim = null, flowKey = '', flowLayer = null, itemLayer = null;
+  const itemMeshes = new Map();
+  // what a conveyor is joined to, and problems at its ends
+  function conveyorLinks(o) {
+    const N = FF().network(doc), me = N.by.get(o.id); if (!me) return { me: null, warn: [] };
+    return { me, from: me.prev.map(id => N.by.get(id).name), to: me.next && N.by.get(me.next.id), warn: N.warn.filter(w => w.ids.includes(o.id)).map(w => w.text) };
+  }
+  function conveyorNote(o, snapped, placed) {
+    const L = conveyorLinks(o);
+    if (L.warn.length) return note(`${o.name}: ${L.warn[0]}`, true);
+    note(`${o.name}${placed ? '을(를) 놓았습니다' : ''}${snapped ? ' — ' + snapped : ''}${L.to ? ` · → ${L.to.name}` : ''}${L.from.length ? ` · ← ${L.from.join(', ')}` : ''}`);
+  }
+  function conveyorInfo(o) {
+    const L = conveyorLinks(o), me = L.me, p = me ? me.p : {};
+    const end = !me ? '' : L.to ? `출구 → ${esc(L.to.name)}${me.next.merge ? ' (옆으로 합류)' : ''}` : p.sink ? '출구: 배출 (물건을 꺼냄)' : '출구: 막힘 — 물건이 끝에 쌓입니다';
+    const start = !me ? '' : L.from.length ? `입구 ← ${L.from.map(esc).join(', ')}` : p.source ? `입구: 투입 (${p.interval} s마다 ${p.item} m 물건)` : '입구: 연결 없음';
+    return `<p class="hint">${me ? `길이 ${me.len.toFixed(2)} m · 한 개 통과 ${(me.len / me.speed).toFixed(1)} s<br>${start}<br>${end}` : ''}</p>
+      ${L.warn.map(w => `<p class="hint" style="color:var(--warn)">⚠ ${esc(w)}</p>`).join('')}
+      <p class="hint" id="fbConvStats"></p>
+      <p class="hint">다른 컨베이어의 입구·출구 근처(40 cm)로 끌어 오면 자석처럼 붙고, 출구를 다른 컨베이어 옆면에 대면 합류합니다. 시뮬레이션을 시작하면 투입 컨베이어에서 물건이 나와 연결된 컨베이어를 따라 흐릅니다.</p>`;
+  }
+  const flowDocKey = () => JSON.stringify(doc.objects.filter(o => o.type === 'conveyor').map(o => [o.id, o.x, o.z, o.rot, o.params]));
+  // items on the conveyors at time t (restarts from 0 after ⟲ or an edit)
+  function flowAt(t) {
+    const key = flowDocKey();
+    if (!flowSim || key !== flowKey || t < flowSim.t() - 1e-6) { flowSim = FF().sim(doc); flowKey = key; buildFlowLayer(); }
+    flowSim.advanceTo(t); return flowSim;
+  }
+  const cartonMat = new THREE.MeshStandardMaterial({ color: 0xa8743e, roughness: 0.85 }), cartonTape = new THREE.MeshStandardMaterial({ color: 0x5e4122, roughness: 0.8 });
+  function renderItems(F) {
+    const s = S(); if (!itemLayer) { itemLayer = new THREE.Group(); itemLayer.name = 'conveyor-items'; s.scene.add(itemLayer); }
+    const live = new Set();
+    for (const x of F.items()) {
+      let m = itemMeshes.get(x.id);
+      if (!m) {
+        m = new THREE.Group(); const b = new THREE.Mesh(new THREE.BoxGeometry(x.size, x.h, x.w), cartonMat); b.castShadow = b.receiveShadow = true; m.add(b);
+        const tp = new THREE.Mesh(new THREE.BoxGeometry(x.size + 0.004, 0.004, Math.min(0.06, x.w * 0.3)), cartonTape); tp.position.y = x.h / 2; m.add(tp);
+        m.traverse(q => { q.raycast = () => {}; }); itemMeshes.set(x.id, m); itemLayer.add(m);
+      }
+      m.position.set(x.x, x.y, x.z); m.rotation.set(0, x.yaw, 0); live.add(x.id);
+    }
+    for (const [id, m] of itemMeshes) if (!live.has(id)) { itemLayer.remove(m); m.children.forEach(c => c.geometry.dispose()); itemMeshes.delete(id); }
+  }
+  // end markers: green = joined, orange = dead end (items queue), red = sink, blue = source
+  function buildFlowLayer() {
+    const s = S(); if (flowLayer) s.scene.remove(flowLayer);
+    flowLayer = new THREE.Group(); flowLayer.name = 'conveyor-ends';
+    const N = FF().network(doc), fed = new Set(N.belts.flatMap(b => b.next && !b.next.merge ? [b.next.id] : []));
+    const dot = (x, y, z, color) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.012, 20), new THREE.MeshBasicMaterial({ color })); m.position.set(x, y, z); m.raycast = () => {}; flowLayer.add(m); };
+    for (const b of N.belts) {
+      const y = b.top + 0.01;
+      dot(b.exit.x, y, b.exit.z, b.next ? 0x2bb673 : b.p.sink ? 0xff6b5a : 0xffa53a);
+      if (!fed.has(b.id)) dot(b.entry.x, y, b.entry.z, b.p.source ? 0x4aa8ff : 0x8894a0);
+    }
+    s.scene.add(flowLayer);
   }
   // 전체 지우기: placed objects only (keep the building) / everything (keep the size) / everything + default size
   const BUILDING = ['column', 'wall', 'door', 'stairs'];
@@ -748,6 +816,7 @@
     if (step === 'place') step = 'select', min = [['', '— 선택 —']].concat(FM().places(doc, motion().G).map(p => [p.ref, p.label]));
     if (step === 'walkway') step = 'select', min = [['', '정지 (제자리)']].concat(doc.objects.filter(o => o.type === 'walkway' || o.type === 'walkroute').map(o => [o.id, o.name]));
     if (step === 'select') return `<label>${label}<select data-k="${k}">${min.map(([val, l]) => `<option value="${val}" ${String(v) === val ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+    if (step === 'check') return `<label class="chk"><input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}> ${label}</label>`;
     if (step === 'text') return `<label>${label}<input type="text" data-k="${k}" value="${esc(v)}" maxlength="30"></label>`;
     if (step === 'color') return `<label>${label}<input type="color" data-k="${k}" value="${esc(v || (selectedId && byId(selectedId) && byId(selectedId).type === 'zone' ? (window.FactoryElements.ZONE_KIND[(byId(selectedId).params || {}).kind || 'pickup'] || ['', '#5f6b78'])[1] : '#888888'))}"></label>`;
     return `<label>${label}<input type="number" data-k="${k}" step="${step}" min="${min}" max="${max}" value="${v}"></label>`;
@@ -779,7 +848,8 @@
       <div class="row">${field('x', 'X (m)', r2(o.x), 0.1, -999, 999)}${field('z', 'Z (m)', r2(o.z), 0.1, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
     if (!isCell) {
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
-      html += `<div class="row">${FIELDS[o.type].map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, mn, mx)).join('')}</div>`;
+      html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, mn, mx)).join('')}</div>`;
+      if (o.type === 'conveyor') html += conveyorInfo(o);
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
       if (o.type === 'amr') {
         const pl = motion().amr[o.id];
@@ -887,7 +957,9 @@
     const others = doc.objects.filter(o => o.type !== 'station');
     // the recording spans the longest cell cycle (or one robot cycle when there are no cells)
     const loops = Object.values(motion().amr).concat(Object.values(motion().worker)).filter(p => p.ok && !p.still).map(p => p.period);
-    const frames = Math.min(Math.ceil(3600 / SPF), cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)), ...loops.map(p => Math.ceil(p / SPF))));
+    const flowing = doc.objects.some(o => o.type === 'conveyor' && o.params && o.params.source);
+    // conveyors with a source need time to fill: at least 120 s then
+    const frames = Math.min(Math.ceil(3600 / SPF), Math.max(flowing ? Math.ceil(120 / SPF) : 1, cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)), ...loops.map(p => Math.ceil(p / SPF)))));
     const M = FM().plans(doc, { horizon: frames * SPF + SPF }); // AMRs simulated together over the whole recording
     const building = [], extra = [];
     for (const o of others) {
@@ -899,13 +971,35 @@
     const rings = new THREE.Group(); rings.name = 'Range_Circles';
     for (const c of FM().rangeCircles(doc, M, 0)) if (c.id.includes(':')) { const m = new THREE.Mesh(new THREE.RingGeometry(c.r - 0.04, c.r, 72), new THREE.MeshBasicMaterial({ color: 0xe8a019, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })); m.name = 'Range_' + c.name; m.rotation.x = -Math.PI / 2; m.position.set(c.x, 0.016, c.z); rings.add(m); }
     building.push(rings);
+    progress('컨베이어 물건 흐름 기록 중…'); await new Promise(r => setTimeout(r, 20));
+    const flow = FF().record(doc, frames, SPF);
+    if (flow.pools.length) { const items = new THREE.Group(); items.name = 'Conveyor_Items'; flow.pools.forEach((pool, k) => extra.push(...rigItems(items, pool, k, frames))); building.push(items); }
     const { glb } = await window.StationExport.buildFactoryGlb(doc.factory, cells, building, extra, frames);
     const objects = doc.objects.map(o => ({ id: o.id, type: o.type, name: o.name, x: o.x, z: o.z, rot: o.rot || 0, params: o.type === 'station' ? undefined : o.params }));
     const timeline = window.StationExport.factoryTimeline(doc.factory, objects, cells, frames);
     Object.assign(timeline, motionTimeline(M, frames, SPF));
+    if (Object.keys(flow.conveyors).length) timeline.flow = { conveyors: flow.conveyors };
     return { glb, timeline, doc: clone(doc) };
   }
 
+  // conveyor items for console 2: each slot a carton on a TX > TZ > TY > RY rig (positions from FactoryFlow.record)
+  function rigItems(parent, pool, k, frames) {
+    const out = [];
+    pool.slots.forEach((P, i) => {
+      const mk = n => { const x = new THREE.Group(); x.name = `Item_${k + 1}_${i + 1}_${n}`; return x; }, q0 = P[0];
+      const tx = mk('TX'), tz = mk('TZ'), ty = mk('TY'), ry = mk('RY');
+      tx.position.x = q0[0]; tz.position.z = q0[2]; ty.position.y = q0[1]; ry.rotation.y = q0[3];
+      const b = new THREE.Mesh(new THREE.BoxGeometry(pool.size, pool.h, pool.w), cartonMat); b.name = `Item_${k + 1}_${i + 1}`; ry.add(b);
+      parent.add(tx); tx.add(tz); tz.add(ty); ty.add(ry);
+      const sx = [], sz = [], sy = [], sr = []; let yaw = q0[3];
+      for (let f = 0; f < frames; f++) {
+        const q = P[f]; while (q[3] - yaw > Math.PI) q[3] -= 2 * Math.PI; while (q[3] - yaw < -Math.PI) q[3] += 2 * Math.PI; yaw = q[3];
+        sx.push(Math.round((q[0] - q0[0]) * 10000) / 10); sz.push(Math.round((q[2] - q0[2]) * 10000) / 10); sy.push(Math.round((q[1] - q0[1]) * 10000) / 10); sr.push(Math.round((q[3] - q0[3]) * 180 / Math.PI * 100) / 100);
+      }
+      out.push({ node: tx, dir: 'LinearX', rev: true, series: sx }, { node: tz, dir: 'LinearZ', rev: false, series: sz }, { node: ty, dir: 'LinearY', rev: false, series: sy }, { node: ry, dir: 'RotationY', rev: true, series: sr });
+    });
+    return out;
+  }
   // AMR / worker motion for console 2: the element moves on a TX > TZ > RY rig recorded from its plan
   function rigMotion(g, pl, frames, SPF) {
     const q0 = pl.pose(0), mk = n => { const x = new THREE.Group(); x.name = g.name + '_' + n; return x; };
@@ -1001,6 +1095,8 @@
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
         }
       }
+      const F = flowAt(t); renderItems(F);
+      if (now - lastPanel > 250) { const cs = $('#fbConvStats'), sel = selectedId && byId(selectedId); if (cs && sel && sel.type === 'conveyor') { const st = F.stats()[sel.id]; if (st) cs.innerHTML = `현재 ${st.state}${sel.params && sel.params.source ? ` · 투입 ${st.made}개` : ''}${sel.params && sel.params.sink ? ` · 배출 ${st.done}개` : ''}`; } }
       updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
       cameraTick(dt);
       requestAnimationFrame(tick);

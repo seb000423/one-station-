@@ -54,6 +54,22 @@
     const down = u < 0.25 ? Math.sin(Math.PI * Math.min(1, u / 0.25)) : u >= 0.5 && u < 0.75 ? Math.sin(Math.PI * (u - 0.5) / 0.25) : 0;
     return { j1: yaw, j2: -0.35 - 0.45 * down, j3: 1.2 + 0.25 * down, j4: -0.85 + 0.2 * down, carry: u >= 0.12 && u < 0.62 };
   }
+  // conveyor centre line in its own frame. base(u) runs 0..len along local +X first (dir +1); at(s) runs along
+  // the actual travel direction (dir −1 reverses it). Both return [x, z, yaw]. A 90° curve / 180° U-turn turns
+  // left (m +1) or right (m −1) around centre (cx, m·cz) with radius R; its footprint box is centred on the origin.
+  function conveyorPath(p) {
+    const W = p.width, h = W / 2 + 0.05, shape = p.shape === 'curve' || p.shape === 'uturn' ? p.shape : 'straight', m = p.turn === 'right' ? -1 : 1;
+    let len, base, size, R = 0, A = 0, cx = 0, cz = 0;
+    if (shape === 'straight') { len = p.length; base = u => [-len / 2 + u, 0, 0]; size = [len, W + 0.1]; }
+    else {
+      R = Math.max(p.radius, h + 0.05); A = shape === 'uturn' ? Math.PI : Math.PI / 2;
+      const Sx = R + h; size = [Sx, shape === 'uturn' ? 2 * Sx : Sx]; cx = -Sx / 2; cz = shape === 'uturn' ? 0 : -Sx / 2; len = R * A;
+      base = u => { const t = u / R; return [cx + R * Math.sin(t), m * (cz + R * Math.cos(t)), m * t]; };
+    }
+    const clamp = s => Math.max(0, Math.min(len, s));
+    const at = p.dir < 0 ? s => { const q = base(len - clamp(s)); return [q[0], q[1], q[2] + Math.PI]; } : s => base(clamp(s));
+    return { shape, len, base, at, size, top: p.height + 0.035, R, A, cx, cz, m, h };
+  }
   const box = (g, n, w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.name = n; b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
 
   let BILLBOARD = false; // set while building for console 1
@@ -140,25 +156,55 @@
     },
     conveyor: {
       label: '컨베이어', group: 'equipment',
-      defaults: () => ({ length: 4, width: 0.6, height: 0.8, speed: 0.3, kind: 'roller', dir: 1 }),
+      // shape: straight / curve (90°) / uturn (180°), turning left or right around radius (centre line);
+      // source: items are put on at the entry every interval s (item: carton length m); sink: taken off at the exit
+      defaults: () => ({ shape: 'straight', length: 4, radius: 0.9, turn: 'left', width: 0.6, height: 0.8, speed: 0.3, kind: 'roller', dir: 1, source: false, interval: 6, item: 0.4, sink: false }),
       build: (g, p) => {
-        const L = p.length, W = p.width, H = p.height, r = 0.035;
-        for (const s of [-1, 1]) box(g, 'Conveyor_Side', L, 0.12, 0.04, M.conveyorFrame, 0, H - 0.02, s * (W / 2 + 0.02));
-        const legs = Math.max(2, Math.ceil(L / 1.5) + 1);
-        for (let i = 0; i < legs; i++) for (const s of [-1, 1]) box(g, 'Conveyor_Leg', 0.05, H - 0.06, 0.05, M.conveyorFrame, -L / 2 + 0.05 + i * (L - 0.1) / (legs - 1), (H - 0.06) / 2, s * (W / 2 - 0.02));
+        const P = conveyorPath(p), W = p.width, H = p.height, r = 0.035;
         const degPerSec = (p.speed / r) * 180 / Math.PI * (p.dir < 0 ? -1 : 1);
-        if (p.kind === 'belt') {
-          box(g, 'Conveyor_Belt', L - 2 * r, 0.012, W - 0.02, M.belt, 0, H + r - 0.006, 0);
-          for (const s of [-1, 1]) jog(cyl(g, 'Conveyor_Drum', r, W - 0.02, M.roller, s * (L / 2 - r), H, 0, 'z'), 'RotationZ', true, -degPerSec);
+        // a part laid along the base centre line at distance u (local +X = travel direction of dir +1)
+        const seg = u => { const [x, z, yaw] = P.base(u), s = new THREE.Group(); s.name = 'Conveyor_Seg'; s.position.set(x, 0, z); s.rotation.y = yaw; g.add(s); return s; };
+        if (P.shape === 'straight') {
+          const L = P.len;
+          for (const s of [-1, 1]) box(g, 'Conveyor_Side', L, 0.12, 0.04, M.conveyorFrame, 0, H - 0.02, s * (W / 2 + 0.02));
+          const legs = Math.max(2, Math.ceil(L / 1.5) + 1);
+          for (let i = 0; i < legs; i++) for (const s of [-1, 1]) box(g, 'Conveyor_Leg', 0.05, H - 0.06, 0.05, M.conveyorFrame, -L / 2 + 0.05 + i * (L - 0.1) / (legs - 1), (H - 0.06) / 2, s * (W / 2 - 0.02));
         } else {
-          const n = Math.max(2, Math.min(80, Math.floor(L / 0.12)));
-          for (let i = 0; i < n; i++) jog(cyl(g, 'Conveyor_Roller', r, W - 0.02, M.roller, -L / 2 + 0.06 + i * (L - 0.12) / (n - 1), H, 0, 'z'), 'RotationZ', true, -degPerSec);
+          // curved side rails from short pieces; legs at the ends and between
+          const arc = (rr, t) => [P.cx + rr * Math.sin(t), P.m * (P.cz + rr * Math.cos(t)), P.m * t];
+          for (const side of [-1, 1]) {
+            const rr = P.R + side * (W / 2 + 0.02), n = Math.max(6, Math.ceil(P.A * rr / 0.12));
+            for (let i = 0; i < n; i++) { const t0 = i / n * P.A, t1 = (i + 1) / n * P.A, [x, z, yaw] = arc(rr, (t0 + t1) / 2); box(g, 'Conveyor_Side', 2 * rr * Math.sin((t1 - t0) / 2) + 0.01, 0.12, 0.04, M.conveyorFrame, x, H - 0.02, z).rotation.y = yaw; }
+            const nl = P.shape === 'uturn' ? 4 : 2;
+            for (let i = 0; i <= nl; i++) { const [x, z] = arc(P.R + side * (W / 2 - 0.02), Math.min(P.A - 0.05, Math.max(0.05, i / nl * P.A))); box(g, 'Conveyor_Leg', 0.05, H - 0.06, 0.05, M.conveyorFrame, x, (H - 0.06) / 2, z); }
+          }
         }
-        const nA = Math.max(1, Math.round(p.length / 1.2));
-        for (let i = 0; i < nA; i++) { const arrow = labelPlane(p.dir < 0 ? '◀' : '▶', 0.35, 'rgba(0,232,208,.7)', true); arrow.name = 'Conveyor_Arrow'; arrow.position.set(-p.length / 2 + (i + 0.5) * p.length / nA, H + r + 0.006, 0); g.add(arrow); }
+        if (p.kind === 'belt') {
+          if (P.shape === 'straight') box(g, 'Conveyor_Belt', P.len - 2 * r, 0.012, W - 0.02, M.belt, 0, H + r - 0.006, 0);
+          else {
+            const belt = new THREE.Mesh(new THREE.RingGeometry(P.R - (W - 0.02) / 2, P.R + (W - 0.02) / 2, 48, 1, P.m > 0 ? -Math.PI / 2 : Math.PI / 2 - P.A, P.A), M.belt);
+            belt.name = 'Conveyor_Belt'; belt.rotation.x = -Math.PI / 2; belt.position.set(P.cx, H + r, P.m * P.cz); belt.receiveShadow = true; g.add(belt);
+          }
+          for (const u of [r, P.len - r]) jog(cyl(seg(u), 'Conveyor_Drum', r, W - 0.02, M.roller, 0, H, 0, 'z'), 'RotationZ', true, -degPerSec);
+        } else {
+          const n = Math.max(2, Math.min(120, Math.floor(P.len / 0.12)));
+          for (let i = 0; i < n; i++) jog(cyl(seg(0.06 + i * (P.len - 0.12) / (n - 1)), 'Conveyor_Roller', r, W - 0.02, M.roller, 0, H, 0, 'z'), 'RotationZ', true, -degPerSec);
+        }
+        // flat arrows along the travel direction
+        const nA = Math.max(1, Math.round(P.len / 1.2));
+        for (let i = 0; i < nA; i++) {
+          const [x, z, yaw] = P.at((i + 0.5) * P.len / nA), a = new THREE.Group(); a.name = 'Conveyor_Arrow'; a.position.set(x, H + r + 0.006, z); a.rotation.y = yaw;
+          const arrow = labelPlane('▶', 0.35, 'rgba(0,232,208,.7)', true); arrow.position.y = 0; a.add(arrow); g.add(a);
+        }
+        // where items are put on / taken off
+        for (const [on, s, text, color] of [[p.source, 0, '투입', '#7cc4ff'], [p.sink, P.len, '배출', '#ffb37c']]) {
+          if (!on) continue;
+          const [x, z] = P.at(s), lab = labelPlane(text, 0.9, color); lab.name = 'Conveyor_' + (s ? 'Sink' : 'Source');
+          lab.position.set(x, lab.isSprite ? H + 0.75 : H + r + 0.012, z); g.add(lab);
+        }
       },
       animate: (g, p, t) => { const r = 0.035, a = -(p.speed / r) * t * (p.dir < 0 ? -1 : 1); g.traverse(o => { if (/^Conveyor_(Roller|Drum)$/.test(o.name) && !o.isMesh) o.rotation.z = a; }); },
-      footprint: p => [p.length, p.width + 0.1]
+      footprint: p => conveyorPath(p).size
     },
     robot: {
       label: '로봇', group: 'equipment',
@@ -241,7 +287,8 @@
         for (let k = 1; k < pts.length; k++) {
           const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0);
           const seg = box(g, 'Route_Segment', len, 0.006, 0.06, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
-          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0', true); // direction arrows stay on the floor arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
+          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0', true); // direction arrows stay on the floor
+          arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
         }
         pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
         if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
@@ -343,5 +390,5 @@
   const drives = (obj, g, frames, simPerFrame) => { const T = TYPES[obj.type]; return T.drives ? T.drives(g, Object.assign(T.defaults(), obj.params || {}), frames, simPerFrame) : []; };
   const cycleSeconds = obj => obj.type === 'robot' ? Math.max(2, Object.assign(TYPES.robot.defaults(), obj.params || {}).cycle) : 0;
 
-  window.FactoryElements = { TYPES, ZONE_KIND, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
+  window.FactoryElements = { TYPES, ZONE_KIND, conveyorPath, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
 })();
