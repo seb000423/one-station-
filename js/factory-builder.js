@@ -224,6 +224,7 @@
       helper = new THREE.BoxHelper(g, 0x00e8d0); s.scene.add(helper);
     }
     renderTree(); renderProps();
+    const tsel = $('#fbTarget'); if (tsel) { tsel.value = selectedId || ''; viewButtons(); }
   }
   function commitDrag() {
     const s = S(), o = selectedId && byId(selectedId); if (!o) return;
@@ -434,7 +435,17 @@
   #fbBar{position:absolute;left:8px;right:8px;top:8px;z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 10px;font-size:12px}
   #fbBar .grp{display:flex;align-items:center;gap:4px}
   #fbBar .grp > span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);margin-right:2px}
-  #fbBar button,#fbBar select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:5px 9px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px;line-height:1.4}
+  #fbBar button,#fbBar select,#fbSim button,#fbSim select{box-sizing:border-box;height:28px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 9px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px;line-height:26px}
+  #fbSim{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:12px;white-space:nowrap}
+  #fbSim > span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);margin-right:2px}
+  #fbSim button:hover{border-color:var(--mute)}
+  #fbSim button.primary{border-color:var(--accent);color:var(--accent)}
+  #fbSim button.on{background:rgba(0,232,208,.1)}
+  #fbSim label{display:flex;align-items:center;gap:4px;color:var(--mute);font-size:11.5px}
+  #fbSim #fbClock{font-family:var(--mono);font-weight:500;color:var(--fg);min-width:44px;text-align:right}
+  .fb-cell #fbSim{left:auto;right:8px;transform:none;top:var(--fbbar,58px);bottom:auto} /* clear of the cell's joint read-out and step bar */
+  #fbBar button.following{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  #fbBar #fbTarget{max-width:180px}
   #fbBar button:hover{border-color:var(--mute)}
   #fbBar button.on{border-color:var(--accent);color:var(--accent)}
   #fbBar button.primary{border-color:var(--accent);color:var(--accent)}
@@ -503,7 +514,6 @@
   #fbBar button.strong{background:var(--accent);color:var(--accent-ink);font-weight:700;border-color:var(--accent)}
   #fbBar button:disabled,#fbBar select:disabled{opacity:.4;cursor:default}
   #fbBar .vsep{width:1px;height:20px;background:var(--line);margin:0 4px}
-  #fbBar #fbClock{font-family:var(--mono);font-weight:500;color:var(--fg);min-width:44px;text-align:right}
   #fbPanel .fbBody{min-height:0;overflow:hidden}
   #fbPanel .fold{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);padding-top:4px}
   #fbPanel .fold.list{flex:1 1 0;min-height:90px}
@@ -538,8 +548,8 @@
   .fbModal button:disabled{opacity:.4;cursor:default}
   .fbModal .acts{display:flex;justify-content:flex-end}
   .fbModal .acts button{display:inline-block;padding:7px 14px}
-  @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:4px 7px;font-size:11.5px} }`;
-  let panel, bar, propSec, stationSecs = [], noteT, tab = 'building';
+  @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:0 7px;font-size:11.5px} }`;
+  let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'building';
   // short messages appear as a toast in the 3D view and fade out
   function note(t, warn) {
     let n = $('#fbToast'); if (!n) { n = document.createElement('div'); n.id = 'fbToast'; $('.view').appendChild(n); }
@@ -556,17 +566,18 @@
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
       <div class="sep"></div>
-      <div class="grp sim"><span>시뮬레이션</span>
-        <button type="button" data-t="play" class="primary" title="셀 사이클·로봇·컨베이어·AMR·작업자를 모두 함께 움직입니다">▶ 시작</button>
-        <button type="button" data-t="restart" title="시뮬레이션을 멈추고 처음 상태로 되돌립니다 (편집하려면 이 상태여야 합니다)">⟲ 처음부터</button>
-        <label title="시뮬레이션 시간 배속 (1× = 실제 시간)">배속 <select data-t="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="16">16×</option><option value="32">32×</option></select></label>
-        <b id="fbClock" title="시뮬레이션 경과 시간">00:00</b></div>
-      <div class="sep"></div>
       <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button>
-        <i class="vsep"></i><button type="button" data-v="scale" title="고른 셀의 계량·도포부를 크게 봅니다">셀 확대</button><select id="fbCellPick" title="셀 확대 대상"></select>
-        <i class="vsep"></i><button type="button" data-v="follow" title="고른 AMR을 따라갑니다">AMR 추적</button><select id="fbAmrPick" title="추적할 AMR"></select></div>
+        <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
       <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · 콘솔 2로 보내기</button></div>`;
     $('.view').appendChild(bar);
+    // simulation controls: their own box at the bottom centre of the 3D view
+    simBox = document.createElement('div'); simBox.id = 'fbSim'; simBox.className = 'card';
+    simBox.innerHTML = `<span>시뮬레이션</span>
+      <button type="button" data-t="play" class="primary" title="셀 사이클·로봇·컨베이어·AMR·작업자를 모두 함께 움직입니다">▶ 시작</button>
+      <button type="button" data-t="restart" title="시뮬레이션을 멈추고 처음 상태로 되돌립니다 (편집하려면 이 상태여야 합니다)">⟲ 처음부터</button>
+      <label title="시뮬레이션 시간 배속 (1× = 실제 시간)">배속 <select data-t="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="16">16×</option><option value="32">32×</option></select></label>
+      <b id="fbClock" title="시뮬레이션 경과 시간">00:00</b>`;
+    $('.view').appendChild(simBox);
     const fitBar = () => document.querySelector('.view').style.setProperty('--fbbar', (bar.offsetHeight + 16) + 'px');
     if (window.ResizeObserver) new ResizeObserver(fitBar).observe(bar); setTimeout(fitBar, 0);
     // left: palette tabs + collapsible object list / safety
@@ -600,10 +611,12 @@
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
-    on('[data-t=play]', () => playing ? simPause() : simStart());
-    on('[data-t=restart]', simRestart);
-    bar.querySelector('[data-t=speed]').onchange = e => setSpeed(+e.target.value);
+    simBox.querySelector('[data-t=play]').onclick = () => playing ? simPause() : simStart();
+    simBox.querySelector('[data-t=restart]').onclick = simRestart;
+    simBox.querySelector('[data-t=speed]').onchange = e => setSpeed(+e.target.value);
     bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => view(b.dataset.v));
+    $('#fbTarget').onchange = viewButtons;
+    S().controls.addEventListener('start', () => { if (followId) stopFollow(); }); // dragging the camera ends 추적
 
     // properties: the selected object's own settings, at the top of the right column
     const scroll = $('.side .scroll');
@@ -636,16 +649,10 @@
   }
   // bounding sphere of an object's scene group (station cells: the simulated cell or its still copy)
   function sphereOf(id) { const g = groupOf(id); if (!g) return null; const b = new THREE.Box3().setFromObject(g), sp = new THREE.Sphere(); b.getBoundingSphere(sp); return sp; }
-  function focusObject(id, scale) {
+  function focusObject(id) {
     const o = byId(id); if (!o) return;
-    const { v, h } = fovs(), V3 = THREE.Vector3;
-    let c, r;
-    if (scale && o.type === 'station') { // weighing / dispensing area: around the scale and the positioner
-      const L = Object.assign(clone(S().LAYOUT_DEFAULT), (o.params && o.params.inner) || {});
-      const w = (x, z) => { const co = Math.cos(o.rot || 0), si = Math.sin(o.rot || 0); return [o.x + co * x + si * z, o.z - si * x + co * z]; };
-      const a = w(L.scale.x, L.scale.z), b = w(L.positioner.x, L.positioner.z), q = w(L.r2.x, L.r2.z);
-      c = new V3((a[0] + b[0] + q[0]) / 3, 1.1, (a[1] + b[1] + q[1]) / 3); r = Math.max(1.1, Math.hypot(a[0] - q[0], a[1] - q[1]) / 2 + 0.5);
-    } else { const sp = sphereOf(id); if (!sp) return; c = sp.center; r = Math.max(0.6, sp.radius); }
+    const { v, h } = fovs(), V3 = THREE.Vector3, sp = sphereOf(id); if (!sp) return;
+    const c = sp.center, r = Math.max(0.6, sp.radius);
     const dist = Math.max(2.2, r / Math.sin(Math.min(v, h) / 2) * 1.15), co = Math.cos(o.rot || 0), si = Math.sin(o.rot || 0);
     const dir = new V3(-0.35 * co + 0.75 * si, 0.62, 0.35 * si + 0.75 * co).normalize(); // from the object's front-left, above
     camTo(c.clone().add(dir.multiplyScalar(dist)), c);
@@ -656,21 +663,32 @@
     if (o.type === 'station' && id === activeId && s.ST && s.ST.robots[0]) { const T = s.ST.robots[0].tcpW([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0.155, 0, 0, 0, 1]); return new THREE.Vector3(T[3], T[7], T[11]).applyMatrix4(s.CELL.matrixWorld); }
     const g = groupOf(id); if (!g) return null; const p = new THREE.Vector3(); g.getWorldPosition(p); p.y += o.type === 'robot' ? 1.0 : o.type === 'worker' ? 1.1 : 0.4; return p;
   }
-  function viewTarget() { const sel = $('#fbViewTarget'); return (sel && sel.value) || (selectedId && byId(selectedId) ? selectedId : (stations()[0] || {}).id); }
+  const FOLLOWABLE = ['amr', 'worker'];
+  const viewTarget = () => { const sel = $('#fbTarget'), o = sel && sel.value && byId(sel.value); return o || null; };
+  function stopFollow(quiet) { if (!followId) return; const o = byId(followId); followId = null; viewButtons(); if (!quiet && o) note(`${o.name} 추적을 멈췄습니다`); }
   function view(kind) {
-    lastView = kind; followId = null;
-    bar.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
+    if (kind === 'follow' && followId) return stopFollow(); // 추적 is a toggle
+    stopFollow(true); lastView = kind;
+    bar.querySelectorAll('[data-v=all],[data-v=front],[data-v=top]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
     if (kind === 'all' || kind === 'front' || kind === 'top') return fitFactory(kind);
-    if (kind === 'scale') { const id = $('#fbCellPick').value || (stations()[0] || {}).id; if (!id) return note('셀이 없습니다', true); return focusObject(id, true); }
-    if (kind === 'follow') { const id = $('#fbAmrPick').value; if (!id) return note('AMR이 없습니다', true); focusObject(id); followId = id; note(`${byId(id).name}을(를) 따라갑니다 — 마우스로 돌려 볼 수 있습니다`); }
+    const o = viewTarget(); if (!o) return note('먼저 볼 객체를 고르세요', true);
+    focusObject(o.id);
+    if (kind === 'follow') { followId = o.id; viewButtons(); note(`${o.name}을(를) 따라갑니다 — 추적을 다시 누르거나 Esc, 화면을 끌면 멈춥니다`); }
+  }
+  // 객체 보기 needs a chosen object; 추적 one that moves (AMR, 작업자)
+  function viewButtons() {
+    if (!bar) return; const o = viewTarget(), look = bar.querySelector('[data-v=look]'), fol = bar.querySelector('[data-v=follow]');
+    look.disabled = !o; fol.disabled = !followId && !(o && FOLLOWABLE.includes(o.type));
+    fol.classList.toggle('following', !!followId); fol.textContent = followId ? '■ 추적 중' : '추적';
   }
   function renderViewTargets() {
-    for (const [id, type, btn] of [['#fbCellPick', 'station', 'scale'], ['#fbAmrPick', 'amr', 'follow']]) {
-      const sel = $(id); if (!sel) continue;
-      const keep = sel.value, list = doc.objects.filter(o => o.type === type);
-      sel.innerHTML = list.length ? list.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('') : `<option value="">${type === 'amr' ? 'AMR 없음' : '셀 없음'}</option>`;
-      if (list.some(o => o.id === keep)) sel.value = keep;
-      sel.disabled = !list.length; bar.querySelector(`[data-v=${btn}]`).disabled = !list.length;
+    const sel = $('#fbTarget');
+    if (sel) {
+      const keep = sel.value, groups = [['설비', EQUIPMENT], ['이동체', ['amr', 'worker']], ['동선 · 구역', ['walkway', 'zone', 'route', 'walkroute']], ['건물', ['column', 'wall', 'door', 'stairs']]];
+      sel.innerHTML = '<option value="">객체 선택</option>' + groups.map(([g, types]) => { const l = doc.objects.filter(o => types.includes(o.type)); return l.length ? `<optgroup label="${g}">${l.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</optgroup>` : ''; }).join('');
+      sel.value = byId(keep) ? keep : '';
+      if (followId && !byId(followId)) followId = null;
+      viewButtons();
     }
     const cnt = $('#fbCount'); if (cnt) cnt.textContent = doc.objects.length;
   }
@@ -953,7 +971,7 @@
     addEventListener('keydown', e => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
       if (drawing && e.key === 'Enter') { finishDrawing(); return; }
-      if (e.key === 'Escape') { cancelPlacing(); select(null); }
+      if (e.key === 'Escape') { if (followId) { stopFollow(); return; } cancelPlacing(); select(null); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') remove();
@@ -1009,7 +1027,7 @@
   function simRestart() { playing = false; clock = 0; const s = S(); s.cfg.sim = speed; s.resetAll(); simUi(); note('시뮬레이션을 처음 상태로 되돌렸습니다 — 이제 편집할 수 있습니다'); }
   function setSpeed(v) { speed = v; if (playing) S().cfg.sim = v; }
   function simUi() {
-    const b = bar && bar.querySelector('[data-t=play]'); if (!b) return;
+    const b = simBox && simBox.querySelector('[data-t=play]'); if (!b) return;
     b.textContent = playing ? '⏸ 일시정지' : (clock > 0 ? '▶ 계속' : '▶ 시작'); b.classList.toggle('on', playing);
     document.querySelector('.app').classList.toggle('fb-running', playing || busy());
   }
