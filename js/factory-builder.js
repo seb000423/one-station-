@@ -50,20 +50,24 @@
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
     walkway: [['length', '길이 (m)', 0.5, 0.5, 200], ['width', '폭 (m)', 0.1, 0.6, 6]],
-    zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color']],
+    zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color'],
+      ['track', '재고 관리 (수량 세기)', 'check'], ['stock', '초기 재고 (개)', 1, 0, 999, p => p.track], ['cap', '최대 적재 (개, 0 = 무제한)', 1, 0, 999, p => p.track],
+      ['supply', '자동 입고 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track], ['consume', '자동 소비 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track]],
     conveyor: [['shape', '모양', 'select', [['straight', '직선'], ['curve', '90° 곡선 (L자)'], ['uturn', '180° U턴']]], ['turn', '꺾는 방향', 'select', [['left', '왼쪽'], ['right', '오른쪽']], null, p => p.shape !== 'straight'],
       ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
       ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
       ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
     robot: [['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
-    amr: [['from', '출발 지점', 'place'], ['to', '도착 지점', 'place'], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    amr: [['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
     walkroute: []
   };
 
+  const hasJobs = p => (p.stops || []).filter(x => x && x.at).length >= 2; // AMR job list in use
+  const ACTS = [['load', '적재'], ['unload', '하역'], ['charge', '충전'], ['wait', '대기']];
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
   const S = () => window.__station;
   const busy = () => { const s = S(); return !(s.sim.phase === 'idle' || s.sim.phase === 'done'); };
@@ -137,7 +141,26 @@
     activeId = o.id; applyCellToEngine(o);
     return true;
   }
-  function setSnapshot(id, g) { const old = snapshots.get(id); if (old) world.remove(old); snapshots.set(id, g); world.add(g); }
+  function setSnapshot(id, g) {
+    const old = snapshots.get(id); if (old) world.remove(old); snapshots.set(id, g); world.add(g);
+    const nodes = treeNodes(g); g.userData.nodes = nodes; g.userData.init = nodes.map(n => [n.position.clone(), n.quaternion.clone(), n.visible]);
+  }
+  // the other cells follow the simulated one while the simulation runs: every node the active cell moves
+  // (robot joints, rail, positioner, doors, parts) is copied onto each still copy with the same structure;
+  // the rest keeps the copy's own layout. ⟲ 처음부터 puts the copies back.
+  const treeNodes = (root, skip) => { const out = []; (function walk(o) { if (o === skip) return; out.push(o); o.children.forEach(walk); })(root); return out; };
+  const mirror = { src: null, base: null };
+  function mirrorStart() { const src = treeNodes(S().CELL, proxy); mirror.src = src; mirror.base = src.map(n => [n.position.clone(), n.quaternion.clone(), n.visible]); }
+  function mirrorCells(restore) {
+    const src = mirror.src, base = mirror.base; if (!src) return;
+    for (const g of snapshots.values()) {
+      const D = g.userData.nodes, I = g.userData.init; if (!D || D.length !== src.length) continue;
+      for (let i = 1; i < D.length; i++) {
+        const a = src[i], b = base[i], moved = !restore && (a.visible !== b[2] || !a.position.equals(b[0]) || !a.quaternion.equals(b[1]));
+        const d = D[i]; if (moved) { d.position.copy(a.position); d.quaternion.copy(a.quaternion); d.visible = a.visible; } else { d.position.copy(I[i][0]); d.quaternion.copy(I[i][1]); d.visible = I[i][2]; }
+      }
+    }
+  }
   // rebuild everything from the document (load, undo)
   function rebuildAll(preferActive) {
     for (const g of views.values()) world.remove(g); views.clear();
@@ -585,7 +608,13 @@
   #fbPanel .fbBody{min-height:0;overflow:hidden}
   #fbPanel .fold{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);padding-top:4px}
   #fbPanel .fold.list{flex:1 1 0;min-height:90px}
-  #fbPanel .fold.safety{flex:0 0 auto}
+  #fbPanel .fold.safety,#fbPanel .fold.logi{flex:0 0 auto}
+  #fbProps .jobs{display:grid;gap:3px;max-height:220px;overflow:auto}
+  #fbProps .jobs .pt{grid-template-columns:18px 1fr 62px 46px 26px}
+  #fbProps .jobs select,#fbProps .jobs input{min-width:0}
+  #fbPanel .fold.logi .foldBody{max-height:150px;overflow:auto;display:grid;gap:2px;font-size:11px}
+  #fbLogi .lrow{display:flex;gap:6px;justify-content:space-between}#fbLogi .lrow span{color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #fbLogi h5{margin:4px 0 0;font:600 10px var(--mono);letter-spacing:.12em;color:var(--dim)}
   #fbPanel .fold.closed{flex:0 0 auto;min-height:0}
   #fbPanel .fold.closed .foldBody{display:none}
   #fbPanel .foldHead{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);line-height:2}
@@ -629,7 +658,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -657,6 +686,7 @@
         <div class="pal"></div>
         <section class="fold list"><button type="button" class="foldHead">객체 목록 <em id="fbCount"></em></button><div class="foldBody" id="fbTree"></div></section>
         <section class="fold safety"><button type="button" class="foldHead">안전 경고 <em id="fbSafetyCount"></em></button><div class="foldBody" id="fbSafety"><span class="ok">위험 없음</span></div></section>
+        <section class="fold logi"><button type="button" class="foldHead">물류 현황 <em id="fbLogiCount"></em></button><div class="foldBody" id="fbLogi"><span class="hint">AMR이나 재고 관리 구역이 있으면 여기에 운반 횟수와 재고가 나옵니다</span></div></section>
       </div>`;
     $('.view').appendChild(panel);
     const showTab = k => {
@@ -676,7 +706,8 @@
     on('[data-t=new]', newFactory);
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
-    on('[data-t=sample]', loadSample);
+    on('[data-t=sample]', () => loadSample('sample-factory.json', '예시 공장'));
+    on('[data-t=sample2]', () => loadSample('sample-factory-2.json', '예시 공장 2'));
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -853,11 +884,14 @@
       if (o.type === 'conveyor') html += conveyorInfo(o);
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
       if (o.type === 'amr') {
-        const pl = motion().amr[o.id];
+        const pl = motion().amr[o.id], jobs = p.stops || [], opts = [['', '— 선택 —']].concat(FM().places(doc, motion().G).filter(x => !x.ref.startsWith('node:')).map(x => [x.ref, x.label]));
+        html += `<h4 style="margin:4px 0 0">작업 순서 <em style="font-weight:400">(2개 이상이면 출발·도착 대신 이 순서를 반복)</em></h4><div class="jobs">${jobs.map((j, i) => `<div class="pt"><span>${i + 1}</span><select data-job="${i}" data-jk="at">${opts.map(([v, l]) => `<option value="${v}" ${j.at === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select><select data-job="${i}" data-jk="act">${ACTS.map(([v, l]) => `<option value="${v}" ${j.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select><input type="number" data-job="${i}" data-jk="dwell" step="1" min="0" max="600" value="${j.dwell ?? p.dwell}" title="머무는 시간 (s)"><button type="button" data-jobdel="${i}" title="작업 삭제">×</button></div>`).join('')}</div>
+          <div class="acts"><button type="button" data-a="jobAdd">작업 추가</button></div>`;
         html += pl && pl.ok
-          ? `<p class="hint">경로 길이 ${pl.length.toFixed(1)} m · 편도 ${pl.oneWay.toFixed(1)} s · 왕복 주기 ${pl.period.toFixed(1)} s (적재·하역 포함). 작업 구역을 지나는 구간은 사용하지 않고 가장 짧은 경로로 다닙니다.</p>`
+          ? `<p class="hint">${pl.mission ? `작업 순서 ${esc(pl.route)} → (반복) · 한 바퀴 ${pl.length.toFixed(1)} m · 약 ${pl.period.toFixed(0)} s (대기 제외)` : `경로 길이 ${pl.length.toFixed(1)} m · 편도 ${pl.oneWay.toFixed(1)} s · 왕복 주기 ${pl.period.toFixed(1)} s (적재·하역 포함)`}. 작업 구역을 지나는 구간은 사용하지 않고 가장 짧은 경로로 다닙니다. 적재한 뒤 하역할 때까지 짐을 싣고 다닙니다.</p>`
           : `<p class="hint" style="color:var(--warn)">${pl ? pl.error : '출발 지점과 도착 지점을 고르세요'}</p>`;
       }
+      if (o.type === 'zone' && p.track) html += '<p class="hint">AMR은 적재할 때 재고가 없으면, 하역할 때 가득 차 있으면 기다립니다. 자동 입고는 트럭·설비가 가져다 놓는 물건, 자동 소비는 라인이 쓰는 물건입니다. 시뮬레이션 중 구역 위에 재고 수가 보입니다.</p>';
       if (o.type === 'worker') { const pl = motion().worker[o.id]; html += `<p class="hint" id="fbWorkerSafety">보행로나 작업자 경로를 고르면 그 경로를 끝에서 끝까지 왕복합니다.</p>${pl && pl.error ? `<p class="hint" style="color:var(--warn)">${esc(pl.error)}</p>` : ''}`; }
       if (o.type === 'route') {
         const pts = FM().routePoints(o), G = motion().G, mine = G.edges.filter(e => e.route === o.id), P0 = Object.assign({ oneway: false }, o.params);
@@ -912,7 +946,14 @@
       const pts = FM().routePoints(o); if (pts.length <= 2) return note('경로에는 점이 2개 이상 필요합니다', true);
       pts.splice(+b.dataset.ptdel, 1); pushUndo(); setRoutePoints(o, pts); store(); select(o.id);
     }));
+    const setJobs = fn => { pushUndo(); const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); const jobs = clone(p.stops || []); fn(jobs, p); o.params = Object.assign(p, { stops: jobs }); store(); select(o.id); };
+    propSec.querySelectorAll('[data-job]').forEach(i => i.addEventListener('change', () => setJobs(jobs => { const j = jobs[+i.dataset.job]; j[i.dataset.jk] = i.dataset.jk === 'dwell' ? Math.min(600, Math.max(0, parseFloat(i.value) || 0)) : i.value; })));
+    propSec.querySelectorAll('[data-jobdel]').forEach(b => b.addEventListener('click', () => setJobs(jobs => jobs.splice(+b.dataset.jobdel, 1))));
     const act = (a, fn) => { const b = propSec.querySelector(`[data-a=${a}]`); if (b) b.onclick = fn; };
+    act('jobAdd', () => setJobs((jobs, p) => {
+      if (!jobs.length && (p.from || p.to)) jobs.push({ at: p.from, act: 'load', dwell: p.dwell }, { at: p.to, act: 'unload', dwell: p.dwell }); // start from 출발 → 도착
+      else jobs.push({ at: '', act: jobs.length % 2 ? 'unload' : 'load', dwell: p.dwell });
+    }));
     act('dup', duplicate); act('del', remove); act('look', () => focusObject(o.id));
     propSec.querySelectorAll('[data-perm]').forEach(i => i.addEventListener('change', () => {
       pushUndo(); o.perm = Object.assign({}, o.perm, { [i.dataset.perm]: i.checked });
@@ -1032,12 +1073,14 @@
     doc = { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(d.objects || []) };
     rebuildAll(); select(null); store();
   }
-  // example factory (examples/sample-factory.json): cells, conveyors, racks, zones, chargers, AMRs, workers
-  async function loadSample() {
+  // example factories (examples/): 1 = cells, conveyors, racks, zones, chargers, AMRs, workers;
+  // 2 = the same plant with zone stock and AMR job lists (milk runs, charging, shipping)
+  async function loadSample(file, label) {
     try {
-      const d = await (await fetch('examples/sample-factory.json', { cache: 'no-store' })).json();
-      loadDoc(d); view('all'); note('예시 공장을 불러왔습니다 · ▶ 시작으로 시뮬레이션 (Ctrl+Z로 되돌리기)');
-    } catch (e) { note('예시 공장을 불러오지 못했습니다: ' + e.message, true); }
+      const d = await (await fetch('examples/' + file, { cache: 'no-store' })).json();
+      if (playing || clock > 0) simRestart();
+      loadDoc(d); view('all'); note(`${label}을(를) 불러왔습니다 · ▶ 시작으로 시뮬레이션 (Ctrl+Z로 되돌리기)`);
+    } catch (e) { note(`${label}을(를) 불러오지 못했습니다: ` + e.message, true); }
   }
   function docFromLegacy(meta) {
     const m = meta.summary || {}, L = m.layout || {}, p = defaultCellParams();
@@ -1094,6 +1137,7 @@
       }
       if (now - lastClock > 200) { lastClock = now; const c = $('#fbClock'); if (c) c.textContent = fmtClock(clock); }
       ctxTick();
+      if (playing || busy()) mirrorCells(false);
       const M = motion(), t = clock;
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
@@ -1101,10 +1145,12 @@
         else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
+          const load = o.type === 'amr' && g.getObjectByName('AMR_Load'); if (load) load.visible = pl && pl.ok && pl.carry ? pl.carry(t) : true;
         }
       }
       const F = flowAt(t); renderItems(F);
       if (now - lastPanel > 250) { const cs = $('#fbConvStats'), sel = selectedId && byId(selectedId); if (cs && sel && sel.type === 'conveyor') { const st = F.stats()[sel.id]; if (st) cs.innerHTML = `현재 ${st.state}${sel.params && sel.params.source ? ` · 투입 ${st.made}개` : ''}${sel.params && sel.params.sink ? ` · 배출 ${st.done}개` : ''}`; } }
+      if (now - lastPanel > 250) updateLogistics(M, t);
       updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
       cameraTick(dt);
       requestAnimationFrame(tick);
@@ -1121,6 +1167,7 @@
   const fmtClock = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); };
   // ▶ 시작: everything runs (cells' cycles, robots, conveyors, AMRs, workers) at the chosen speed
   function simStart() {
+    if (clock === 0 || !mirror.src) mirrorStart();
     playing = true; const s = S(); s.cfg.sim = speed;
     if (activeId && (s.sim.phase === 'idle' || s.sim.phase === 'done')) s.startCycle();
     simUi();
@@ -1128,12 +1175,41 @@
   // ⏸: everything holds where it is (the cell's cycle too)
   function simPause() { playing = false; S().cfg.sim = 0; simUi(); }
   // ⟲ 처음부터: stop and return to the start state; editing is possible again
-  function simRestart() { playing = false; clock = 0; const s = S(); s.cfg.sim = speed; s.resetAll(); simUi(); note('시뮬레이션을 처음 상태로 되돌렸습니다 — 이제 편집할 수 있습니다'); }
+  function simRestart() { playing = false; clock = 0; const s = S(); s.cfg.sim = speed; s.resetAll(); mirrorCells(true); simUi(); note('시뮬레이션을 처음 상태로 되돌렸습니다 — 이제 편집할 수 있습니다'); }
   function setSpeed(v) { speed = v; if (playing) S().cfg.sim = v; }
   function simUi() {
     const b = simBox && simBox.querySelector('[data-t=play]'); if (!b) return;
     b.textContent = playing ? '⏸ 일시정지' : (clock > 0 ? '▶ 계속' : '▶ 시작'); b.classList.toggle('on', playing);
     document.querySelector('.app').classList.toggle('fb-running', playing || busy());
+  }
+  // zone stock badges above tracked zones and the 물류 현황 panel (AMR state · trips, zone stock)
+  function stockBadge(g, text) {
+    let b = g.getObjectByName('Zone_Stock');
+    if (!b) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 64; const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
+      b = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false })); b.name = 'Zone_Stock'; b.scale.set(2.4, 0.6, 1); b.position.y = 1.6; b.renderOrder = 6; b.raycast = () => {}; g.add(b);
+    }
+    if (b.userData.text === text) return; b.userData.text = text;
+    const c = b.material.map.image, x = c.getContext('2d'); x.clearRect(0, 0, 256, 64);
+    x.fillStyle = 'rgba(11,13,16,.82)'; x.beginPath(); x.roundRect ? x.roundRect(4, 6, 248, 52, 12) : x.rect(4, 6, 248, 52); x.fill();
+    x.fillStyle = '#7dffb2'; x.font = 'bold 34px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 128, 33);
+    b.material.map.needsUpdate = true;
+  }
+  function updateLogistics(M, t) {
+    const Z = M.zones || {};
+    for (const o of doc.objects) if (o.type === 'zone') {
+      const g = views.get(o.id); if (!g) continue; const z = Z[o.id], old = g.getObjectByName('Zone_Stock');
+      if (z) stockBadge(g, `재고 ${z.stock(t)}${z.cap ? ' / ' + z.cap : ''}`); else if (old) g.remove(old);
+    }
+    const box = $('#fbLogi'); if (!box) return;
+    const amrs = doc.objects.filter(o => o.type === 'amr'), zs = doc.objects.filter(o => Z[o.id]);
+    if (!amrs.length && !zs.length) return;
+    let total = 0;
+    const rows = amrs.map(o => { const pl = M.amr[o.id]; if (!pl || !pl.ok) return `<div class="lrow"><b>${esc(o.name)}</b><span class="ng">경로 없음</span></div>`; const n = pl.trips(t); total += n; return `<div class="lrow"><b>${esc(o.name)}${pl.carry && pl.carry(t) ? ' 📦' : ''}</b><span>${esc(pl.state(t))} · ${n}회</span></div>`; }).join('');
+    const zr = zs.map(o => `<div class="lrow"><b>${esc(o.name)}</b><span>재고 ${Z[o.id].stock(t)}${Z[o.id].cap ? ' / ' + Z[o.id].cap : ''}</span></div>`).join('');
+    const html = (rows ? '<h5>AMR</h5>' + rows : '') + (zr ? '<h5>구역 재고</h5>' + zr : '');
+    if (box.innerHTML !== html) box.innerHTML = html;
+    const cnt = $('#fbLogiCount'); if (cnt) cnt.textContent = amrs.length ? `운반 ${total}회` : '';
   }
   const cellRings = new Map();
   // station cells' R1 / R2 circles and the route edges that are blocked (red) or cross a walkway (yellow)

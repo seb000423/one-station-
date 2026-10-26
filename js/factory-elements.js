@@ -143,7 +143,7 @@
     },
     zone: {
       label: '구역', group: 'route',
-      defaults: () => ({ w: 3, d: 3, kind: 'pickup', label: '', color: '' }),
+      defaults: () => ({ w: 3, d: 3, kind: 'pickup', label: '', color: '', track: false, stock: 0, cap: 0, supply: 0, consume: 0 }), // track: count stock (js/factory-motion.js)
       build: (g, p) => {
         const c = new THREE.Color(p.color || (ZONE_KIND[p.kind] || ZONE_KIND.none)[1]);
         box(g, 'Zone_Area', p.w, 0.004, p.d, mat(c, { transparent: true, opacity: 0.28, depthWrite: false }), 0, 0.002, 0).castShadow = false;
@@ -267,7 +267,7 @@
     },
     amr: {
       label: 'AMR', group: 'equipment',
-      defaults: () => ({ length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5 }),
+      defaults: () => ({ length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5, stops: [] }), // stops: job list [{ at, act, dwell }]
       build: (g, p) => {
         ring(g, 'AMR_Safety', Math.hypot(p.length, p.width) / 2 + 0.5, 0x00e8d0, 0.5);
         box(g, 'AMR_Load', p.length * 0.6, 0.22, p.width * 0.7, M.carton, 0, 0.44, 0);

@@ -9,6 +9,12 @@
 //     Crossing a walkway is allowed but reported.
 //   - An AMR runs 출발 → 도착 over the shortest unblocked path: load at the start, turn in place at each
 //     corner, accelerate / cruise / decelerate on each straight, unload at the end, come back, loop.
+//     With a job list (params.stops: [{ at, act: load | unload | charge | wait, dwell }]) it visits the stops
+//     in order and loops; it carries a load from a load stop to the next unload stop.
+//   - Zones with 재고 관리 (params.track) count their stock: an AMR leaves for a load stop only when an item
+//     there is free (not promised to another AMR) and for an unload stop only when there is room (cap); until
+//     then it waits where it is, so it never parks on a dock waiting. supply / consume add or take one item
+//     every n s.
 //   - AMRs share the route network (fleet simulation): each reserves the stretch ahead up to the next
 //     junction or its destination (and route segments running close to it), so two AMRs never meet head
 //     on in a corridor; the other one waits, and after waiting a while tries a detour. An AMR slows down
@@ -235,8 +241,41 @@
       trips(t) { return t < deliverEnd ? 0 : Math.floor((t - deliverEnd) / period) + 1; }
     };
   }
+  // a loop over several legs (AMR job list): dwell at each stop, then drive the leg to the next one
+  function planMission(legs, dwells, stopLabels, moveLabels, speed) {
+    const acts = [], add = a => { a.t0 = acts.length ? acts[acts.length - 1].t0 + acts[acts.length - 1].dur : 0; acts.push(a); };
+    const first = legs.find(L => L.length > 1), startYaw = first ? heading(first[0], first[1]) : 0;
+    let yaw = startYaw, length = 0;
+    legs.forEach((P, k) => {
+      add({ kind: 'dwell', dur: dwells[k], at: P[0], yaw0: yaw, yaw1: yaw, label: stopLabels[k] });
+      for (let i = 1; i < P.length; i++) {
+        let d = heading(P[i - 1], P[i]) - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) > 1e-3) add({ kind: 'turn', dur: Math.abs(d) / TURN, at: P[i - 1], yaw0: yaw, yaw1: yaw + d, label: moveLabels[k] });
+        yaw += d;
+        const len = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); length += len;
+        if (len > 1e-6) add({ kind: 'move', dur: moveTime(len, speed), a: P[i - 1], b: P[i], len, yaw0: yaw, yaw1: yaw, label: moveLabels[k] });
+      }
+    });
+    const period = Math.max(1e-3, acts[acts.length - 1].t0 + acts[acts.length - 1].dur);
+    const find = t => { const u = ((t % period) + period) % period; let lo = 0, hi = acts.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (acts[m].t0 <= u) lo = m; else hi = m - 1; } return [acts[lo], u - acts[lo].t0]; };
+    return {
+      ok: true, period, length, oneWay: period, points: legs.flat(),
+      pose(t) { const [a, u] = find(t); if (a.kind === 'move') { const f = moveDist(u, a.len, speed) / a.len; return { x: a.a[0] + (a.b[0] - a.a[0]) * f, z: a.a[1] + (a.b[1] - a.a[1]) * f, yaw: a.yaw0 }; } const f = a.dur ? u / a.dur : 1; return { x: a.at[0], z: a.at[1], yaw: a.yaw0 + (a.yaw1 - a.yaw0) * f }; },
+      state(t) { return find(t)[0].label; },
+      trips(t) { return Math.floor(t / period); }
+    };
+  }
+  // an AMR's job: its stop list (2 or more stops), or 출발 (load) → 도착 (unload)
+  const ACT = { load: '적재', unload: '하역', charge: '충전', wait: '대기' };
+  function stopsOf(p) {
+    const st = (p.stops || []).filter(x => x && x.at);
+    return st.length >= 2 ? st.map(x => ({ at: x.at, act: ACT[x.act] ? x.act : 'wait', dwell: Number.isFinite(+x.dwell) && x.dwell !== '' ? +x.dwell : p.dwell }))
+      : [{ at: p.from, act: 'load', dwell: p.dwell }, { at: p.to, act: 'unload', dwell: p.dwell }];
+  }
   function amrPlan(doc, amr, G = graph(doc)) {
-    const p = P(amr), from = placeNode(doc, G, p.from), to = placeNode(doc, G, p.to);
+    const p = P(amr), mission = (p.stops || []).filter(x => x && x.at).length >= 2;
+    if (mission) return missionPlan(doc, amr, G);
+    const from = placeNode(doc, G, p.from), to = placeNode(doc, G, p.to);
     const name = r => { const pl = places(doc, G).find(x => x.ref === r); return pl ? pl.label : '?'; };
     if (!G.edges.length) return { ok: false, error: 'AMR 경로가 없습니다. 팔레트의 "AMR 경로"로 먼저 경로를 그리세요' };
     if (!p.from || !p.to) return { ok: false, error: '출발 지점과 도착 지점을 고르세요' };
@@ -248,7 +287,25 @@
     const pts = path.map(i => [G.nodes[i].x, G.nodes[i].z]);
     const plan = planFromPoints(pts, p.speed, p.dwell, p.dwell, [`적재 중 (${name(p.from)})`, `이동 중 → ${name(p.to)}`, `하역 중 (${name(p.to)})`, `복귀 중 → ${name(p.from)}`]);
     plan.radius = Math.hypot(p.length, p.width) / 2 + AMR_MARGIN; plan.fromLabel = name(p.from); plan.toLabel = name(p.to);
+    plan.stops = stopsOf(p).map((x, k) => Object.assign(x, { node: k ? to : from, name: name(x.at) })); plan.legs = [path, back];
+    plan.moveLabels = [`이동 중 → ${plan.toLabel}`, `복귀 중 → ${plan.fromLabel}`];
     return plan;
+  }
+  function missionPlan(doc, amr, G) {
+    const p = P(amr), S = stopsOf(p), name = r => { const pl = places(doc, G).find(x => x.ref === r); return pl ? pl.label : '?'; };
+    if (!G.edges.length) return { ok: false, error: 'AMR 경로가 없습니다. 팔레트의 "AMR 경로"로 먼저 경로를 그리세요' };
+    const nodes = S.map(x => placeNode(doc, G, x.at)), bad = nodes.findIndex(n => n < 0);
+    if (bad >= 0) return { ok: false, error: `${bad + 1}번 작업 · ${name(S[bad].at)}: 가장자리 1 m 이내에 AMR 경로 점이 없습니다. 구역 가장자리(도킹 지점)까지 경로를 그리세요` };
+    const legs = [];
+    for (let k = 0; k < S.length; k++) {
+      const a = nodes[k], b = nodes[(k + 1) % S.length], path = a === b ? [a] : shortest(G, a, b);
+      if (!path) return { ok: false, error: `${k + 1}번 ${name(S[k].at)} → ${name(S[(k + 1) % S.length].at)}: 막히지 않은 경로가 없습니다 (단방향 경로라면 방향을 확인하세요)` };
+      legs.push(path);
+    }
+    const stops = S.map((x, k) => Object.assign(x, { node: nodes[k], name: name(x.at) }));
+    const moveLabels = stops.map((x, k) => `이동 중 → ${stops[(k + 1) % stops.length].name}`);
+    const plan = planMission(legs.map(L => L.map(i => [G.nodes[i].x, G.nodes[i].z])), stops.map(x => x.dwell), stops.map(x => `${ACT[x.act]} 중 (${x.name})`), moveLabels, p.speed);
+    return Object.assign(plan, { radius: Math.hypot(p.length, p.width) / 2 + AMR_MARGIN, fromLabel: stops[0].name, toLabel: stops[1].name, route: stops.map(x => x.name).join(' → '), stops, legs, moveLabels, mission: true });
   }
   // where pedestrians may not go: areas closed to walking (and columns, walls, stairs)
   function walkBlocks(doc) {
@@ -301,44 +358,76 @@
     const free = (r, id) => !held.has(r) || held.get(r) === id;
     const workers = doc.objects.filter(o => o.type === 'worker');
     const agents = amrs.map((o, k) => {
-      const p = P(o), pl = out.amr[o.id], from = placeNode(doc, G, p.from), to = placeNode(doc, G, p.to);
-      return { o, p, pl, k, from, to, fwd: shortest(G, from, to), back: shortest(G, to, from), x: o.x, z: o.z, yaw: o.rot || 0, v: 0, trips: 0, phase: 'enter', leg: null, i: 0, s: 0, timer: 0, wait: 0, label: '대기: 출발 지점 사용 중', chain: [] };
+      const p = P(o), pl = out.amr[o.id];
+      return { o, p, pl, k, stops: pl.stops, legs: pl.legs, at: 0, carry: false, x: o.x, z: o.z, yaw: o.rot || 0, v: 0, trips: 0, phase: 'enter', leg: null, i: 0, s: 0, timer: 0, wait: 0, label: '대기: 출발 지점 사용 중', chain: [] };
     });
+    // zone stock (재고 관리): the AMRs take from and add to it; supply / consume change it on their own
+    const zones = new Map();
+    for (const o of doc.objects) if (o.type === 'zone') { const p = P(o); if (p.track) zones.set('zone:' + o.id, { o, p, stock: Math.max(0, +p.stock || 0), cap: Math.max(0, +p.cap || 0), resOut: 0, resIn: 0, sup: 0, con: 0, made: 0, used: 0 }); }
+    const zoneTracks = new Map([...zones.values()].map(z => [z.o.id, new Int16Array(Math.ceil(horizon / SAMPLE) + 1)]));
+    const stopAt = a => a.stops[a.at];
+    // can an AMR be promised an item (load) / a place (unload) at this stop? promise it
+    const canServe = st => { const z = zones.get(st.at); if (!z) return true; return st.act === 'load' ? z.stock - z.resOut >= 1 : st.act === 'unload' ? !z.cap || z.stock + z.resIn < z.cap : true; };
+    const promise = st => { const z = zones.get(st.at); if (z && st.act === 'load') z.resOut++; if (z && st.act === 'unload') z.resIn++; };
+    const short = st => `대기: ${st.name} ${st.act === 'load' ? '재고 없음' : '가득 참'}`;
     const tryHold = (a, res) => { if (!res.every(r => free(r, a.o.id))) return false; res.forEach(r => held.set(r, a.o.id)); return true; };
     const release = (a, r) => { if (held.get(r) === a.o.id) held.delete(r); };
     const holderOf = (a, res) => { for (const r of res) if (!free(r, a.o.id)) return held.get(r); return null; };
     const nameOf = id => (amrs.find(o => o.id === id) || {}).name || '';
     // resources for the stretch ahead: on a one-way segment just the next segment (nobody comes head on,
     // so the AMR can drive up and queue); on a two-way segment the whole corridor up to the next junction
-    // or the leg end, so two AMRs never meet head on in it
+    // or the leg end, so two AMRs never meet head on in it. A one-way segment that leads into a two-way
+    // corridor (a dock spur) is reserved together with the corridor, so the AMR waits before the junction
+    // instead of on it, where it would block the AMR coming out
     const edgeOf = new Map(G.edges.map(e => [ekey(e.a, e.b), e]));
     function chainRes(a) {
       const res = [], L = a.leg;
       for (let j = a.i; j < L.length - 1; j++) {
         const k = ekey(L[j], L[j + 1]); res.push('e:' + k, 'n:' + L[j + 1]); near.get(k).forEach(c => res.push('e:' + c));
-        if (edgeOf.get(k) && edgeOf.get(k).oneway) break;
+        const e = edgeOf.get(k), nx = j + 2 < L.length ? edgeOf.get(ekey(L[j + 1], L[j + 2])) : null;
+        if (e && e.oneway) { if (!nx || nx.oneway) break; continue; }
         if (j + 1 < L.length - 1 && degree(L[j + 1]) >= 3) break;
       }
       return res;
     }
     const startLeg = (a, path, label, dest) => { a.leg = path; a.i = 0; a.s = 0; a.phase = 'turn'; a.legLabel = label; a.dest = dest; a.chain = []; };
     const samples = Math.ceil(horizon / SAMPLE) + 1, track = { x: new Float32Array(samples), z: new Float32Array(samples), yaw: new Float32Array(samples), state: new Array(samples), trips: new Uint16Array(samples) };
-    const tracks = new Map(agents.map(a => [a.o.id, { x: new Float32Array(samples), z: new Float32Array(samples), yaw: new Float32Array(samples), state: new Array(samples), trips: new Uint16Array(samples) }]));
+    const tracks = new Map(agents.map(a => [a.o.id, { x: new Float32Array(samples), z: new Float32Array(samples), yaw: new Float32Array(samples), state: new Array(samples), trips: new Uint16Array(samples), carry: new Uint8Array(samples) }]));
     const workerAt = t => workers.map(w => ({ w, q: (out.worker[w.id] || { pose: () => ({ x: w.x, z: w.z }) }).pose(t) }));
     let si = 0;
     for (let t = 0, step = 0; si < samples; t += SIM_DT, step++) {
       const W = workers.length ? workerAt(t) : [];
+      for (const z of zones.values()) {
+        if (z.p.supply > 0 && (!z.cap || z.stock < z.cap)) { z.sup += SIM_DT; if (z.sup >= z.p.supply) { z.sup = 0; z.stock++; z.made++; } }
+        if (z.p.consume > 0 && z.stock - z.resOut > 0) { z.con += SIM_DT; if (z.con >= z.p.consume) { z.con = 0; z.stock--; z.used++; } }
+      }
       for (const a of agents) {
-        const L = a.leg, fromName = a.pl.fromLabel, toName = a.pl.toLabel;
-        if (a.phase === 'enter') { // wait for the start point, then move onto it
-          if (tryHold(a, ['n:' + a.from])) { [a.x, a.z] = NP(a.from); a.phase = 'dwellA'; a.timer = a.p.dwell; a.label = `적재 중 (${fromName})`; }
+        const L = a.leg;
+        if (a.phase === 'enter') { // wait for the first stop, then move onto it; with nothing to load there yet, start at the last stop (as if just done) so the dock stays free
+          const k = canServe(a.stops[0]) ? 0 : a.stops.length - 1, nk = a.stops[k].node;
+          if (tryHold(a, ['n:' + nk])) { [a.x, a.z] = NP(nk); a.at = k; if (k) { a.phase = 'dwell'; a.timer = 0; a.done = true; } else a.phase = 'arrive'; }
           continue;
         }
-        if (a.phase === 'dwellA' || a.phase === 'dwellB') {
+        if (a.phase === 'arrive') { // at a stop (promised on the way here, or the first stop): work there
+          const st = stopAt(a), z = zones.get(st.at);
+          if (!a.promised) { if (!canServe(st)) { a.label = short(st); continue; } promise(st); }
+          a.promised = false;
+          if (z && st.act === 'load') { z.stock--; z.resOut--; }
+          a.phase = 'dwell'; a.timer = st.dwell; a.label = `${ACT[st.act]} 중 (${st.name})`; continue;
+        }
+        if (a.phase === 'dwell') {
           a.timer -= SIM_DT; if (a.timer > 0) continue;
-          if (a.phase === 'dwellB') a.trips++;
-          const back = a.phase === 'dwellB';
-          startLeg(a, back ? (a.back || a.fwd.slice().reverse()) : a.fwd.slice(), back ? `복귀 중 → ${fromName}` : `이동 중 → ${toName}`, back ? 'A' : 'B');
+          const st = stopAt(a), z = zones.get(st.at);
+          if (!a.done) {
+            if (st.act === 'load') a.carry = true;
+            if (st.act === 'unload') { if (a.carry || !z) a.trips++; a.carry = false; if (z) { z.stock++; z.resIn--; } }
+          }
+          a.done = true; // the work here is done; now wait (here) until the next stop can take this AMR
+          const leg = a.legs[a.at], next = (a.at + 1) % a.stops.length, nst = a.stops[next];
+          if (!canServe(nst)) { a.label = short(nst); continue; }
+          promise(nst); a.promised = true; a.done = false;
+          if (leg.length < 2) { a.at = next; a.phase = 'arrive'; continue; }
+          startLeg(a, leg.slice(), a.pl.moveLabels[a.at], next);
           a.label = a.legLabel; continue;
         }
         const u = L[a.i], v = L[a.i + 1], A = NP(u), B = NP(v), len = Math.hypot(B[0] - A[0], B[1] - A[1]);
@@ -384,12 +473,13 @@
           release(a, 'n:' + u); release(a, 'e:' + ekey(u, v)); near.get(ekey(u, v)).forEach(c => release(a, 'e:' + c));
           a.chain = a.chain.filter(r => r !== 'n:' + u && r !== 'e:' + ekey(u, v));
           a.i++; a.s = 0; a.v = 0;
-          if (a.i >= a.leg.length - 1) { a.chain.forEach(r => { if (r !== 'n:' + v) release(a, r); }); a.chain = []; a.phase = a.dest === 'B' ? 'dwellB' : 'dwellA'; a.timer = a.p.dwell; a.label = a.dest === 'B' ? `하역 중 (${toName})` : `적재 중 (${fromName})`; }
+          if (a.i >= a.leg.length - 1) { a.chain.forEach(r => { if (r !== 'n:' + v) release(a, r); }); a.chain = []; a.at = a.dest; a.phase = 'arrive'; }
           else a.phase = 'turn';
         }
       }
       if (step % Math.round(SAMPLE / SIM_DT) === 0) {
-        for (const a of agents) { const tr = tracks.get(a.o.id); tr.x[si] = a.x; tr.z[si] = a.z; tr.yaw[si] = a.yaw; tr.state[si] = a.label; tr.trips[si] = a.trips; }
+        for (const a of agents) { const tr = tracks.get(a.o.id); tr.x[si] = a.x; tr.z[si] = a.z; tr.yaw[si] = a.yaw; tr.state[si] = a.label; tr.trips[si] = a.trips; tr.carry[si] = a.carry ? 1 : 0; }
+        for (const z of zones.values()) zoneTracks.get(z.o.id)[si] = z.stock;
         si++;
       }
     }
@@ -399,9 +489,13 @@
         horizon, fleet: true,
         pose(t) { const [i, f] = at(t); return { x: tr.x[i] + (tr.x[i + 1] - tr.x[i]) * f, z: tr.z[i] + (tr.z[i + 1] - tr.z[i]) * f, yaw: tr.yaw[i] + (tr.yaw[i + 1] - tr.yaw[i]) * f }; },
         state(t) { return tr.state[at(t)[0]]; },
-        trips(t) { return tr.trips[at(t)[0]]; }
+        trips(t) { return tr.trips[at(t)[0]]; },
+        carry(t) { return !!tr.carry[at(t)[0]]; }
       });
     }
+    const idx = t => Math.min(samples - 1, Math.floor((((t % horizon) + horizon) % horizon) / SAMPLE));
+    out.zones = {};
+    for (const z of zones.values()) { const tr = zoneTracks.get(z.o.id); out.zones[z.o.id] = { name: z.o.name, cap: z.cap, stock: t => tr[idx(t)] }; }
   }
 
   /* ---------- range circles + safety ---------- */
