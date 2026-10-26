@@ -24,14 +24,15 @@
   const PALETTE = [
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
-    ['AMR 경로 · 작업자', [['route', 'AMR 경로'], ['worker', '작업자']]],
-    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['amr', 'AMR'], ['charger', '충전소']]]
+    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소']]],
+    ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자' };
-  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'amr', 'charger'];
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로' };
+  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'], MOVERS = ['amr', 'worker', 'route', 'walkroute'];
+  const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
   // numbering continues after the highest existing name of that type, so a deleted number is not reused
-  const LETTERED = ['walkway', 'zone', 'route'];
+  const LETTERED = ['walkway', 'zone', 'route', 'walkroute'];
   const FM = () => window.FactoryMotion;
   const toLetters = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
   const fromLetters = s => [...s].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
@@ -55,8 +56,9 @@
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
     amr: [['from', '출발 지점', 'place'], ['to', '도착 지점', 'place'], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
-    worker: [['walkway', '보행로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
-    route: []
+    worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
+    route: [],
+    walkroute: []
   };
 
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
@@ -156,11 +158,18 @@
     const floor = shell.getObjectByName('Factory_Floor'); if (floor) floor.visible = false; // console 1 keeps its own floor
     s.scene.add(shell);
     s.floor.geometry.dispose(); s.floor.geometry = new THREE.PlaneGeometry(f.width, f.depth);
-    const size = Math.max(f.width, f.depth), gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / 0.5)), 0x2c323b, 0x1b1f25);
+    const size = Math.max(f.width, f.depth), cellM = size > 20 ? 1 : 0.5, gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / cellM)), 0x56606c, 0x47505a); // 1 m cells on large floors
+    s.grid.material.dispose(); s.grid.material = gh.material;
     s.grid.geometry.dispose(); s.grid.geometry = gh.geometry;
-    s.scene.fog.far = Math.max(24, Math.hypot(f.width, f.depth) * 1.6);
+    // no distance fog (it darkened the factory when zooming out); a brighter, even space sized to the factory
+    s.scene.fog = null;
+    s.scene.background = new THREE.Color(0x343b44);
+    s.floor.material.color.set(0x3a414a); s.floor.material.needsUpdate = true;
+    s.renderer.toneMappingExposure = 1.0;
+    const M = Math.max(f.width, f.depth, f.height);
+    s.camera.far = Math.max(80, M * 8); s.camera.updateProjectionMatrix();
     if (s.fitLights) s.fitLights(f);
-    s.controls.maxDistance = Math.max(9, Math.hypot(f.width, f.depth) * 1.1);
+    s.controls.maxDistance = Math.max(9, Math.hypot(f.width, f.depth, f.height) * 2.5);
   }
   function buildView(o) {
     const old = views.get(o.id); if (old) world.remove(old);
@@ -255,25 +264,26 @@
     const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p)) return null;
     const st = snap ? 0.1 : 0.01; p.x = Math.round(p.x / st) * st; p.z = Math.round(p.z / st) * st; return p;
   };
-  /* ---------- AMR route drawing: click points, double-click / Enter / right-click to finish ---------- */
-  let drawing = null; // { obj (when extending), pts: [[x, z]], preview }
+  /* ---------- path drawing (AMR 경로 / 작업자 경로): click points, double-click / Enter / right-click to finish ---------- */
+  let drawing = null; // { type, obj (when extending), pts: [[x, z]], preview }
   function setRoutePoints(o, pts) {
     o.x = pts[0][0]; o.z = pts[0][1]; o.rot = 0;
-    o.params = Object.assign(window.FactoryElements.defaults('route'), o.params || {}, { points: pts.map(([x, z]) => [r2(x - o.x), r2(z - o.z)]) });
+    o.params = Object.assign(window.FactoryElements.defaults(o.type), o.params || {}, { points: pts.map(([x, z]) => [r2(x - o.x), r2(z - o.z)]) });
     buildView(o);
   }
-  function startDrawing(obj) {
-    if (busy()) return note('사이클 중에는 그릴 수 없습니다', true);
-    cancelPlacing(); placing = 'route';
-    drawing = { obj: obj || null, pts: obj ? FM().routePoints(obj) : [], preview: null };
+  function startDrawing(obj, type) {
+    if (busy()) return note('시뮬레이션 중에는 그릴 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
+    type = obj ? obj.type : type;
+    cancelPlacing(); placing = type;
+    drawing = { type, obj: obj || null, pts: obj ? FM().routePoints(obj) : [], preview: null };
     redrawPreview();
-    note('AMR 경로: 바닥을 클릭해 점을 찍습니다. 더블클릭·Enter·오른쪽 클릭으로 완료, Esc로 취소. 작업 구역을 지나는 구간은 놓이지 않습니다.');
+    note(`${TYPE_LABEL[type] === '경로' ? 'AMR 경로' : TYPE_LABEL[type]}: 바닥을 클릭해 점을 찍고 더블클릭·Enter·오른쪽 클릭으로 끝냅니다 (Esc 취소). ${type === 'route' ? 'AMR 진입이 금지된' : '보행이 금지된'} 구역을 지나는 구간은 놓이지 않습니다.`);
   }
   function redrawPreview(cursor) {
     const s = S(); if (drawing.preview) s.scene.remove(drawing.preview);
     const pts = drawing.pts.concat(cursor ? [cursor] : []);
     if (pts.length < 1) { drawing.preview = null; return; }
-    const o = { type: 'route', x: pts[0][0], z: pts[0][1], rot: 0, params: { points: pts.map(([x, z]) => [x - pts[0][0], z - pts[0][1]]) } };
+    const o = { type: drawing.type, x: pts[0][0], z: pts[0][1], rot: 0, params: { points: pts.map(([x, z]) => [x - pts[0][0], z - pts[0][1]]) } };
     drawing.preview = window.FactoryElements.build(o, doc.factory);
     drawing.preview.traverse(m => { if (m.isMesh) m.raycast = () => {}; });
     s.scene.add(drawing.preview);
@@ -281,15 +291,16 @@
   // snap to an existing route point so routes join into one network
   function snapToNode(p) {
     let best = null, bd = 0.3;
-    for (const n of motion().G.nodes) { const d = Math.hypot(n.x - p.x, n.z - p.z); if (d < bd) { bd = d; best = n; } }
+    const nodes = drawing && drawing.type === 'walkroute' ? doc.objects.filter(o => o.type === 'walkroute').flatMap(o => FM().routePoints(o).map(([x, z]) => ({ x, z }))) : motion().G.nodes;
+    for (const n of nodes) { const d = Math.hypot(n.x - p.x, n.z - p.z); if (d < bd) { bd = d; best = n; } }
     return best ? [best.x, best.z] : [r2(p.x), r2(p.z)];
   }
   function addDrawPoint(p) {
     const q = snapToNode(p), pts = drawing.pts;
     if (pts.length) {
       const a = pts[pts.length - 1]; if (Math.hypot(q[0] - a[0], q[1] - a[1]) < 0.05) return;
-      const bad = FM().keepouts(doc).filter(s => FM().hits(a, q, s));
-      if (bad.length) return note(`이 구간은 작업 구역(${bad.map(s => s.name).join(', ')})을 지나서 놓을 수 없습니다`, true);
+      const walk = drawing.type === 'walkroute', bad = (walk ? FM().walkBlocks(doc) : FM().keepouts(doc)).filter(s => FM().hits(a, q, s));
+      if (bad.length) return note(`이 구간은 ${walk ? '보행' : 'AMR 진입'}이 금지된 ${bad.map(s => s.name).join(', ')}을(를) 지나서 놓을 수 없습니다 — 그 구역의 진입 허용을 켜거나 돌아가게 그리세요`, true);
     }
     pts.push(q); redrawPreview();
   }
@@ -299,15 +310,15 @@
     drawing = null; placing = null;
     if (d.pts.length < 2) { if (!d.obj) note('점이 2개 이상이어야 경로가 됩니다'); return; }
     pushUndo();
-    const o = d.obj || { id: newId(), type: 'route', name: nextName('route'), x: 0, z: 0, rot: 0, params: {} };
+    const o = d.obj || { id: newId(), type: d.type, name: nextName(d.type), x: 0, z: 0, rot: 0, params: {} };
     if (!d.obj) doc.objects.push(o);
     setRoutePoints(o, d.pts); store(); select(o.id); note(`${o.name}: 점 ${d.pts.length}개`);
   }
   function cancelDrawing() { if (!drawing) return; if (drawing.preview) S().scene.remove(drawing.preview); drawing = null; placing = null; }
 
   function startPlacing(type) {
-    if (type === 'route') return startDrawing(null);
-    if (busy()) return note('사이클 중에는 배치할 수 없습니다', true);
+    if (PATHS.includes(type)) return startDrawing(null, type);
+    if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
     cancelPlacing(); placing = type;
     ghost = type === 'station'
       ? new THREE.Mesh(new THREE.BoxGeometry(CELL_FOOT[0], 2, CELL_FOOT[1]), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.18, depthWrite: false }))
@@ -335,11 +346,29 @@
     select(o.id); if (type === 'station') placeObjectGroup(o);
     store(); note(`${o.name}을(를) 놓았습니다`);
   }
+  // 전체 지우기: placed objects only (keep the building) / everything (keep the size) / everything + default size
+  const BUILDING = ['column', 'wall', 'door', 'stairs'];
   function clearAll() {
-    if (busy()) return note('사이클 중에는 지울 수 없습니다', true);
-    const n = doc.objects.length; if (!n) return note('지울 객체가 없습니다');
-    if (!confirm(`배치한 객체 ${n}개(셀·설비·건물·경로·작업자)를 모두 지웁니다.\n공장 크기(${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m)는 그대로 둡니다.\n\nCtrl+Z(되돌리기)로 되돌릴 수 있습니다.`)) return;
-    pushUndo(); doc.objects = []; rebuildAll(); select(null); store(); note(`객체 ${n}개를 지웠습니다 (Ctrl+Z로 되돌리기)`);
+    if (busy()) return note('시뮬레이션 중에는 지울 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
+    const nB = doc.objects.filter(o => BUILDING.includes(o.type)).length, nO = doc.objects.length - nB, f = doc.factory;
+    if (!doc.objects.length) return note('지울 객체가 없습니다');
+    const wrap = document.createElement('div'); wrap.className = 'fbModal';
+    wrap.innerHTML = `<div class="card"><h3>전체 지우기</h3><p class="hint">무엇을 지울지 고르세요. 어느 쪽이든 Ctrl+Z(되돌리기)로 되돌릴 수 있습니다.</p>
+      <button type="button" data-c="objects" ${nO ? '' : 'disabled'}><b>배치 객체만 지우기</b><span>셀·설비·구역·경로·이동체 ${nO}개 · 건물 요소 ${nB}개와 공장 크기(${f.width}×${f.depth}×${f.height} m)는 유지</span></button>
+      <button type="button" data-c="all"><b>건물 요소 포함 전부 지우기</b><span>객체 ${nO + nB}개 모두 · 공장 크기는 유지</span></button>
+      <button type="button" data-c="reset" class="danger"><b>공장 크기까지 초기화</b><span>객체 ${nO + nB}개 모두 · 공장 크기를 ${FACTORY_DEFAULT.width}×${FACTORY_DEFAULT.depth}×${FACTORY_DEFAULT.height} m로</span></button>
+      <div class="acts"><button type="button" data-c="cancel">취소</button></div></div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => {
+      const c = e.target.closest('[data-c]'), mode = c ? c.dataset.c : (e.target === wrap ? 'cancel' : null); if (!mode) return;
+      wrap.remove(); if (mode === 'cancel') return;
+      pushUndo();
+      const n = doc.objects.length;
+      doc.objects = mode === 'objects' ? doc.objects.filter(o => BUILDING.includes(o.type)) : [];
+      if (mode === 'reset') doc.factory = { ...FACTORY_DEFAULT };
+      rebuildAll(); select(null); store(); if (mode === 'reset') view('all');
+      note(`${n - doc.objects.length}개를 지웠습니다${mode === 'reset' ? ' · 공장 크기 초기화' : ''} (Ctrl+Z로 되돌리기)`);
+    });
   }
   // where o may not stand: overlapping another object's size / work area, or outside the factory
   function blockedBy(o) {
@@ -394,7 +423,7 @@
     charger: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="m13 7-3 5h4l-3 5"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
-  const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['amr', 'AMR·작업자', PALETTE[2][1]], ['equip', '설비', PALETTE[3][1]]];
+  const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]]];
   const css = `
   .fb-on .view .hud.tr{display:none}
   .fb-on .view .hud.tl{left:262px;top:var(--fbbar,58px)}
@@ -466,23 +495,77 @@
   #fbProps .pts{display:grid;gap:3px;max-height:180px;overflow:auto}
   #fbProps .pt{display:grid;grid-template-columns:18px 1fr 1fr 26px;gap:4px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--mute)}
   #fbProps .pt button{background:var(--panel2);border:1px solid var(--line);color:var(--mute);border-radius:3px;cursor:pointer;padding:3px 0}
-  .fb-hide{display:none!important}`;
+  .fb-hide{display:none!important}
+  .fb-on .side .foot{display:none}
+  .fb-on:not(.fb-cell) .view .hud.tl{display:none}
+  #fbBar .push{margin-left:auto}
+  #fbBar button.danger{color:#ff8a80;border-color:rgba(255,77,79,.45)}
+  #fbBar button.strong{background:var(--accent);color:var(--accent-ink);font-weight:700;border-color:var(--accent)}
+  #fbBar button:disabled,#fbBar select:disabled{opacity:.4;cursor:default}
+  #fbBar .vsep{width:1px;height:20px;background:var(--line);margin:0 4px}
+  #fbBar #fbClock{font-family:var(--mono);font-weight:500;color:var(--fg);min-width:44px;text-align:right}
+  #fbPanel .fbBody{min-height:0;overflow:hidden}
+  #fbPanel .fold{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);padding-top:4px}
+  #fbPanel .fold.list{flex:1 1 0;min-height:90px}
+  #fbPanel .fold.safety{flex:0 0 auto}
+  #fbPanel .fold.closed{flex:0 0 auto;min-height:0}
+  #fbPanel .fold.closed .foldBody{display:none}
+  #fbPanel .foldHead{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);line-height:2}
+  #fbPanel .foldHead::after{content:'▾';margin-left:auto;color:var(--dim)}
+  #fbPanel .fold.closed .foldHead::after{content:'▸'}
+  #fbPanel .foldHead em{font-style:normal;color:var(--dim)}
+  #fbPanel .fold.safety .foldHead em{color:var(--ng)}
+  #fbPanel .fold.list .foldBody{flex:1 1 auto;min-height:0;overflow:auto}
+  #fbPanel .fold.safety .foldBody{max-height:120px;overflow:auto}
+  #fbTree button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #fbTree em{flex:none;max-width:70px;overflow:hidden;text-overflow:ellipsis}
+  #fbToast{position:absolute;left:50%;top:calc(var(--fbbar,58px) + 4px);transform:translate(-50%,-6px);z-index:8;max-width:min(640px,70%);padding:9px 14px;border-radius:4px;background:rgba(16,19,23,.94);border:1px solid var(--line);color:var(--fg);font-size:12.5px;line-height:1.5;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+  #fbToast.show{opacity:1;transform:translate(-50%,0)}
+  #fbToast.err{border-color:var(--warn);color:#ffd59a}
+  #fbCtx{position:absolute;z-index:7;display:flex;align-items:center;gap:3px;padding:4px 6px;font-size:11.5px;white-space:nowrap}
+  #fbCtx b{font-weight:600;margin:0 6px 0 2px;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+  #fbCtx button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:3px 7px;border-radius:3px;cursor:pointer;font:inherit}
+  #fbCtx button:hover{border-color:var(--accent);color:var(--accent)}
+  #fbProps.flash{outline:2px solid var(--accent);outline-offset:4px;transition:outline-color .6s}
+  .fbModal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+  .fbModal .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px 20px;width:min(440px,100%);display:grid;gap:8px;font-size:13px}
+  .fbModal h3{margin:0;font-size:14px}
+  .fbModal .hint{color:var(--dim);font-size:11.5px;margin:0 0 4px}
+  .fbModal button{display:grid;gap:3px;text-align:left;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:10px 12px;border-radius:3px;cursor:pointer;font:inherit}
+  .fbModal button:hover{border-color:var(--accent)}
+  .fbModal button span{font-size:11.5px;color:var(--mute)}
+  .fbModal button.danger b{color:#ff8a80}
+  .fbModal button:disabled{opacity:.4;cursor:default}
+  .fbModal .acts{display:flex;justify-content:flex-end}
+  .fbModal .acts button{display:inline-block;padding:7px 14px}
+  @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:4px 7px;font-size:11.5px} }`;
   let panel, bar, propSec, stationSecs = [], noteT, tab = 'building';
-  function note(t, warn) { const n = $('#fbNote'); if (!n) return; n.textContent = t; n.classList.toggle('err', !!warn); clearTimeout(noteT); if (!warn) noteT = setTimeout(() => { if (n.textContent === t) n.textContent = ''; }, 6000); }
+  // short messages appear as a toast in the 3D view and fade out
+  function note(t, warn) {
+    let n = $('#fbToast'); if (!n) { n = document.createElement('div'); n.id = 'fbToast'; $('.view').appendChild(n); }
+    n.textContent = t; n.classList.toggle('err', !!warn); n.classList.add('show');
+    clearTimeout(noteT); noteT = setTimeout(() => n.classList.remove('show'), warn ? 6000 : 3500);
+  }
 
   function buildPanel() {
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="save" class="primary">저장 · 콘솔 2로 보내기</button><button type="button" data-t="clear">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
-      <div class="grp"><span>편집</span><button type="button" data-t="translate" title="이동 (T)">이동</button><button type="button" data-t="rotate" title="회전 (R)">회전</button><button type="button" data-t="dup" title="복제 (Ctrl+D)">복제</button><button type="button" data-t="del" title="삭제 (Del)">삭제</button><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">되돌리기</button>
-        <label title="이동 0.1 m, 회전 15° 단위로 맞춥니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
+      <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
+        <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
       <div class="sep"></div>
-      <div class="grp"><span>시뮬레이션</span><button type="button" data-t="play" class="on" title="AMR · 작업자 · 로봇 · 컨베이어 움직임">⏸ 일시정지</button></div>
+      <div class="grp sim"><span>시뮬레이션</span>
+        <button type="button" data-t="play" class="primary" title="셀 사이클·로봇·컨베이어·AMR·작업자를 모두 함께 움직입니다">▶ 시작</button>
+        <button type="button" data-t="restart" title="시뮬레이션을 멈추고 처음 상태로 되돌립니다 (편집하려면 이 상태여야 합니다)">⟲ 처음부터</button>
+        <label title="시뮬레이션 시간 배속 (1× = 실제 시간)">배속 <select data-t="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="16">16×</option><option value="32">32×</option></select></label>
+        <b id="fbClock" title="시뮬레이션 경과 시간">00:00</b></div>
       <div class="sep"></div>
-      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="scale" title="고른 셀의 계량·도포부">계량·도포부</button><button type="button" data-v="follow" title="고른 객체를 따라갑니다">추적</button>
-        <select id="fbViewTarget" title="계량·도포부 / 추적 / 객체 시점의 대상"></select></div>`;
+      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button>
+        <i class="vsep"></i><button type="button" data-v="scale" title="고른 셀의 계량·도포부를 크게 봅니다">셀 확대</button><select id="fbCellPick" title="셀 확대 대상"></select>
+        <i class="vsep"></i><button type="button" data-v="follow" title="고른 AMR을 따라갑니다">AMR 추적</button><select id="fbAmrPick" title="추적할 AMR"></select></div>
+      <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · 콘솔 2로 보내기</button></div>`;
     $('.view').appendChild(bar);
     const fitBar = () => document.querySelector('.view').style.setProperty('--fbbar', (bar.offsetHeight + 16) + 'px');
     if (window.ResizeObserver) new ResizeObserver(fitBar).observe(bar); setTimeout(fitBar, 0);
@@ -493,9 +576,8 @@
       <div class="fbBody">
         <div class="tabs">${TABS.map(([k, l]) => `<button type="button" data-tab="${k}">${l}</button>`).join('')}</div>
         <div class="pal"></div>
-        <details open class="grow"><summary>객체 목록</summary><div id="fbTree"></div></details>
-        <details open><summary>안전 경고 <em id="fbSafetyCount"></em></summary><div id="fbSafety"><span class="ok">위험 없음</span></div></details>
-        <div id="fbNote"></div>
+        <section class="fold list"><button type="button" class="foldHead">객체 목록 <em id="fbCount"></em></button><div class="foldBody" id="fbTree"></div></section>
+        <section class="fold safety"><button type="button" class="foldHead">안전 경고 <em id="fbSafetyCount"></em></button><div class="foldBody" id="fbSafety"><span class="ok">위험 없음</span></div></section>
       </div>`;
     $('.view').appendChild(panel);
     const showTab = k => {
@@ -508,6 +590,7 @@
       });
     };
     panel.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+    panel.querySelectorAll('.foldHead').forEach(h => h.onclick = () => h.parentElement.classList.toggle('closed'));
     showTab(tab);
     panel.querySelector('[data-t=min]').onclick = () => { panel.classList.toggle('min'); panel.querySelector('[data-t=min]').textContent = panel.classList.contains('min') ? '+' : '–'; };
     const on = (sel, fn) => { const b = bar.querySelector(sel); if (b) b.onclick = fn; };
@@ -515,10 +598,11 @@
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
     on('[data-t=clear]', clearAll);
-    on('[data-t=translate]', () => setMode('translate')); on('[data-t=rotate]', () => setMode('rotate'));
-    on('[data-t=dup]', duplicate); on('[data-t=del]', remove); on('[data-t=undo]', undo);
+    on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
-    on('[data-t=play]', e => { playing = !playing; e.target.classList.toggle('on', playing); e.target.textContent = playing ? '⏸ 일시정지' : '▶ 재생'; });
+    on('[data-t=play]', () => playing ? simPause() : simStart());
+    on('[data-t=restart]', simRestart);
+    bar.querySelector('[data-t=speed]').onchange = e => setSpeed(+e.target.value);
     bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => view(b.dataset.v));
 
     // properties: the selected object's own settings, at the top of the right column
@@ -532,7 +616,6 @@
   let camTween = null, lastView = null, followId = null;
   function camTo(pos, target, dur = 0.8) {
     const s = S(); s.cfg.follow = false;
-    const d = pos.distanceTo(target); s.scene.fog.near = Math.max(9, d * 1.15); s.scene.fog.far = Math.max(24, d * 3.2);
     s.controls.maxDistance = Math.max(s.controls.maxDistance, pos.distanceTo(target) * 1.6);
     camTween = { p0: s.camera.position.clone(), t0: s.controls.target.clone(), p1: pos, t1: target, f: 0, dur };
   }
@@ -578,15 +661,18 @@
     lastView = kind; followId = null;
     bar.querySelectorAll('[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
     if (kind === 'all' || kind === 'front' || kind === 'top') return fitFactory(kind);
-    const id = viewTarget(); if (!id) return note('대상 객체가 없습니다', true);
-    if (kind === 'scale') { const o = byId(id); if (!o || o.type !== 'station') { const c = stations()[0]; if (!c) return note('셀이 없습니다', true); return focusObject(c.id, true); } return focusObject(id, true); }
-    if (kind === 'follow') { focusObject(id); followId = id; note(`${byId(id).name}을(를) 따라갑니다 — 마우스로 돌려 볼 수 있습니다`); }
+    if (kind === 'scale') { const id = $('#fbCellPick').value || (stations()[0] || {}).id; if (!id) return note('셀이 없습니다', true); return focusObject(id, true); }
+    if (kind === 'follow') { const id = $('#fbAmrPick').value; if (!id) return note('AMR이 없습니다', true); focusObject(id); followId = id; note(`${byId(id).name}을(를) 따라갑니다 — 마우스로 돌려 볼 수 있습니다`); }
   }
   function renderViewTargets() {
-    const sel = $('#fbViewTarget'); if (!sel) return;
-    const keep = sel.value, list = doc.objects.filter(o => ['station', 'robot', 'amr', 'worker', 'conveyor', 'rack', 'charger'].includes(o.type));
-    sel.innerHTML = '<option value="">대상: 선택한 객체</option>' + list.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('');
-    if (list.some(o => o.id === keep)) sel.value = keep;
+    for (const [id, type, btn] of [['#fbCellPick', 'station', 'scale'], ['#fbAmrPick', 'amr', 'follow']]) {
+      const sel = $(id); if (!sel) continue;
+      const keep = sel.value, list = doc.objects.filter(o => o.type === type);
+      sel.innerHTML = list.length ? list.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('') : `<option value="">${type === 'amr' ? 'AMR 없음' : '셀 없음'}</option>`;
+      if (list.some(o => o.id === keep)) sel.value = keep;
+      sel.disabled = !list.length; bar.querySelector(`[data-v=${btn}]`).disabled = !list.length;
+    }
+    const cnt = $('#fbCount'); if (cnt) cnt.textContent = doc.objects.length;
   }
   function cameraTick(dt) {
     const s = S();
@@ -606,9 +692,32 @@
     rebuildAll(); select(null); store(); view('all'); note('새 공장을 시작했습니다');
   }
 
+  // floating actions for the selected object, next to it in the 3D view
+  function ctxTick() {
+    let c = $('#fbCtx');
+    const o = selectedId && byId(selectedId), g = o && groupOf(o.id);
+    if (!o || !g || placing) { if (c) c.hidden = true; return; }
+    if (!c) {
+      c = document.createElement('div'); c.id = 'fbCtx'; c.className = 'card';
+      c.innerHTML = '<b></b><button type="button" data-x="translate" title="이동 (T)">이동</button><button type="button" data-x="rotate" title="회전 (R)">회전</button><button type="button" data-x="dup" title="복제 (Ctrl+D)">복제</button><button type="button" data-x="del" title="삭제 (Del)">삭제</button><button type="button" data-x="look">보기</button><button type="button" data-x="props">설정</button>';
+      c.addEventListener('click', e => {
+        const x = e.target.closest('[data-x]'); if (!x) return;
+        ({ translate: () => setMode('translate'), rotate: () => setMode('rotate'), dup: duplicate, del: remove, look: () => focusObject(selectedId),
+           props: () => { propSec.scrollIntoView({ behavior: 'smooth', block: 'start' }); propSec.classList.add('flash'); setTimeout(() => propSec.classList.remove('flash'), 900); } })[x.dataset.x]();
+      });
+      $('.view').appendChild(c);
+    }
+    c.querySelector('b').textContent = o.name;
+    const box = new THREE.Box3().setFromObject(g), top = new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2).project(S().camera);
+    const view = $('.view').getBoundingClientRect(), el = S().renderer.domElement.getBoundingClientRect();
+    if (top.z > 1) { c.hidden = true; return; }
+    const x = el.left - view.left + (top.x + 1) / 2 * el.width, y = el.top - view.top + (1 - top.y) / 2 * el.height - 14;
+    c.hidden = false; c.style.left = Math.max(270, Math.min(view.width - c.offsetWidth - 8, x - c.offsetWidth / 2)) + 'px'; c.style.top = Math.max(60, Math.min(view.height - 60, y - c.offsetHeight)) + 'px';
+  }
+
   function renderTree() {
     const t = $('#fbTree'); if (!t) return;
-    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['AMR 경로 · 작업자', ['route', 'worker']], ['설비', EQUIPMENT]];
+    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['설비', EQUIPMENT], ['이동체', MOVERS]];
     t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><span>공장 · </span>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, types]) => {
       const list = doc.objects.filter(o => types.includes(o.type));
       return list.length ? `<div class="grp">${g}</div>` + list.map(o => `<button type="button" data-id="${o.id}" class="${o.id === selectedId ? 'on' : ''}" title="${TYPE_LABEL[o.type]} · 더블클릭: 이 객체 보기">${icon(o.type)}<span>${esc(o.name)}</span>${o.id === activeId ? '<em>시뮬레이션</em>' : ''}</button>`).join('') : '';
@@ -619,7 +728,7 @@
 
   function field(k, label, v, step, min, max) {
     if (step === 'place') step = 'select', min = [['', '— 선택 —']].concat(FM().places(doc, motion().G).map(p => [p.ref, p.label]));
-    if (step === 'walkway') step = 'select', min = [['', '정지 (제자리)']].concat(doc.objects.filter(o => o.type === 'walkway').map(o => [o.id, o.name]));
+    if (step === 'walkway') step = 'select', min = [['', '정지 (제자리)']].concat(doc.objects.filter(o => o.type === 'walkway' || o.type === 'walkroute').map(o => [o.id, o.name]));
     if (step === 'select') return `<label>${label}<select data-k="${k}">${min.map(([val, l]) => `<option value="${val}" ${String(v) === val ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     if (step === 'text') return `<label>${label}<input type="text" data-k="${k}" value="${esc(v)}" maxlength="30"></label>`;
     if (step === 'color') return `<label>${label}<input type="color" data-k="${k}" value="${esc(v || (selectedId && byId(selectedId) && byId(selectedId).type === 'zone' ? (window.FactoryElements.ZONE_KIND[(byId(selectedId).params || {}).kind || 'pickup'] || ['', '#5f6b78'])[1] : '#888888'))}"></label>`;
@@ -660,7 +769,7 @@
           ? `<p class="hint">경로 길이 ${pl.length.toFixed(1)} m · 편도 ${pl.oneWay.toFixed(1)} s · 왕복 주기 ${pl.period.toFixed(1)} s (적재·하역 포함). 작업 구역을 지나는 구간은 사용하지 않고 가장 짧은 경로로 다닙니다.</p>`
           : `<p class="hint" style="color:var(--warn)">${pl ? pl.error : '출발 지점과 도착 지점을 고르세요'}</p>`;
       }
-      if (o.type === 'worker') html += `<p class="hint" id="fbWorkerSafety">보행로를 고르면 그 보행로 끝에서 끝까지 왕복합니다.</p>`;
+      if (o.type === 'worker') { const pl = motion().worker[o.id]; html += `<p class="hint" id="fbWorkerSafety">보행로나 작업자 경로를 고르면 그 경로를 끝에서 끝까지 왕복합니다.</p>${pl && pl.error ? `<p class="hint" style="color:var(--warn)">${esc(pl.error)}</p>` : ''}`; }
       if (o.type === 'route') {
         const pts = FM().routePoints(o), G = motion().G, mine = G.edges.filter(e => e.route === o.id), P0 = Object.assign({ oneway: false }, o.params);
         const blocked = mine.filter(e => e.blockedBy.length), cross = mine.filter(e => e.crosses.length);
@@ -670,7 +779,13 @@
           <div class="acts"><button type="button" data-a="extend">점 이어 그리기</button></div>
           <p class="hint" style="${blocked.length ? 'color:var(--warn)' : ''}">${blocked.length ? `막힌 구간 ${blocked.length}개: ${[...new Set(blocked.flatMap(e => e.blockedBy))].join(', ')} — AMR은 이 구간을 쓰지 않습니다 (빨간 표시)` : '작업 구역을 지나는 구간 없음'}${cross.length ? ` · 보행로 교차 ${cross.length}곳 (노란 표시)` : ''}</p>`;
       }
-      if (o.type === 'robot') html += '<p class="hint">픽 위치(파랑)에서 집어 플레이스 위치(주황)에 놓는 동작을 반복합니다. 사이클 시간은 시뮬레이션 기준 (콘솔 2의 1x = SIM 4x).</p>';
+      if (o.type === 'walkroute') {
+        const pts = FM().routePoints(o), bad = FM().walkBlocked(doc, o), users = doc.objects.filter(w => w.type === 'worker' && (w.params || {}).walkway === o.id);
+        html += `<h4>경로 점 (X, Z m)</h4><div class="pts">${pts.map(([x, z], i) => `<div class="pt"><span>${i + 1}</span><input type="number" step="0.1" data-pt="${i}" data-c="0" value="${r2(x)}"><input type="number" step="0.1" data-pt="${i}" data-c="1" value="${r2(z)}"><button type="button" data-ptdel="${i}" title="점 삭제">×</button></div>`).join('')}</div>
+          <div class="acts"><button type="button" data-a="extend">점 이어 그리기</button></div>
+          <p class="hint" style="${bad.length ? 'color:var(--warn)' : ''}">${bad.length ? `보행 금지 구역을 지납니다: ${bad.join(', ')} — 이 경로를 쓰는 작업자는 서 있습니다` : '보행 금지 구역을 지나지 않습니다'} · 이 경로를 걷는 작업자 ${users.length}명 (작업자 설정의 "걷는 경로"에서 고릅니다)</p>`;
+      }
+      if (o.type === 'robot') html += '<p class="hint">픽 위치(파랑)에서 집어 플레이스 위치(주황)에 놓는 동작을 반복합니다. 사이클 시간은 시뮬레이션 시간 기준입니다.</p>';
     } else {
       html += `<h4 style="margin:4px 0 0">셀 내부 배치</h4><div class="inner">${Object.entries(INNER).map(([k, d]) => `<button type="button" data-inner="${k}" class="${innerSel === k ? 'on' : ''}">${d.label}</button>`).join('')}</div>
         <p class="hint">장비를 고른 뒤 3D 화살표를 끌면 이 셀 안에서 옮겨집니다. 아래 제품·파라미터·도포 포인트가 이 셀의 설정이며, 사이클 시작은 이 셀을 시뮬레이션합니다.</p>
@@ -850,10 +965,15 @@
     $('.side').addEventListener('click', () => setTimeout(store, 300));
     setInterval(() => { if (helper) helper.update(); }, 250);
     // conveyors spin, robots pick & place, AMRs drive their trips and workers walk, at console 1's SIM speed
-    let last = performance.now(), lastPanel = 0;
+    let last = performance.now(), lastPanel = 0, lastClock = 0;
     const tick = now => {
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
-      if (playing) clock += dt * (S().cfg.sim || 1);
+      if (playing) {
+        clock += dt * speed;
+        const sim = S().sim; if (activeId && sim.phase === 'done') S().startCycle(); // cells keep producing while it runs
+      }
+      if (now - lastClock > 200) { lastClock = now; const c = $('#fbClock'); if (c) c.textContent = fmtClock(clock); }
+      ctxTick();
       const M = motion(), t = clock;
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
@@ -875,7 +995,24 @@
   }
 
   /* ---------- range circles + safety ---------- */
-  let playing = true, clock = 0, safetyLayer = null;
+  let playing = false, clock = 0, speed = 4, safetyLayer = null;
+  const fmtClock = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); };
+  // ▶ 시작: everything runs (cells' cycles, robots, conveyors, AMRs, workers) at the chosen speed
+  function simStart() {
+    playing = true; const s = S(); s.cfg.sim = speed;
+    if (activeId && (s.sim.phase === 'idle' || s.sim.phase === 'done')) s.startCycle();
+    simUi();
+  }
+  // ⏸: everything holds where it is (the cell's cycle too)
+  function simPause() { playing = false; S().cfg.sim = 0; simUi(); }
+  // ⟲ 처음부터: stop and return to the start state; editing is possible again
+  function simRestart() { playing = false; clock = 0; const s = S(); s.cfg.sim = speed; s.resetAll(); simUi(); note('시뮬레이션을 처음 상태로 되돌렸습니다 — 이제 편집할 수 있습니다'); }
+  function setSpeed(v) { speed = v; if (playing) S().cfg.sim = v; }
+  function simUi() {
+    const b = bar && bar.querySelector('[data-t=play]'); if (!b) return;
+    b.textContent = playing ? '⏸ 일시정지' : (clock > 0 ? '▶ 계속' : '▶ 시작'); b.classList.toggle('on', playing);
+    document.querySelector('.app').classList.toggle('fb-running', playing || busy());
+  }
   const cellRings = new Map();
   // station cells' R1 / R2 circles and the route edges that are blocked (red) or cross a walkway (yellow)
   function buildSafetyLayer() {

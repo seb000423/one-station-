@@ -250,11 +250,25 @@
     plan.radius = Math.hypot(p.length, p.width) / 2 + AMR_MARGIN; plan.fromLabel = name(p.from); plan.toLabel = name(p.to);
     return plan;
   }
+  // where pedestrians may not go: areas closed to walking (and columns, walls, stairs)
+  function walkBlocks(doc) {
+    const out = [];
+    for (const q of doc.objects) { const s = footprint(q); if (s && q.type !== 'walkway' && clash({ type: 'worker' }, q)) out.push(Object.assign({}, s, { name: q.name })); }
+    return out;
+  }
+  function walkBlocked(doc, o) { const pts = routePoints(o), ko = walkBlocks(doc), bad = new Set(); for (let k = 1; k < pts.length; k++) ko.filter(s => hits(pts[k - 1], pts[k], s)).forEach(s => bad.add(s.name)); return [...bad]; }
+  // a worker stands, or walks a walkway (centre line) or a worker path (작업자 경로) end to end and back
   function workerPlan(doc, w) {
-    const p = P(w), ww = doc.objects.find(o => o.id === p.walkway && o.type === 'walkway');
-    if (!ww) return { ok: true, still: true, pose: () => ({ x: w.x, z: w.z, yaw: w.rot || 0 }), state: () => '정지', trips: () => 0, period: 0 };
-    const q = P(ww), A = local2world(ww, -q.length / 2 + 0.4, 0), B = local2world(ww, q.length / 2 - 0.4, 0);
-    return planFromPoints([A, B], p.speed, p.dwell, p.dwell, ['작업 중', `보행 중 → ${ww.name} 끝`, '작업 중', `보행 중 → ${ww.name} 시작`]);
+    const p = P(w), path = doc.objects.find(o => o.id === p.walkway && (o.type === 'walkway' || o.type === 'walkroute'));
+    const still = (state, error) => ({ ok: true, still: true, error, pose: () => ({ x: w.x, z: w.z, yaw: w.rot || 0 }), state: () => state, trips: () => 0, period: 0 });
+    if (!path) return still('정지');
+    let pts;
+    if (path.type === 'walkway') { const q = P(path); pts = [local2world(path, -q.length / 2 + 0.4, 0), local2world(path, q.length / 2 - 0.4, 0)]; }
+    else {
+      pts = routePoints(path); if (pts.length < 2) return still('정지');
+      const bad = walkBlocked(doc, path); if (bad.length) return still('정지 (경로 막힘)', `${path.name}이(가) 보행 금지 구역(${bad.join(', ')})을 지납니다`);
+    }
+    return planFromPoints(pts, p.speed, p.dwell, p.dwell, ['작업 중', `보행 중 → ${path.name} 끝`, '작업 중', `보행 중 → ${path.name} 시작`]);
   }
   function plans(doc, opts = {}) {
     const G = graph(doc), out = { G, amr: {}, worker: {} };
@@ -420,5 +434,5 @@
     return out;
   }
 
-  window.FactoryMotion = { perm, clash, footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
+  window.FactoryMotion = { walkBlocks, walkBlocked, perm, clash, footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
 })();

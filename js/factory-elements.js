@@ -154,7 +154,8 @@
           const n = Math.max(2, Math.min(80, Math.floor(L / 0.12)));
           for (let i = 0; i < n; i++) jog(cyl(g, 'Conveyor_Roller', r, W - 0.02, M.roller, -L / 2 + 0.06 + i * (L - 0.12) / (n - 1), H, 0, 'z'), 'RotationZ', true, -degPerSec);
         }
-        const arrow = labelPlane(p.dir < 0 ? '◀' : '▶', 0.6, '#00e8d0'); arrow.position.set(0, H + r + 0.02, 0); g.add(arrow);
+        const nA = Math.max(1, Math.round(p.length / 1.2));
+        for (let i = 0; i < nA; i++) { const arrow = labelPlane(p.dir < 0 ? '◀' : '▶', 0.35, 'rgba(0,232,208,.7)', true); arrow.name = 'Conveyor_Arrow'; arrow.position.set(-p.length / 2 + (i + 0.5) * p.length / nA, H + r + 0.006, 0); g.add(arrow); }
       },
       animate: (g, p, t) => { const r = 0.035, a = -(p.speed / r) * t * (p.dir < 0 ? -1 : 1); g.traverse(o => { if (/^Conveyor_(Roller|Drum)$/.test(o.name) && !o.isMesh) o.rotation.z = a; }); },
       footprint: p => [p.length, p.width + 0.1]
@@ -245,6 +246,22 @@
         pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
         if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
         if (pts.length > 1) { const e = labelPlane('끝', 0.6, '#00e8d0'); const q = pts[pts.length - 1]; e.position.set(q[0], 0.02, q[1] + 0.3); g.add(e); }
+      },
+      footprint: () => [0.5, 0.5]
+    },
+    walkroute: {
+      label: '작업자 경로', group: 'route',
+      defaults: () => ({ points: [] }),
+      build: (g, p) => {
+        const pts = p.points || [], line = mat(0x2bb673, { emissive: 0x2bb673, emissiveIntensity: 0.3 }), node = mat(0x7dffb2);
+        for (let k = 1; k < pts.length; k++) {
+          const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.floor(len / 0.5));
+          for (let i = 0; i < n; i++) { // dashed: a pedestrian path, not an AMR lane
+            const t0 = (i + 0.15) / n, t1 = (i + 0.85) / n, dl = len * (t1 - t0);
+            const seg = box(g, 'WalkRoute_Dash', dl, 0.006, 0.05, line, x0 + (x1 - x0) * (t0 + t1) / 2, 0.009, z0 + (z1 - z0) * (t0 + t1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
+          }
+        }
+        pts.forEach(([x, z], k) => { const n = cyl(g, 'WalkRoute_Point_' + (k + 1), 0.07, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
       },
       footprint: () => [0.5, 0.5]
     },
