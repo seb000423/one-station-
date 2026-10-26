@@ -629,7 +629,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -676,6 +676,7 @@
     on('[data-t=new]', newFactory);
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
+    on('[data-t=sample]', loadSample);
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -1030,6 +1031,13 @@
     pushUndo();
     doc = { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(d.objects || []) };
     rebuildAll(); select(null); store();
+  }
+  // example factory (examples/sample-factory.json): cells, conveyors, racks, zones, chargers, AMRs, workers
+  async function loadSample() {
+    try {
+      const d = await (await fetch('examples/sample-factory.json', { cache: 'no-store' })).json();
+      loadDoc(d); view('all'); note('예시 공장을 불러왔습니다 · ▶ 시작으로 시뮬레이션 (Ctrl+Z로 되돌리기)');
+    } catch (e) { note('예시 공장을 불러오지 못했습니다: ' + e.message, true); }
   }
   function docFromLegacy(meta) {
     const m = meta.summary || {}, L = m.layout || {}, p = defaultCellParams();
