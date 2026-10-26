@@ -6,6 +6,10 @@
 //     Crossing a walkway is allowed but reported.
 //   - An AMR runs 출발 → 도착 over the shortest unblocked path: load at the start, turn in place at each
 //     corner, accelerate / cruise / decelerate on each straight, unload at the end, come back, loop.
+//   - AMRs share the route network (fleet simulation): each reserves the stretch ahead up to the next
+//     junction or its destination (and route segments running close to it), so two AMRs never meet head
+//     on in a corridor; the other one waits, and after waiting a while tries a detour. An AMR slows down
+//     when a worker comes within twice its safety circle ahead and stops when the worker is inside it.
 //   - A worker stands, or walks a walkway end to end and back.
 //   - Moving equipment has a range circle (robot reach, a station cell's R1/R2 reach, AMR footprint +
 //     margin); a worker inside one is a safety warning.
@@ -123,7 +127,8 @@
       const pts = routePoints(o), ids = pts.map(([x, z], k) => nodeAt(x, z, `${o.name} 점 ${k + 1}`));
       for (let k = 1; k < ids.length; k++) {
         const a = pts[k - 1], b = pts[k], blockedBy = ko.filter(s => hits(a, b, s)).map(s => s.name), crosses = ww.filter(s => hits(a, b, s)).map(s => s.name);
-        const e = { a: ids[k - 1], b: ids[k], route: o.id, len: Math.hypot(b[0] - a[0], b[1] - a[1]), blockedBy, crosses };
+        // one-way routes are travelled only in drawing order (a → b)
+        const e = { a: ids[k - 1], b: ids[k], route: o.id, oneway: !!P(o).oneway, len: Math.hypot(b[0] - a[0], b[1] - a[1]), blockedBy, crosses };
         edges.push(e); nodes[e.a].adj.push(e); nodes[e.b].adj.push(e);
       }
     }
@@ -135,7 +140,7 @@
     for (;;) {
       let u = -1; for (let i = 0; i < dist.length; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
       if (u < 0 || u === to) break; done[u] = true;
-      for (const e of G.nodes[u].adj) { if (e.blockedBy.length) continue; const v = e.a === u ? e.b : e.a; if (dist[u] + e.len < dist[v]) { dist[v] = dist[u] + e.len; prev[v] = u; } }
+      for (const e of G.nodes[u].adj) { if (e.blockedBy.length || (e.oneway && e.a !== u)) continue; const v = e.a === u ? e.b : e.a; if (dist[u] + e.len < dist[v]) { dist[v] = dist[u] + e.len; prev[v] = u; } }
     }
     if (dist[to] === Infinity) return null;
     const path = []; for (let v = to; v >= 0; v = prev[v]) path.unshift(v); return path;
@@ -205,8 +210,9 @@
     if (!G.edges.length) return { ok: false, error: 'AMR 경로가 없습니다. 팔레트의 "AMR 경로"로 먼저 경로를 그리세요' };
     if (from < 0 || to < 0) return { ok: false, error: '출발 지점과 도착 지점을 고르세요' };
     if (from === to) return { ok: false, error: '출발 지점과 도착 지점이 같은 경로 점입니다' };
-    const path = shortest(G, from, to);
-    if (!path) return { ok: false, error: '막히지 않은 경로로 갈 수 없습니다 (작업 구역을 지나는 구간은 사용하지 않습니다)' };
+    const path = shortest(G, from, to), back = shortest(G, to, from);
+    if (!path) return { ok: false, error: '막히지 않은 경로로 갈 수 없습니다 (작업 구역을 지나는 구간·단방향 반대쪽은 사용하지 않습니다)' };
+    if (!back) return { ok: false, error: '도착 지점에서 돌아오는 경로가 없습니다 (단방향 경로라면 돌아오는 경로도 그리세요)' };
     const pts = path.map(i => [G.nodes[i].x, G.nodes[i].z]);
     const plan = planFromPoints(pts, p.speed, p.dwell, p.dwell, [`적재 중 (${name(p.from)})`, `이동 중 → ${name(p.to)}`, `하역 중 (${name(p.to)})`, `복귀 중 → ${name(p.from)}`]);
     plan.radius = Math.hypot(p.length, p.width) / 2 + AMR_MARGIN; plan.fromLabel = name(p.from); plan.toLabel = name(p.to);
@@ -218,10 +224,138 @@
     const q = P(ww), A = local2world(ww, -q.length / 2 + 0.4, 0), B = local2world(ww, q.length / 2 - 0.4, 0);
     return planFromPoints([A, B], p.speed, p.dwell, p.dwell, ['작업 중', `보행 중 → ${ww.name} 끝`, '작업 중', `보행 중 → ${ww.name} 시작`]);
   }
-  function plans(doc) {
+  function plans(doc, opts = {}) {
     const G = graph(doc), out = { G, amr: {}, worker: {} };
     for (const o of doc.objects) { if (o.type === 'amr') out.amr[o.id] = amrPlan(doc, o, G); else if (o.type === 'worker') out.worker[o.id] = workerPlan(doc, o); }
+    fleet(doc, G, out, opts.horizon || 900);
     return out;
+  }
+
+  /* ---------- fleet: AMRs on the shared network ---------- */
+  const SIM_DT = 0.04, SAMPLE = 0.16;
+  const segDist = (a, b, c, d) => { // shortest distance between segments ab and cd
+    const pt = (p, q, r) => { const dx = r[0] - q[0], dz = r[1] - q[1], L2 = dx * dx + dz * dz || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - q[0]) * dx + (p[1] - q[1]) * dz) / L2)); return Math.hypot(p[0] - q[0] - t * dx, p[1] - q[1] - t * dz); };
+    const cr = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+    if (cr(a, b, c) * cr(a, b, d) < 0 && cr(c, d, a) * cr(c, d, b) < 0) return 0;
+    return Math.min(pt(a, c, d), pt(b, c, d), pt(c, a, b), pt(d, a, b));
+  };
+  // simulates every valid AMR for 'horizon' seconds and replaces its pose / state / trips with the result
+  function fleet(doc, G, out, horizon) {
+    const amrs = doc.objects.filter(o => o.type === 'amr' && out.amr[o.id] && out.amr[o.id].ok);
+    if (!amrs.length) return;
+    const ekey = (a, b) => a < b ? a + '-' + b : b + '-' + a, NP = i => [G.nodes[i].x, G.nodes[i].z];
+    const radius = Math.max(...amrs.map(o => out.amr[o.id].radius));
+    // edges running within two AMR radii of each other (crossing routes without a shared point) conflict
+    const near = new Map();
+    for (const e of G.edges) near.set(ekey(e.a, e.b), new Set());
+    for (const e of G.edges) for (const f of G.edges) { if (e === f) continue; const shared = e.a === f.a || e.a === f.b || e.b === f.a || e.b === f.b; if (!shared && segDist(NP(e.a), NP(e.b), NP(f.a), NP(f.b)) < 2 * radius) near.get(ekey(e.a, e.b)).add(ekey(f.a, f.b)); }
+    const degree = i => G.nodes[i].adj.filter(e => !e.blockedBy.length).length;
+    // the way back may differ from the way out (one-way loops)
+    const held = new Map(); // resource -> amr id
+    const free = (r, id) => !held.has(r) || held.get(r) === id;
+    const workers = doc.objects.filter(o => o.type === 'worker');
+    const agents = amrs.map((o, k) => {
+      const p = P(o), pl = out.amr[o.id], from = placeNode(doc, G, p.from), to = placeNode(doc, G, p.to);
+      return { o, p, pl, k, from, to, fwd: shortest(G, from, to), back: shortest(G, to, from), x: o.x, z: o.z, yaw: o.rot || 0, v: 0, trips: 0, phase: 'enter', leg: null, i: 0, s: 0, timer: 0, wait: 0, label: '대기: 출발 지점 사용 중', chain: [] };
+    });
+    const tryHold = (a, res) => { if (!res.every(r => free(r, a.o.id))) return false; res.forEach(r => held.set(r, a.o.id)); return true; };
+    const release = (a, r) => { if (held.get(r) === a.o.id) held.delete(r); };
+    const holderOf = (a, res) => { for (const r of res) if (!free(r, a.o.id)) return held.get(r); return null; };
+    const nameOf = id => (amrs.find(o => o.id === id) || {}).name || '';
+    // resources for the stretch ahead: on a one-way segment just the next segment (nobody comes head on,
+    // so the AMR can drive up and queue); on a two-way segment the whole corridor up to the next junction
+    // or the leg end, so two AMRs never meet head on in it
+    const edgeOf = new Map(G.edges.map(e => [ekey(e.a, e.b), e]));
+    function chainRes(a) {
+      const res = [], L = a.leg;
+      for (let j = a.i; j < L.length - 1; j++) {
+        const k = ekey(L[j], L[j + 1]); res.push('e:' + k, 'n:' + L[j + 1]); near.get(k).forEach(c => res.push('e:' + c));
+        if (edgeOf.get(k) && edgeOf.get(k).oneway) break;
+        if (j + 1 < L.length - 1 && degree(L[j + 1]) >= 3) break;
+      }
+      return res;
+    }
+    const startLeg = (a, path, label, dest) => { a.leg = path; a.i = 0; a.s = 0; a.phase = 'turn'; a.legLabel = label; a.dest = dest; a.chain = []; };
+    const samples = Math.ceil(horizon / SAMPLE) + 1, track = { x: new Float32Array(samples), z: new Float32Array(samples), yaw: new Float32Array(samples), state: new Array(samples), trips: new Uint16Array(samples) };
+    const tracks = new Map(agents.map(a => [a.o.id, { x: new Float32Array(samples), z: new Float32Array(samples), yaw: new Float32Array(samples), state: new Array(samples), trips: new Uint16Array(samples) }]));
+    const workerAt = t => workers.map(w => ({ w, q: (out.worker[w.id] || { pose: () => ({ x: w.x, z: w.z }) }).pose(t) }));
+    let si = 0;
+    for (let t = 0, step = 0; si < samples; t += SIM_DT, step++) {
+      const W = workers.length ? workerAt(t) : [];
+      for (const a of agents) {
+        const L = a.leg, fromName = a.pl.fromLabel, toName = a.pl.toLabel;
+        if (a.phase === 'enter') { // wait for the start point, then move onto it
+          if (tryHold(a, ['n:' + a.from])) { [a.x, a.z] = NP(a.from); a.phase = 'dwellA'; a.timer = a.p.dwell; a.label = `적재 중 (${fromName})`; }
+          continue;
+        }
+        if (a.phase === 'dwellA' || a.phase === 'dwellB') {
+          a.timer -= SIM_DT; if (a.timer > 0) continue;
+          if (a.phase === 'dwellB') a.trips++;
+          const back = a.phase === 'dwellB';
+          startLeg(a, back ? (a.back || a.fwd.slice().reverse()) : a.fwd.slice(), back ? `복귀 중 → ${fromName}` : `이동 중 → ${toName}`, back ? 'A' : 'B');
+          a.label = a.legLabel; continue;
+        }
+        const u = L[a.i], v = L[a.i + 1], A = NP(u), B = NP(v), len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+        if (a.phase === 'turn') {
+          let d = heading(A, B) - a.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+          const st = Math.sign(d) * Math.min(Math.abs(d), TURN * SIM_DT); a.yaw += st;
+          if (Math.abs(d) - Math.abs(st) < 1e-3) a.phase = 'move';
+          continue;
+        }
+        // move u -> v: needs the stretch ahead reserved
+        if (!a.chain.length || !a.chain.includes('e:' + ekey(u, v))) {
+          const res = chainRes(a);
+          if (!tryHold(a, res)) {
+            a.wait += SIM_DT; a.v = 0; const by = holderOf(a, res); a.waitingFor = by; a.label = `대기: ${nameOf(by)} 통과 대기`;
+            // both waiting on each other for a while: a single-lane deadlock (no passing place)
+            const other = agents.find(x => x.o.id === by);
+            if (other && other.waitingFor === a.o.id && a.wait > 2 && other.wait > 2) a.label = `교착: ${nameOf(by)}와 마주침 — 경로에 교행(분기) 구간이 필요합니다`;
+            // waited long: try a detour around what the other AMR holds
+            if (a.wait > 6 && a.wait - SIM_DT <= 6) {
+              const blockedNodes = new Set([...held].filter(([, id]) => id !== a.o.id).map(([r]) => r).filter(r => r.startsWith('n:')).map(r => +r.slice(2)));
+              const G2 = { nodes: G.nodes.map((n, i) => ({ ...n, adj: n.adj.map(e => (blockedNodes.has(e.a) || blockedNodes.has(e.b)) && !(e.a === u && e.b === u) ? { ...e, blockedBy: ['x'] } : e) })) };
+              const alt = shortest(G2, u, L[L.length - 1]);
+              if (alt && alt.length > 1 && alt[1] !== v) { a.leg = alt; a.i = 0; a.phase = 'turn'; a.wait = 0; a.label = '우회 경로로 변경'; }
+            }
+            continue;
+          }
+          a.chain = res; a.wait = 0; a.waitingFor = null; a.label = a.legLabel;
+        }
+        // workers ahead: slow down within two safety radii, stop inside one
+        let vmax = a.p.speed, why = '';
+        for (const { w, q } of W) {
+          const dx = q.x - a.x, dz = q.z - a.z, dist = Math.hypot(dx, dz), ahead = dx * Math.cos(a.yaw) - dz * Math.sin(a.yaw);
+          if (ahead < -0.2) continue;
+          if (dist < a.pl.radius) { vmax = 0; why = `정지: ${w.name} 접근`; break; }
+          if (dist < 2 * a.pl.radius) { vmax = Math.min(vmax, a.p.speed * 0.3); why = `감속: ${w.name} 접근`; }
+        }
+        const rem = len - a.s, vEnd = Math.sqrt(2 * ACCEL * Math.max(0, rem)), target = Math.min(vmax, vEnd + 0.05);
+        a.v = a.v < target ? Math.min(target, a.v + ACCEL * SIM_DT) : Math.max(target, a.v - 2 * ACCEL * SIM_DT);
+        a.s = Math.min(len, a.s + a.v * SIM_DT);
+        a.x = A[0] + (B[0] - A[0]) * (a.s / len || 0); a.z = A[1] + (B[1] - A[1]) * (a.s / len || 0);
+        a.label = why || a.legLabel;
+        if (a.s >= len - 1e-4) { // arrived at v: free what is behind
+          release(a, 'n:' + u); release(a, 'e:' + ekey(u, v)); near.get(ekey(u, v)).forEach(c => release(a, 'e:' + c));
+          a.chain = a.chain.filter(r => r !== 'n:' + u && r !== 'e:' + ekey(u, v));
+          a.i++; a.s = 0; a.v = 0;
+          if (a.i >= a.leg.length - 1) { a.chain.forEach(r => { if (r !== 'n:' + v) release(a, r); }); a.chain = []; a.phase = a.dest === 'B' ? 'dwellB' : 'dwellA'; a.timer = a.p.dwell; a.label = a.dest === 'B' ? `하역 중 (${toName})` : `적재 중 (${fromName})`; }
+          else a.phase = 'turn';
+        }
+      }
+      if (step % Math.round(SAMPLE / SIM_DT) === 0) {
+        for (const a of agents) { const tr = tracks.get(a.o.id); tr.x[si] = a.x; tr.z[si] = a.z; tr.yaw[si] = a.yaw; tr.state[si] = a.label; tr.trips[si] = a.trips; }
+        si++;
+      }
+    }
+    for (const a of agents) {
+      const tr = tracks.get(a.o.id), at = t => { const u = (((t % horizon) + horizon) % horizon) / SAMPLE, i = Math.min(samples - 2, Math.floor(u)); return [i, u - i]; };
+      Object.assign(a.pl, {
+        horizon, fleet: true,
+        pose(t) { const [i, f] = at(t); return { x: tr.x[i] + (tr.x[i + 1] - tr.x[i]) * f, z: tr.z[i] + (tr.z[i + 1] - tr.z[i]) * f, yaw: tr.yaw[i] + (tr.yaw[i + 1] - tr.yaw[i]) * f }; },
+        state(t) { return tr.state[at(t)[0]]; },
+        trips(t) { return tr.trips[at(t)[0]]; }
+      });
+    }
   }
 
   /* ---------- range circles + safety ---------- */

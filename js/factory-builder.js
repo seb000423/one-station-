@@ -416,6 +416,8 @@
   #fbProps .inner button.on{border-color:var(--accent);color:var(--accent)}
   #fbProps .kind{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.12em}
   #fbProps .hint{color:var(--dim);font-size:11px;line-height:1.5;margin:0}
+  #fbProps label.chk{display:flex;align-items:center;gap:6px;color:var(--fg);font-size:12px}
+  #fbProps label.chk input{width:auto}
   #fbProps .pts{display:grid;gap:3px;max-height:180px;overflow:auto}
   #fbProps .pt{display:grid;grid-template-columns:18px 1fr 1fr 26px;gap:4px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--mute)}
   #fbProps .pt button{background:var(--panel2);border:1px solid var(--line);color:var(--mute);border-radius:3px;cursor:pointer;padding:3px 0}
@@ -521,9 +523,11 @@
       }
       if (o.type === 'worker') html += `<p class="hint" id="fbWorkerSafety">보행로를 고르면 그 보행로 끝에서 끝까지 왕복합니다.</p>`;
       if (o.type === 'route') {
-        const pts = FM().routePoints(o), G = motion().G, mine = G.edges.filter(e => e.route === o.id);
+        const pts = FM().routePoints(o), G = motion().G, mine = G.edges.filter(e => e.route === o.id), P0 = Object.assign({ oneway: false }, o.params);
         const blocked = mine.filter(e => e.blockedBy.length), cross = mine.filter(e => e.crosses.length);
         html += `<h4 style="margin:4px 0 0">경로 점 (X, Z m)</h4><div class="pts">${pts.map(([x, z], i) => `<div class="pt"><span>${i + 1}</span><input type="number" step="0.1" data-pt="${i}" data-c="0" value="${r2(x)}"><input type="number" step="0.1" data-pt="${i}" data-c="1" value="${r2(z)}"><button type="button" data-ptdel="${i}" title="점 삭제">×</button></div>`).join('')}</div>
+          <label class="chk"><input type="checkbox" data-k="p.oneway" ${P0.oneway ? 'checked' : ''}> 단방향 (그린 순서대로만 통행)</label>
+          <p class="hint">AMR 여러 대가 왕복하면 한 줄 경로에서는 서로 마주쳐 멈춥니다. 가는 길과 오는 길을 단방향 경로 두 개로 그리거나, 중간에 갈라지는 교행 구간을 두세요.</p>
           <div class="acts"><button type="button" data-a="extend">점 이어 그리기</button></div>
           <p class="hint" style="${blocked.length ? 'color:var(--warn)' : ''}">${blocked.length ? `막힌 구간 ${blocked.length}개: ${[...new Set(blocked.flatMap(e => e.blockedBy))].join(', ')} — AMR은 이 구간을 쓰지 않습니다 (빨간 표시)` : '작업 구역을 지나는 구간 없음'}${cross.length ? ` · 보행로 교차 ${cross.length}곳 (노란 표시)` : ''}</p>`;
       }
@@ -537,7 +541,7 @@
     propSec.innerHTML = html;
     propSec.querySelector('[data-n]').addEventListener('change', e => { pushUndo(); o.name = e.target.value.trim() || o.name; syncLabel(o); if (o.type !== 'station') { buildView(o); select(o.id); } store(); renderTree(); });
     propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
-      const k = i.dataset.k, raw = i.type === 'number' || (k === 'p.dir') ? parseFloat(i.value) : i.value;
+      const k = i.dataset.k, raw = i.type === 'checkbox' ? i.checked : i.type === 'number' || (k === 'p.dir') ? parseFloat(i.value) : i.value;
       if (i.type === 'number' && Number.isNaN(raw)) return renderProps();
       const next = clone(o);
       if (k === 'rot') next.rot = THREE.MathUtils.degToRad(raw);
@@ -600,8 +604,9 @@
     const SPF = window.StationExport.SIM_PER_FRAME, FE = window.FactoryElements;
     const others = doc.objects.filter(o => o.type !== 'station');
     // the recording spans the longest cell cycle (or one robot cycle when there are no cells)
-    const M = FM().plans(doc), loops = Object.values(M.amr).concat(Object.values(M.worker)).filter(p => p.ok && !p.still).map(p => p.period);
+    const loops = Object.values(motion().amr).concat(Object.values(motion().worker)).filter(p => p.ok && !p.still).map(p => p.period);
     const frames = Math.min(Math.ceil(3600 / SPF), cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)), ...loops.map(p => Math.ceil(p / SPF))));
+    const M = FM().plans(doc, { horizon: frames * SPF + SPF }); // AMRs simulated together over the whole recording
     const building = [], extra = [];
     for (const o of others) {
       const g = FE.build(o, doc.factory); building.push(g); extra.push(...FE.drives(o, g, frames, SPF));

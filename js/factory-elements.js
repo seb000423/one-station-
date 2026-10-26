@@ -223,13 +223,13 @@
     },
     route: {
       label: 'AMR 경로', group: 'route',
-      defaults: () => ({ points: [] }),
+      defaults: () => ({ points: [], oneway: false }),
       build: (g, p) => {
         const pts = p.points || [], line = mat(0x00b8d9, { emissive: 0x00b8d9, emissiveIntensity: 0.35 }), node = mat(0x00e8d0);
         for (let k = 1; k < pts.length; k++) {
           const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0);
           const seg = box(g, 'Route_Segment', len, 0.006, 0.1, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
-          const arr = labelPlane('▶', 0.5, '#00e8d0'); arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
+          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0'); arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
         }
         pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
         if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
