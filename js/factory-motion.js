@@ -1,8 +1,11 @@
 // AMR routes, keep-out areas, AMR trips, worker walks and safety for the factory builder (console 1) and
 // the factory export. Works on the factory document ({ factory, objects }) in world metres, Y up.
 //   - Routes ("AMR 경로" objects) are polylines; all of them form one graph (points within 0.2 m join).
-//   - Keep-out areas come from equipment footprints (station cells, robot reach, conveyors, racks, columns,
-//     walls, stairs) and "금지 구역" zones. A route edge crossing one is blocked: AMRs never use it.
+//   - Work areas are off limits by default: every zone, station cell, robot reach, conveyor, rack and
+//     charging station (its body; the bay in front is the dock) keeps AMRs and pedestrians (walkways,
+//     workers) out unless the object allows it (o.perm = { amr, walk }); columns, walls and stairs always
+//     block AMRs. A route edge crossing a closed area is blocked: AMRs never use it. An AMR serving a zone
+//     docks at its edge: the nearest route point within 1 m outside it (inside, when AMR entry is allowed).
 //     Crossing a walkway is allowed but reported.
 //   - An AMR runs 출발 → 도착 over the shortest unblocked path: load at the start, turn in place at each
 //     corner, accelerate / cruise / decelerate on each straight, unload at the end, come back, loop.
@@ -26,10 +29,12 @@
   const routePoints = o => (P(o).points || []).map(([x, z]) => local2world(o, x, z));
   // rect: centre, rotation, half sizes (local x = length direction)
   const rect = (o, w, d, m = 0) => ({ kind: 'rect', id: o.id, name: o.name, cx: o.x, cz: o.z, rot: o.rot || 0, hw: w / 2 + m, hd: d / 2 + m });
+  const perm = (o, k) => !!(o.perm && o.perm[k]);
   function keepouts(doc) {
     const out = [];
     for (const o of doc.objects) {
       const p = P(o);
+      if (perm(o, 'amr')) continue;
       if (o.type === 'station') { const [cx, cz] = local2world(o, 0, -0.275); out.push(Object.assign(rect(o, CELL_FOOT[0], CELL_FOOT[1], CELL_MARGIN), { cx, cz })); } // enclosure centre sits 0.275 m behind the cell origin
       else if (o.type === 'robot') out.push({ kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: p.reach });
       else if (o.type === 'conveyor') out.push(rect(o, p.length, p.width + 0.1, 0.15));
@@ -37,7 +42,8 @@
       else if (o.type === 'column') out.push(rect(o, p.w, p.d, 0.2));
       else if (o.type === 'wall') out.push(rect(o, p.length, p.thickness, 0.2));
       else if (o.type === 'stairs') out.push(rect(o, p.width, p.run, 0.2));
-      else if (o.type === 'zone' && p.kind === 'keepout') out.push(rect(o, p.w, p.d));
+      else if (o.type === 'zone') out.push(rect(o, p.w, p.d));
+      else if (o.type === 'charger') out.push(Object.assign(rect(o, p.width, 0.25, 0.1), { name: o.name }));
     }
     return out;
   }
@@ -78,9 +84,27 @@
       case 'door': return rect(o, p.width + 0.16, p.thickness);
       case 'charger': return rect(o, p.width, 0.25);
       case 'walkway': return rect(o, p.length, p.width);
-      case 'zone': return p.kind === 'keepout' ? rect(o, p.w, p.d) : null;
+      case 'zone': return rect(o, p.w, p.d);
+      case 'worker': return { kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: 0.3 };
+      case 'amr': return rect(o, p.length, p.width);
       default: return null;
     }
+  }
+  // may o and q stand where their footprints overlap?
+  const MOVER = { worker: 'walk', walkway: 'walk', amr: 'amr' }, WORK = ['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'];
+  function clash(o, q) {
+    const mo = MOVER[o.type], mq = MOVER[q.type];
+    if (mo && mq) return o.type === 'walkway' && q.type === 'walkway' ? false : false; // movers share space (workers on walkways, AMRs crossing)
+    if (mo || mq) {
+      const m = mo ? o : q, x = mo ? q : o, k = MOVER[m.type];
+      if (x.type === 'door') return false;                    // doors are passages
+      if (WORK.includes(x.type)) return !perm(x, k);          // work areas: closed unless allowed
+      return true;                                            // columns, walls, stairs
+    }
+    // two fixed objects: zones may lie under equipment (except 금지 zones)
+    const z = o.type === 'zone' ? o : q.type === 'zone' ? q : null;
+    if (z) return P(z).kind === 'keepout' && !(o.type === 'zone' && q.type === 'zone');
+    return true;
   }
   const corners = s => { const c = Math.cos(s.rot), sn = Math.sin(s.rot); return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [s.cx + c * a * s.hw + sn * b * s.hd, s.cz - sn * a * s.hw + c * b * s.hd]); };
   function overlap(a, b, eps = 0.01) {
@@ -100,14 +124,13 @@
     }
     return true;
   }
-  // which objects would o overlap (by name); walkways only clash with equipment, not with zones
+  // which objects would o overlap where that is not allowed (by name)
   function collisions(doc, o) {
     const s = footprint(o); if (!s) return [];
     const out = [];
     for (const q of doc.objects) {
       if (q.id === o.id) continue;
-      const t = footprint(q); if (!t) continue;
-      if ((o.type === 'walkway' && q.type === 'zone') || (q.type === 'walkway' && o.type === 'zone')) continue;
+      const t = footprint(q); if (!t || !clash(o, q)) continue;
       if (overlap(s, t)) out.push(q.name);
     }
     return out;
@@ -156,7 +179,15 @@
     if (!ref || !G.nodes.length) return -1;
     if (ref.startsWith('node:')) { const i = +ref.slice(5); return i < G.nodes.length ? i : -1; }
     const o = doc.objects.find(x => x.type + ':' + x.id === ref); if (!o) return -1;
-    let best = -1, bd = Infinity; G.nodes.forEach((n, i) => { const d = Math.hypot(n.x - o.x, n.z - o.z); if (d < bd) { bd = d; best = i; } });
+    // dock: a route point within 1 m outside the zone / charging bay (inside counts only when AMR entry is allowed)
+    const p = P(o), [hw, hd] = o.type === 'zone' ? [p.w / 2, p.d / 2] : [p.width / 2 + 0.2, 0.6], [cx, cz] = o.type === 'zone' ? [o.x, o.z] : local2world(o, 0, 0.8);
+    let best = -1, bd = Infinity;
+    G.nodes.forEach((n, i) => {
+      const [lx, lz] = world2local({ x: cx, z: cz, rot: o.rot || 0 }, n.x, n.z), out = Math.hypot(Math.max(0, Math.abs(lx) - hw), Math.max(0, Math.abs(lz) - hd));
+      const inside = Math.abs(lx) < hw - 1e-3 && Math.abs(lz) < hd - 1e-3;
+      if (out > 1.0 || (inside && o.type === 'zone' && !perm(o, 'amr'))) return;
+      const d = Math.hypot(n.x - cx, n.z - cz); if (d < bd) { bd = d; best = i; }
+    });
     return best;
   }
 
@@ -208,7 +239,8 @@
     const p = P(amr), from = placeNode(doc, G, p.from), to = placeNode(doc, G, p.to);
     const name = r => { const pl = places(doc, G).find(x => x.ref === r); return pl ? pl.label : '?'; };
     if (!G.edges.length) return { ok: false, error: 'AMR 경로가 없습니다. 팔레트의 "AMR 경로"로 먼저 경로를 그리세요' };
-    if (from < 0 || to < 0) return { ok: false, error: '출발 지점과 도착 지점을 고르세요' };
+    if (!p.from || !p.to) return { ok: false, error: '출발 지점과 도착 지점을 고르세요' };
+    if (from < 0 || to < 0) return { ok: false, error: `${from < 0 ? name(p.from) : name(p.to)}: 가장자리 1 m 이내에 AMR 경로 점이 없습니다. 구역 가장자리(도킹 지점)까지 경로를 그리세요 — 구역 안으로 들어가려면 그 구역의 "AMR 진입 허용"을 켜세요` };
     if (from === to) return { ok: false, error: '출발 지점과 도착 지점이 같은 경로 점입니다' };
     const path = shortest(G, from, to), back = shortest(G, to, from);
     if (!path) return { ok: false, error: '막히지 않은 경로로 갈 수 없습니다 (작업 구역을 지나는 구간·단방향 반대쪽은 사용하지 않습니다)' };
@@ -388,5 +420,5 @@
     return out;
   }
 
-  window.FactoryMotion = { footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
+  window.FactoryMotion = { perm, clash, footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
 })();

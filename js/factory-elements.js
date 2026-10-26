@@ -56,7 +56,18 @@
   }
   const box = (g, n, w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.name = n; b.position.set(x, y, z); b.castShadow = b.receiveShadow = true; g.add(b); return b; };
 
-  function labelPlane(text, w, color) {
+  let BILLBOARD = false; // set while building for console 1
+  function labelPlane(text, w, color, flat) {
+    if (BILLBOARD && !flat) {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+      const x = c.getContext('2d'); x.fillStyle = 'rgba(11,13,16,.72)'; const tw = Math.min(500, x.measureText ? 500 : 500);
+      x.font = 'bold 56px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; const m = Math.min(500, x.measureText(text).width + 48);
+      x.beginPath(); x.roundRect ? x.roundRect((512 - m) / 2, 20, m, 88, 16) : x.rect((512 - m) / 2, 20, m, 88); x.fill();
+      x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 66);
+      const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+      const W = Math.min(Math.max(w, 1.2), 2.4); s.scale.set(W, W / 4, 1); s.position.y = 0.5; s.renderOrder = 5; s.userData.label = true; return s;
+    }
     const c = document.createElement('canvas'); c.width = 512; c.height = 128;
     const x = c.getContext('2d'); x.fillStyle = color; x.font = 'bold 64px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 64);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
@@ -121,7 +132,7 @@
         const c = new THREE.Color(p.color || (ZONE_KIND[p.kind] || ZONE_KIND.none)[1]);
         box(g, 'Zone_Area', p.w, 0.004, p.d, mat(c, { transparent: true, opacity: 0.28, depthWrite: false }), 0, 0.002, 0).castShadow = false;
         const edge = mat(c);
-        for (const [w, d, x, z] of [[p.w, 0.06, 0, -p.d / 2], [p.w, 0.06, 0, p.d / 2], [0.06, p.d, -p.w / 2, 0], [0.06, p.d, p.w / 2, 0]]) box(g, 'Zone_Edge', w, 0.01, d, edge, x, 0.005, z).castShadow = false;
+        for (const [w, d, x, z] of [[p.w, 0.08, 0, -p.d / 2], [p.w, 0.08, 0, p.d / 2], [0.08, p.d, -p.w / 2, 0], [0.08, p.d, p.w / 2, 0]]) box(g, 'Zone_Edge', w, 0.012, d, edge, x, 0.006, z).castShadow = false;
         g.add(labelPlane(p.label || (ZONE_KIND[p.kind] || ZONE_KIND.none)[0], p.w, '#ffffff'));
         const sub = labelPlane((ZONE_KIND[p.kind] || ZONE_KIND.none)[0], p.w * 0.6, '#d6dde4'); sub.position.z = Math.min(p.d, p.w) * 0.22; g.add(sub);
       },
@@ -228,8 +239,8 @@
         const pts = p.points || [], line = mat(0x00b8d9, { emissive: 0x00b8d9, emissiveIntensity: 0.35 }), node = mat(0x00e8d0);
         for (let k = 1; k < pts.length; k++) {
           const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0);
-          const seg = box(g, 'Route_Segment', len, 0.006, 0.1, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
-          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0'); arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
+          const seg = box(g, 'Route_Segment', len, 0.006, 0.06, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
+          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0', true); // direction arrows stay on the floor arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
         }
         pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
         if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
@@ -264,12 +275,38 @@
     }
   };
 
-  function build(obj, factory) {
+  function build(obj, factory, opts = {}) {
+    BILLBOARD = !!opts.billboard;
+    try { return buildInner(obj, factory); } finally { BILLBOARD = false; }
+  }
+  function buildInner(obj, factory) {
     const T = TYPES[obj.type], g = new THREE.Group();
     g.name = (obj.name || T.label).replace(/[\/\s]+/g, '_');
     g.position.set(obj.x || 0, 0, obj.z || 0); g.rotation.y = obj.rot || 0;
     T.build(g, Object.assign(T.defaults(factory), obj.params || {}), factory);
+    if (obj.type === 'zone' || WORK_AREA.includes(obj.type)) permMarks(g, obj);
     return g;
+  }
+  // work areas show who may enter: hatched = closed, small tags for allowed AMR / pedestrian entry
+  const WORK_AREA = ['robot', 'conveyor', 'rack', 'charger'];
+  function hatch(w, d, color) {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    x.strokeStyle = color; x.lineWidth = 6; x.globalAlpha = 0.55; for (let i = -64; i < 128; i += 22) { x.beginPath(); x.moveTo(i, 64); x.lineTo(i + 64, 0); x.stroke(); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 0.6), Math.max(1, d / 0.6));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.006; m.name = 'Area_Closed'; m.renderOrder = 1; return m;
+  }
+  function permMarks(g, obj) {
+    const amr = !!(obj.perm && obj.perm.amr), walk = !!(obj.perm && obj.perm.walk);
+    if (obj.type === 'zone') {
+      const p = Object.assign(TYPES.zone.defaults(), obj.params || {});
+      if (!amr && !walk) g.add(hatch(p.w, p.d, p.kind === 'keepout' ? '#ff3b30' : '#c9d2dc'));
+    }
+    const tags = [amr ? 'AMR 진입 허용' : '', walk ? '보행 허용' : ''].filter(Boolean).join(' · ') || (obj.type === 'zone' ? '진입 금지' : '');
+    if (!tags) return;
+    const lab = labelPlane(tags, 1.6, amr || walk ? '#7dffb2' : '#ff8a80'); lab.name = 'Area_Access';
+    if (lab.isSprite) lab.position.y = obj.type === 'zone' ? 0.95 : 2.4; else { lab.position.z = (Object.assign(TYPES.zone.defaults(), obj.params || {}).d || 2) * -0.3; }
+    g.add(lab);
   }
 
   // floor, perimeter (see-through) walls, corner columns, ceiling outline
