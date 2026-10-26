@@ -1,0 +1,281 @@
+{
+ "version": 2,
+ "factory": {
+  "width": 22,
+  "depth": 14,
+  "height": 6
+ },
+ "objects": [
+  {
+   "id": "pl1",
+   "type": "palletloop",
+   "name": "팔레트 순환 컨베이어 1",
+   "x": 0,
+   "z": 0,
+   "rot": 0,
+   "params": {
+    "length": 9,
+    "width": 2.4,
+    "ends": "square",
+    "pallets": 10,
+    "pitch": 1.5,
+    "speed": 0.3,
+    "dwell": 6,
+    "height": 0.85,
+    "product": "pedal"
+   }
+  },
+  {
+   "id": "st1",
+   "type": "asmstation",
+   "name": "조립 스테이션 1",
+   "x": -4.5,
+   "z": -2.2,
+   "rot": 0,
+   "params": {
+    "kind": "manual",
+    "title": "수동 투입 (POKA-YOKE)",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st2",
+   "type": "asmstation",
+   "name": "조립 스테이션 2",
+   "x": -1.46,
+   "z": -2.2,
+   "rot": 0,
+   "params": {
+    "kind": "press",
+    "title": "부싱 압입",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st3",
+   "type": "asmstation",
+   "name": "조립 스테이션 3",
+   "x": 1.58,
+   "z": -2.2,
+   "rot": 0,
+   "params": {
+    "kind": "robot",
+    "title": "페달 암 로봇 조립",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st4",
+   "type": "asmstation",
+   "name": "조립 스테이션 4",
+   "x": 3.74,
+   "z": 2.2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "screw",
+    "title": "피벗 볼트 체결",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st5",
+   "type": "asmstation",
+   "name": "조립 스테이션 5",
+   "x": 0.7,
+   "z": 2.2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "test",
+    "title": "답력·스트로크 검사",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st6",
+   "type": "asmstation",
+   "name": "조립 스테이션 6",
+   "x": -2.34,
+   "z": 2.2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "camera",
+    "title": "비전 검사",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st7",
+   "type": "asmstation",
+   "name": "조립 스테이션 7",
+   "x": -3.86,
+   "z": 2.2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "manual",
+    "title": "수동 배출",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 11.07,
+    "dwell": 6,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "cv1",
+   "type": "conveyor",
+   "name": "컨베이어 1",
+   "x": -3.86,
+   "z": 4.1,
+   "rot": -1.57079635,
+   "params": {
+    "shape": "straight",
+    "length": 2,
+    "radius": 0.9,
+    "turn": "left",
+    "width": 0.6,
+    "height": 0.8,
+    "speed": 0.25,
+    "kind": "belt",
+    "dir": 1,
+    "source": true,
+    "interval": 11.07,
+    "item": 0.35,
+    "sink": true
+   }
+  },
+  {
+   "id": "fr1",
+   "type": "flowrack",
+   "name": "경사 부품 선반 1",
+   "x": -6.4,
+   "z": -2.2,
+   "rot": 1.57079635,
+   "params": {
+    "width": 1.6,
+    "depth": 1,
+    "height": 1.9,
+    "levels": 4,
+    "bins": 5
+   }
+  },
+  {
+   "id": "rk1",
+   "type": "rack",
+   "name": "랙 · 버퍼 1",
+   "x": 5.5,
+   "z": -5,
+   "rot": 0,
+   "params": {
+    "bays": 3,
+    "levels": 3,
+    "bayWidth": 1.2,
+    "depth": 1,
+    "levelHeight": 1,
+    "perSlot": 2,
+    "fill": 60
+   }
+  },
+  {
+   "id": "wk1",
+   "type": "worker",
+   "name": "작업자 1",
+   "x": -4.5,
+   "z": -3.35,
+   "rot": 0,
+   "params": {
+    "walkway": "",
+    "speed": 1.2,
+    "dwell": 4
+   }
+  },
+  {
+   "id": "wk2",
+   "type": "worker",
+   "name": "작업자 2",
+   "x": -5.21,
+   "z": 3,
+   "rot": 0,
+   "params": {
+    "walkway": "",
+    "speed": 1.2,
+    "dwell": 4
+   }
+  },
+  {
+   "id": "wwA",
+   "type": "walkway",
+   "name": "보행로 A",
+   "x": 0,
+   "z": 6,
+   "rot": 0,
+   "params": {
+    "length": 18,
+    "width": 1.2,
+    "label": "보행로 A"
+   }
+  },
+  {
+   "id": "wk3",
+   "type": "worker",
+   "name": "작업자 3",
+   "x": 4,
+   "z": 6,
+   "rot": 0,
+   "params": {
+    "walkway": "wwA",
+    "speed": 1,
+    "dwell": 6
+   }
+  },
+  {
+   "id": "c0",
+   "type": "column",
+   "name": "기둥 1",
+   "x": -9,
+   "z": -6.6,
+   "rot": 0,
+   "params": {
+    "w": 0.5,
+    "d": 0.5,
+    "h": 0
+   }
+  },
+  {
+   "id": "c1",
+   "type": "column",
+   "name": "기둥 2",
+   "x": 9,
+   "z": -6.6,
+   "rot": 0,
+   "params": {
+    "w": 0.5,
+    "d": 0.5,
+    "h": 0
+   }
+  }
+ ]
+}

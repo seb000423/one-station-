@@ -1,0 +1,294 @@
+{
+ "version": 2,
+ "factory": {
+  "width": 18,
+  "depth": 12,
+  "height": 5
+ },
+ "objects": [
+  {
+   "id": "pl1",
+   "type": "palletloop",
+   "name": "팔레트 순환 컨베이어 1",
+   "x": 0,
+   "z": 0,
+   "rot": 0,
+   "params": {
+    "length": 6,
+    "width": 2,
+    "ends": "round",
+    "pallets": 8,
+    "pitch": 1.2,
+    "speed": 0.25,
+    "dwell": 8,
+    "height": 0.85,
+    "product": "lego"
+   }
+  },
+  {
+   "id": "rs1",
+   "type": "asmstation",
+   "name": "조립 스테이션 1",
+   "x": -3,
+   "z": -2,
+   "rot": 0,
+   "params": {
+    "kind": "robot",
+    "title": "로봇 1 · 레고 베이스",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "fr1",
+   "type": "flowrack",
+   "name": "경사 부품 선반 1",
+   "x": -3,
+   "z": -3.5,
+   "rot": 0,
+   "params": {
+    "width": 1.4,
+    "depth": 1,
+    "height": 1.9,
+    "levels": 4,
+    "bins": 4
+   }
+  },
+  {
+   "id": "rs2",
+   "type": "asmstation",
+   "name": "조립 스테이션 2",
+   "x": -0.56,
+   "z": -2,
+   "rot": 0,
+   "params": {
+    "kind": "robot",
+    "title": "로봇 2 · PCB 장착",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "fr2",
+   "type": "flowrack",
+   "name": "경사 부품 선반 2",
+   "x": -0.56,
+   "z": -3.5,
+   "rot": 0,
+   "params": {
+    "width": 1.4,
+    "depth": 1,
+    "height": 1.9,
+    "levels": 4,
+    "bins": 4
+   }
+  },
+  {
+   "id": "rs3",
+   "type": "asmstation",
+   "name": "조립 스테이션 3",
+   "x": 1.88,
+   "z": -2,
+   "rot": 0,
+   "params": {
+    "kind": "robot",
+    "title": "로봇 3 · 상부 브릭",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "fr3",
+   "type": "flowrack",
+   "name": "경사 부품 선반 3",
+   "x": 1.88,
+   "z": -3.5,
+   "rot": 0,
+   "params": {
+    "width": 1.4,
+    "depth": 1,
+    "height": 1.9,
+    "levels": 4,
+    "bins": 4
+   }
+  },
+  {
+   "id": "st4",
+   "type": "asmstation",
+   "name": "조립 스테이션 4",
+   "x": 2.39,
+   "z": 2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "press",
+    "title": "브릭 압착 프레스",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st5",
+   "type": "asmstation",
+   "name": "조립 스테이션 5",
+   "x": -0.05,
+   "z": 2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "test",
+    "title": "기능 검사 · 리포트",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "st6",
+   "type": "asmstation",
+   "name": "조립 스테이션 6",
+   "x": -2.48,
+   "z": 2,
+   "rot": 3.1415927,
+   "params": {
+    "kind": "manual",
+    "title": "완성품 배출",
+    "width": 1.2,
+    "depth": 1.2,
+    "cycle": 12.88,
+    "dwell": 8,
+    "reach": 0.4
+   }
+  },
+  {
+   "id": "wk1",
+   "type": "worker",
+   "name": "작업자 1",
+   "x": -2.48,
+   "z": 3.15,
+   "rot": 3.1415927,
+   "params": {
+    "walkway": "",
+    "speed": 1.2,
+    "dwell": 4
+   }
+  },
+  {
+   "id": "wk2",
+   "type": "worker",
+   "name": "작업자 2",
+   "x": 0.85,
+   "z": 3.15,
+   "rot": 3.1415927,
+   "params": {
+    "walkway": "",
+    "speed": 1.2,
+    "dwell": 4
+   }
+  },
+  {
+   "id": "zA",
+   "type": "zone",
+   "name": "구역 A",
+   "x": -6.6,
+   "z": -3.2,
+   "rot": 0,
+   "params": {
+    "kind": "pickup",
+    "w": 2,
+    "d": 2,
+    "label": "자재 보충",
+    "color": "",
+    "track": true,
+    "stock": 6,
+    "cap": 10,
+    "supply": 40
+   }
+  },
+  {
+   "id": "zB",
+   "type": "zone",
+   "name": "구역 B",
+   "x": -6.6,
+   "z": 3.2,
+   "rot": 0,
+   "params": {
+    "kind": "dropoff",
+    "w": 2,
+    "d": 2,
+    "label": "완성품",
+    "color": "",
+    "track": true,
+    "stock": 0,
+    "cap": 10,
+    "consume": 40
+   }
+  },
+  {
+   "id": "rtA",
+   "type": "route",
+   "name": "AMR 경로 A",
+   "x": 0,
+   "z": 0,
+   "rot": 0,
+   "params": {
+    "oneway": false,
+    "points": [
+     [
+      -5.3,
+      -3.2
+     ],
+     [
+      -5.3,
+      3.2
+     ]
+    ]
+   }
+  },
+  {
+   "id": "amr1",
+   "type": "amr",
+   "name": "AMR 1",
+   "x": -5.3,
+   "z": -3.2,
+   "rot": 1.57079635,
+   "params": {
+    "from": "zone:zA",
+    "to": "zone:zB",
+    "dwell": 6,
+    "speed": 0.8,
+    "payload": 100,
+    "battery": 85,
+    "length": 0.7,
+    "width": 0.5
+   }
+  },
+  {
+   "id": "zK",
+   "type": "zone",
+   "name": "구역 K",
+   "x": 6.8,
+   "z": 0,
+   "rot": 0,
+   "params": {
+    "kind": "keepout",
+    "w": 2,
+    "d": 3,
+    "label": "제어반",
+    "color": ""
+   }
+  }
+ ]
+}

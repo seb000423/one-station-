@@ -1,7 +1,8 @@
 // General manufacturing equipment for the factory builder (console 1) and the factory export, registered
 // into js/factory-elements.js: two-level conveyor (pallet loop with end lifts), press, injection moulding
 // machine, machining centre, tunnel washer, gantry transfer (이재기), vacuum brazing furnace, welding cell
-// and helium leak tester. Each is built from its parameters
+// and helium leak tester, and for assembly lines: pallet loop conveyor (indexing workpiece carriers), assembly
+// station (manual load, press-fit, screwing, robot, test, vision) and gravity flow rack. Each is built from its parameters
 // in metres (local +X = length / flow direction) and has a repeating cycle: animate(g, p, t) poses it in
 // console 1, drives() records the same motion for console 2 (linear axes in mm, rotations in degrees, as
 // deltas from the pose at t = 0). Travelling items (pallets, washer parts) are shown in console 1 only.
@@ -421,7 +422,151 @@
     cycle: p => Math.max(10, p.cycle)
   };
 
-  Object.assign(FE.TYPES, { conveyor2, press, injection, machining, washer, transfer, furnace, welder, leaktest });
-  FE.MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest'];
+  /* ---------- pallet loop: workpiece carriers index around a closed loop (Bosch-type square ends or an oval) ---------- */
+  // all carriers move one pitch together, then stand still for dwell s while the stations work (a synchronous
+  // indexing line); stop s = 0 is the start of the first lane (x = -length / 2, z = -width / 2), flow +X there.
+  // The product on a carrier gains a part with each quarter of the loop and is taken off near the end.
+  const PRODUCT = {
+    pedal: [['base', 0.3, 0.03, 0.22, 0x9aa1a8], ['bush', 0.08, 0.08, 0.08, 0x2b3138], ['arm', 0.06, 0.04, 0.3, 0x1e2226], ['spring', 0.05, 0.12, 0.05, 0xf2c200], ['pad', 0.12, 0.03, 0.08, 0x3a3f45]],
+    lego: [['base', 0.28, 0.03, 0.2, 0x9aa1a8], ['frame', 0.24, 0.06, 0.16, 0xf2c200], ['pcb', 0.2, 0.015, 0.13, 0x2e9e57], ['top', 0.1, 0.05, 0.06, 0xe5484d]],
+    box: [['base', 0.26, 0.03, 0.2, 0x9aa1a8], ['body', 0.2, 0.12, 0.14, 0xb08a5a]]
+  };
+  function loopPath(p) {
+    const L = p.length, W = p.width, round = p.ends === 'round', end = round ? Math.PI * W / 2 : W, P = 2 * L + 2 * end;
+    const at = s => {
+      s = ((s % P) + P) % P;
+      if (s < L) return [-L / 2 + s, -W / 2, 0];
+      s -= L; if (s < end) { if (!round) return [L / 2, -W / 2 + s, 0]; const a = s / (W / 2); return [L / 2 + Math.sin(a) * W / 2, -Math.cos(a) * W / 2, -a]; }
+      s -= end; if (s < L) return [L / 2 - s, W / 2, round ? -Math.PI : 0];
+      s -= L; if (!round) return [-L / 2, W / 2 - s, 0]; const a = s / (W / 2); return [-L / 2 - Math.sin(a) * W / 2, Math.cos(a) * W / 2, -Math.PI - a];
+    };
+    const n = Math.max(2, Math.round(P / Math.max(0.3, p.pitch))), pitch = P / n, move = pitch / Math.max(0.02, p.speed), T = move + Math.max(0, p.dwell);
+    const offset = t => { const k = Math.floor(t / T), u = t - k * T; return (k + ease(Math.min(1, u / move))) * pitch; };
+    const slot = k => Math.round(k * n / Math.max(1, Math.min(n, p.pallets)));
+    return { L, W, P, at, n, pitch, move, T, offset, slot, round, end };
+  }
+  const palletloop = {
+    label: '팔레트 순환 컨베이어', group: 'equipment',
+    defaults: () => ({ length: 9, width: 2.4, ends: 'square', pallets: 10, pitch: 1.5, speed: 0.3, dwell: 6, height: 0.85, product: 'pedal' }),
+    build: (g, p) => {
+      const Q = loopPath(p), H = p.height, lane = 0.36, frame = mat(0xc8cdd3, { metalness: 0.6, roughness: 0.35 }), belt = M.belt;
+      const strip = (x, z, len, yaw) => { const s2 = grp(g, 'PL_Lane', x, 0, z); s2.rotation.y = yaw; box(s2, 'PL_Profile', len, 0.08, lane, frame, 0, H - 0.04, 0); for (const e of [-1, 1]) box(s2, 'PL_Belt', len, 0.012, 0.05, belt, 0, H + 0.006, e * (lane / 2 - 0.05)).castShadow = false; };
+      for (const z of [-Q.W / 2, Q.W / 2]) strip(0, z, Q.L, 0);
+      if (Q.round) { const N = 14; for (const e of [-1, 1]) for (let i = 0; i < N; i++) { const a0 = i / N * Math.PI, a1 = (i + 1) / N * Math.PI, am = (a0 + a1) / 2, r = Q.W / 2; strip(e * (Q.L / 2 + Math.sin(am) * r), -e * Math.cos(am) * r, 2 * r * Math.sin((a1 - a0) / 2) + 0.02, -am); } }
+      else for (const x of [-Q.L / 2, Q.L / 2]) { strip(x, 0, Q.W + lane, Math.PI / 2); box(g, 'PL_Transfer', 0.5, 0.18, 0.5, mat(0x3d4650, { metalness: 0.4 }), x, H - 0.17, -Q.W / 2); box(g, 'PL_Transfer', 0.5, 0.18, 0.5, mat(0x3d4650, { metalness: 0.4 }), x, H - 0.17, Q.W / 2); }
+      const legs = Math.max(2, Math.ceil(Q.L / 1.5) + 1);
+      for (let i = 0; i < legs; i++) for (const z of [-Q.W / 2, Q.W / 2]) box(g, 'PL_Leg', 0.06, H - 0.08, 0.06, frame, -Q.L / 2 + i * Q.L / (legs - 1), (H - 0.08) / 2, z);
+      for (let k = 0; k < Q.n; k++) { const [x, z] = Q.at(k * Q.pitch); if (Math.abs(x) <= Q.L / 2 + 1e-6 && Math.abs(Math.abs(z) - Q.W / 2) < 1e-6) box(g, 'PL_Stopper', 0.04, 0.06, lane + 0.04, C.dark, x + (z < 0 ? 0.2 : -0.2), H + 0.03, z).castShadow = false; }
+      const parts = PRODUCT[p.product] || PRODUCT.box, np = Math.max(1, Math.min(Q.n, p.pallets));
+      for (let k = 0; k < np; k++) {
+        const it = grp(g, 'PL_Pallet_' + (k + 1)); box(it, 'PL_Carrier', 0.34, 0.025, 0.34, frame, 0, H + 0.025, 0); box(it, 'PL_Jig', 0.26, 0.02, 0.2, C.dark, 0, H + 0.048, 0);
+        let y = H + 0.058; parts.forEach(([n, w, h, d, col], i) => { const m = box(it, 'PL_Part_' + i, w, h, d, mat(col, { roughness: 0.5, metalness: n === 'base' ? 0.6 : 0.1 }), 0, y + h / 2, n === 'arm' ? 0.04 : 0); if (n === 'arm') m.rotation.x = -0.5; if (n !== 'arm' && n !== 'spring') y += h; });
+      }
+      titled(g, '팔레트 순환 컨베이어', 2.4, Q.W / 2 + 0.8);
+      palletloop.animate(g, p, 0);
+    },
+    animate: (g, p, t) => {
+      const Q = loopPath(p), off = Q.offset(t), parts = (PRODUCT[p.product] || PRODUCT.box).length, np = Math.max(1, Math.min(Q.n, p.pallets));
+      for (let k = 0; k < np; k++) {
+        const it = g.getObjectByName('PL_Pallet_' + (k + 1)); if (!it) continue;
+        const s = ((Q.slot(k) * Q.pitch + off) % Q.P + Q.P) % Q.P, [x, z, yaw] = Q.at(s); it.position.set(x, 0, z); it.rotation.y = yaw;
+        const f = s / Q.P, stage = f > 0.88 ? -1 : Math.min(parts - 1, Math.floor(f / 0.85 * parts)); // taken off near the end of the loop
+        for (let i = 0; i < parts; i++) { const m = it.getObjectByName('PL_Part_' + i); if (m) m.visible = i <= stage; }
+      }
+    },
+    footprint: p => { const Q = loopPath(p); return [Q.L + (Q.round ? Q.W : 0) + 0.5, Q.W + 0.5]; },
+    cycle: p => loopPath(p).T
+  };
+
+  /* ---------- assembly station: aluminium-profile cell beside the pallet loop; works while the carriers stand still ---------- */
+  // kind: manual (operator loads parts into the poka-yoke jig), press (press-fit), screw (nut runner), robot,
+  // test (function test with HMI), camera (vision check). Front (local +Z) faces the conveyor; the tool reaches
+  // reach m past the front edge, over the carrier. It works for dwell s at the end of every cycle s.
+  function asPose(p, t) {
+    const T = Math.max(1, p.cycle), u = ((t % T) + T) % T, a = T - Math.min(T, p.dwell);
+    const w = u < a ? -1 : (u - a) / Math.max(0.1, T - a); // 0..1 while working
+    const dip = w < 0 ? 0 : Math.sin(Math.PI * Math.min(1, w * 1.25));
+    return { w, dip, spin: w < 0 ? 0 : t * 12, u, a };
+  }
+  const ASKIND = { manual: '수동 투입', press: '압입', screw: '체결', robot: '로봇 조립', test: '기능 검사', camera: '비전 검사' };
+  const asmstation = {
+    label: '조립 스테이션', group: 'equipment',
+    defaults: () => ({ kind: 'press', width: 1.2, depth: 1.2, cycle: 11, dwell: 6, reach: 0.55, title: '' }),
+    build: (g, p) => {
+      const W = p.width, D = p.depth, top = 0.85, H = 2.05, frame = mat(0xc8cdd3, { metalness: 0.6, roughness: 0.35 }), red = mat(0xc8202a, { roughness: 0.5 });
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(g, 'AS_Post', 0.05, p.kind === 'manual' ? top : H, 0.05, frame, x * (W / 2 - 0.025), (p.kind === 'manual' ? top : H) / 2, z * (D / 2 - 0.025));
+      box(g, 'AS_Table', W, 0.04, D, mat(0xdfe3e8, { metalness: 0.3 }), 0, top, 0);
+      box(g, 'AS_Panel', W - 0.06, 0.55, 0.02, red, 0, 0.35, D / 2 - 0.03); for (const s2 of [-1, 1]) box(g, 'AS_Panel', 0.02, 0.55, D - 0.06, red, s2 * (W / 2 - 0.03), 0.35, 0);
+      const T2 = new THREE.Group(); T2.name = 'AS_ToolMount'; g.add(T2);
+      if (p.kind !== 'manual') {
+        for (const z of [-1, 1]) box(g, 'AS_TopBeam', W, 0.05, 0.05, frame, 0, H, z * (D / 2 - 0.025)); for (const x of [-1, 1]) box(g, 'AS_TopBeam', 0.05, 0.05, D, frame, x * (W / 2 - 0.025), H, 0);
+        box(g, 'AS_Guard', W - 0.06, H - top - 0.05, 0.01, C.glass, 0, (H + top) / 2, -D / 2 + 0.01).castShadow = false;
+        for (const s2 of [-1, 1]) box(g, 'AS_Guard', 0.01, H - top - 0.05, D - 0.06, C.glass, s2 * (W / 2 - 0.01), (H + top) / 2, 0).castShadow = false;
+        // bridge reaching over the carrier
+        const R = D / 2 + p.reach;
+        for (const x of [-1, 1]) box(g, 'AS_Bridge', 0.05, 0.05, R - D / 2 + 0.05, frame, x * 0.25, 1.65, D / 2 + (R - D / 2) / 2);
+        box(g, 'AS_Bridge', 0.55, 0.05, 0.05, frame, 0, 1.65, R);
+        const tool = grp(g, 'AS_Tool', 0, 0, R);
+        if (p.kind === 'press') { box(tool, 'AS_Cylinder', 0.16, 0.35, 0.16, C.steel, 0, 1.45, 0); box(tool, 'AS_Ram', 0.1, 0.3, 0.1, C.dark, 0, 1.12, 0); }
+        if (p.kind === 'screw') { box(tool, 'AS_Motor', 0.1, 0.3, 0.1, C.body, 0, 1.45, 0); const sp = grp(tool, 'AS_Spindle', 0, 1.18, 0); cyl(sp, 'AS_Bit', 0.015, 0.25, C.steel, 0, 0, 0); box(sp, 'AS_Flag', 0.06, 0.02, 0.01, C.yellow, 0.04, 0.05, 0); }
+        if (p.kind === 'test') { box(tool, 'AS_Probe', 0.22, 0.12, 0.18, C.body, 0, 1.25, 0); for (const x of [-1, 1]) cyl(tool, 'AS_Pin', 0.01, 0.12, C.yellow, x * 0.06, 1.13, 0); }
+        if (p.kind === 'camera') { box(tool, 'AS_Camera', 0.1, 0.16, 0.1, M.black, 0, 1.5, 0); cyl(tool, 'AS_Ring', 0.09, 0.03, mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0 }), 0, 1.4, 0); }
+        if (p.kind === 'robot') {
+          tool.position.z = 0; box(g, 'AS_RobotBase', 0.26, 0.18, 0.26, M.robotDark, 0, top + 0.09, D / 2 - 0.25);
+          const j1 = grp(g, 'AS_J1', 0, top + 0.18, D / 2 - 0.25); cyl(j1, 'AS_Turret', 0.11, 0.16, red, 0, 0.08, 0);
+          const j2 = grp(j1, 'AS_J2', 0, 0.2, 0); j2.rotation.x = -0.6; box(j2, 'AS_Upper', 0.1, 0.5, 0.1, red, 0, 0.25, 0);
+          const j3 = grp(j2, 'AS_J3', 0, 0.5, 0); j3.rotation.x = 1.9; box(j3, 'AS_Fore', 0.08, 0.42, 0.08, red, 0, 0.21, 0); box(j3, 'AS_Gripper', 0.1, 0.08, 0.06, C.dark, 0, 0.46, 0);
+          const held = box(j3, 'AS_Held', 0.08, 0.05, 0.06, mat(0x2e9e57), 0, 0.53, 0); held.visible = false;
+        }
+      } else {
+        box(g, 'AS_Bin', 0.4, 0.25, 0.3, mat(0x2f6fd1), -W / 2 + 0.3, top + 0.125, -D / 2 + 0.25);
+        box(g, 'AS_Bin', 0.4, 0.25, 0.3, mat(0xc8202a), W / 2 - 0.3, top + 0.125, -D / 2 + 0.25);
+        box(g, 'AS_PokaYoke', 0.36, 0.05, 0.26, C.yellow, 0, top + 0.045, D / 2 - 0.25);
+        box(g, 'AS_Andon', 0.04, 0.6, 0.04, frame, W / 2 - 0.05, top + 0.3, -D / 2 + 0.05); cyl(g, 'AS_Lamp', 0.04, 0.06, C.lamp, W / 2 - 0.05, top + 0.63, -D / 2 + 0.05);
+      }
+      // HMI on an arm
+      box(g, 'AS_HmiArm', 0.04, 0.5, 0.04, frame, W / 2 + 0.02, 1.3, D / 2 - 0.1);
+      box(g, 'AS_Hmi', 0.32, 0.24, 0.03, M.black, W / 2 + 0.1, 1.55, D / 2 - 0.06).rotation.y = -0.4;
+      if (p.kind !== 'manual') lampTower(g, -W / 2 + 0.06, H, -D / 2 + 0.06);
+      titled(g, p.title || ASKIND[p.kind] || '조립 스테이션', 1.5, -D / 2 - 0.35);
+      asmstation.animate(g, p, 0);
+    },
+    animate: (g, p, t) => {
+      const q = asPose(p, t), n = k => g.getObjectByName(k);
+      const tool = n('AS_Tool'); if (tool && p.kind !== 'robot') tool.position.y = -0.2 * q.dip;
+      const sp = n('AS_Spindle'); if (sp) sp.rotation.y = q.spin;
+      const ring = n('AS_Ring'); if (ring) ring.children[0].material.emissiveIntensity = q.w >= 0 && Math.sin(t * 20) > 0 ? 2 : 0;
+      const j1 = n('AS_J1'); if (j1) {
+        // robot: turns back to the rack and picks while the carriers move, places on the carrier while they stand
+        j1.rotation.y = Math.PI * Math.sin(Math.PI * Math.min(1, q.u / Math.max(0.1, q.a)));
+        const j3 = n('AS_J3'); if (j3) j3.rotation.x = 1.9 + 0.3 * q.dip;
+        const held = n('AS_Held'); if (held) held.visible = q.u > q.a * 0.5 && q.w < 0.5;
+      }
+    },
+    drives: (g, p, frames, spf) => record(g, frames, spf, p.kind === 'robot' ? [] : [['AS_Tool', 'LinearY', false, t => -0.2 * asPose(p, t).dip]]),
+    footprint: p => [p.width + 0.2, p.depth + 0.2],
+    cycle: p => Math.max(1, p.cycle)
+  };
+
+  /* ---------- gravity flow rack: inclined shelves of part bins that roll down to the picking side (front, local +Z) ---------- */
+  const flowrack = {
+    label: '경사 부품 선반', group: 'equipment',
+    defaults: () => ({ width: 1.6, depth: 1.0, height: 1.9, levels: 4, bins: 5 }),
+    build: (g, p) => {
+      const W = p.width, D = p.depth, H = p.height, frame = mat(0xc8cdd3, { metalness: 0.6, roughness: 0.35 }), cols = [0x2f6fd1, 0xc8202a, 0xf2c200, 0x2e9e57, 0x3a3f45];
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(g, 'FR_Post', 0.05, z < 0 ? H : H - 0.35, 0.05, frame, x * (W / 2 - 0.025), (z < 0 ? H : H - 0.35) / 2, z * (D / 2 - 0.025));
+      const tilt = Math.atan2(0.3, D);
+      for (let l = 0; l < p.levels; l++) {
+        const y = 0.45 + l * (H - 0.6) / Math.max(1, p.levels), sh = grp(g, 'FR_Shelf', 0, y, 0); sh.rotation.x = tilt;
+        box(sh, 'FR_Roller', W - 0.08, 0.02, D, frame, 0, 0, 0);
+        for (let b = 0; b < p.bins; b++) for (let r = 0; r < 2; r++) box(sh, 'FR_Bin', (W - 0.1) / p.bins - 0.04, 0.12, D / 2 - 0.06, mat(cols[(b + l) % cols.length], { roughness: 0.6 }), -W / 2 + 0.05 + (b + 0.5) * (W - 0.1) / p.bins, 0.07, -D / 4 + r * D / 2);
+      }
+      titled(g, '경사 부품 선반', 1.4, D / 2 + 0.3);
+    },
+    footprint: p => [p.width + 0.2, p.depth + 0.2]
+  };
+
+  Object.assign(FE.TYPES, { conveyor2, press, injection, machining, washer, transfer, furnace, welder, leaktest, palletloop, asmstation, flowrack });
+  FE.MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest', 'palletloop', 'asmstation', 'flowrack'];
   FE.WORK_AREA.push(...FE.MACHINES);
 })();

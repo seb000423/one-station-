@@ -25,11 +25,11 @@
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소'],
-      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터']]],
+      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터' };
-  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest']; // js/factory-machines.js
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반' };
+  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest', 'palletloop', 'asmstation', 'flowrack']; // js/factory-machines.js
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
@@ -71,6 +71,9 @@
     transfer: [['cycle', '사이클 (s)', 0.5, 3, 120], ['span', '이송 거리 (m)', 0.1, 1.5, 12], ['depth', '깊이 (m)', 0.1, 0.6, 4], ['height', '높이 (m)', 0.1, 1.8, 5]],
     furnace: [['cycle', '사이클 (s, 시뮬레이션 압축)', 5, 20, 36000], ['temp', '브레이징 온도 (°C)', 10, 500, 1300], ['width', '폭 (m)', 0.1, 2, 8], ['depth', '노 길이 (m)', 0.1, 2, 10], ['height', '높이 (m)', 0.1, 2, 6]],
     welder: [['cycle', '용접 사이클 (s)', 1, 10, 3600], ['width', '폭 (m)', 0.1, 2, 8], ['depth', '깊이 (m)', 0.1, 2, 8]],
+    palletloop: [['ends', '양 끝', 'select', [['square', '사각 (리프트 트랜스퍼)'], ['round', '타원 (곡선)']]], ['product', '제품', 'select', [['pedal', '브레이크 페달'], ['lego', '레고 + PCB'], ['box', '상자']]], ['length', '직선 길이 (m)', 0.5, 2, 60], ['width', '라인 간격 (m)', 0.1, 1, 6], ['pallets', '팔레트 수', 1, 1, 80], ['pitch', '정지 간격 (m)', 0.1, 0.4, 5], ['speed', '이동 속도 (m/s)', 0.05, 0.05, 2], ['dwell', '정지 시간 (s)', 0.5, 0, 300], ['height', '높이 (m)', 0.05, 0.5, 1.4]],
+    asmstation: [['kind', '스테이션 종류', 'select', [['manual', '수동 투입 (작업자)'], ['press', '압입'], ['screw', '체결'], ['robot', '로봇 조립'], ['test', '기능 검사'], ['camera', '비전 검사']]], ['title', '표시 이름', 'text'], ['cycle', '사이클 (s, 팔레트 순환과 같게)', 0.5, 1, 600], ['dwell', '작업 시간 (s)', 0.5, 0, 600], ['reach', '컨베이어까지 (m)', 0.05, 0, 2], ['width', '폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.6, 4]],
+    flowrack: [['levels', '단 수', 1, 1, 8], ['bins', '열 수', 1, 1, 12], ['width', '폭 (m)', 0.1, 0.6, 5], ['depth', '깊이 (m)', 0.1, 0.4, 3], ['height', '높이 (m)', 0.1, 1, 3]],
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
@@ -532,7 +535,10 @@
     transfer: '<path d="M4 21V5h16v16M4 5h16"/><path d="M10 5v7M8 12h4M8 12v2M12 12v2"/>',
     furnace: '<rect x="3" y="6" width="14" height="11" rx="5"/><path d="M17 11h3M7 21h9M8 17v4M15 17v4"/>',
     welder: '<path d="M4 20h7M7 20v-6l5-4 4 2M16 12l2 4"/><path d="m19 18 1 1M20 16h1"/>',
-    leaktest: '<path d="M5 20h14M7 20v-6h10v6M9 14V9h6v5M12 9V4"/><circle cx="18" cy="5" r="1.5"/>'
+    leaktest: '<path d="M5 20h14M7 20v-6h10v6M9 14V9h6v5M12 9V4"/><circle cx="18" cy="5" r="1.5"/>',
+    palletloop: '<rect x="3" y="7" width="18" height="10" rx="5"/><rect x="6" y="9" width="3" height="2"/><rect x="15" y="13" width="3" height="2"/>',
+    asmstation: '<path d="M4 21V5h16v16M4 13h16M12 5v4"/><rect x="10" y="9" width="4" height="2"/>',
+    flowrack: '<path d="M4 21V3M20 21V7M4 8l16 4M4 13l16 4M4 18l16 3"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]]];
@@ -678,7 +684,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="sample3" title="프레스·사출기·가공기·세척기·이재기·2층 컨베이어로 만든 가공 라인입니다 (Ctrl+Z로 되돌리기)">예시 공장 3</button><button type="button" data-t="sample4" title="EGR 쿨러 라인: 프레스 → 세척 → 조립 → Ni 페이스트 도포 → 진공 브레이징 → 용접 → 가공 → 리크 테스트 → 포장 → 출하 (Ctrl+Z로 되돌리기)">EGR 쿨러 라인</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="pedal" title="브레이크 페달 반자동 조립·검사 라인: 사각 팔레트 순환 + 수동 투입·압입·로봇·체결·검사·비전·수동 배출 (Ctrl+Z로 되돌리기)">페달 조립 라인</button><button type="button" data-t="smart" title="SmartFactory 교육용 조립 라인: 타원 팔레트 루프 + 로봇 3대와 경사 부품 선반, 프레스, 기능 검사 (Ctrl+Z로 되돌리기)">스마트팩토리 라인</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -728,8 +734,8 @@
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
     on('[data-t=sample]', () => loadSample('sample-factory.json', '예시 공장'));
     on('[data-t=sample2]', () => loadSample('sample-factory-2.json', '예시 공장 2'));
-    on('[data-t=sample3]', () => loadSample('sample-factory-3.json', '예시 공장 3'));
-    on('[data-t=sample4]', () => loadSample('sample-factory-4.json', 'EGR 쿨러 라인'));
+    on('[data-t=pedal]', () => loadSample('sample-pedal-line.json', '페달 조립 라인'));
+    on('[data-t=smart]', () => loadSample('sample-smartfactory.json', '스마트팩토리 라인'));
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -1097,8 +1103,8 @@
   }
   // example factories (examples/): 1 = cells, conveyors, racks, zones, chargers, AMRs, workers;
   // 2 = the same plant with zone stock and AMR job lists (milk runs, charging, shipping);
-  // 3 = a machining line of the general process equipment (press, transfer, machining, washer, two-level conveyor, injection);
-  // 4 = an EGR cooler line around the Ni paste station cells (forming → brazing → welding → machining → leak test → shipping)
+  // pedal line / smart factory = pallet loop assembly lines after two TEMEX reference lines (brake pedal assembly & test,
+  // SmartFactory educational line)
   async function loadSample(file, label) {
     try {
       const d = await (await fetch('examples/' + file, { cache: 'no-store' })).json();
