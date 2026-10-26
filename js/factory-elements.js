@@ -38,7 +38,12 @@
   };
   // realvirtual drive extras (console 2); harmless in console 1
   const jog = (node, dir, rev, degPerSec) => { node.userData.realvirtual = { Drive: { Direction: dir, ReverseDirection: rev, TargetSpeed: Math.abs(degPerSec), JogForward: degPerSec > 0, JogBackward: degPerSec < 0, UseLimits: false } }; };
-  const ZONE_KIND = { pickup: ['적재 구역', '#2f7dd1'], dropoff: ['하역 구역', '#d1782f'], storage: ['보관 구역', '#7a5fd1'], none: ['구역', '#5f6b78'] };
+  const ZONE_KIND = { pickup: ['적재 구역', '#2f7dd1'], dropoff: ['하역 구역', '#d1782f'], storage: ['보관 구역', '#7a5fd1'], keepout: ['금지 구역', '#d13f3f'], none: ['구역', '#5f6b78'] };
+  // floor ring (range / safety circles); its material is its own so it can turn red
+  function ring(g, n, r, color, opacity = 0.55) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.01, r - 0.04), r, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
+    m.name = n; m.rotation.x = -Math.PI / 2; m.position.y = 0.015; m.renderOrder = 2; g.add(m); return m;
+  }
   const ease = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
   // standalone robot pick & place: joint angles (rad) at time t (s) of one cycle
   function robotPose(p, t) {
@@ -165,6 +170,7 @@
           const rad = ang * Math.PI / 180, pad = box(g, n, 0.4, 0.01, 0.4, mat(new THREE.Color(col), { transparent: true, opacity: 0.6 }), Math.cos(rad) * R * 0.75, 0.005, -Math.sin(rad) * R * 0.75);
           pad.castShadow = false;
         }
+        ring(g, 'Robot_Range', p.reach, 0xe8a019, 0.45);
         const pose = robotPose(p, 0); j1.rotation.y = pose.j1; j2.rotation.z = pose.j2; j3.rotation.z = pose.j3; j4.rotation.z = pose.j4;
       },
       animate: (g, p, t) => {
@@ -203,8 +209,10 @@
     },
     amr: {
       label: 'AMR', group: 'equipment',
-      defaults: () => ({ length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100 }),
+      defaults: () => ({ length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5 }),
       build: (g, p) => {
+        ring(g, 'AMR_Safety', Math.hypot(p.length, p.width) / 2 + 0.5, 0x00e8d0, 0.5);
+        box(g, 'AMR_Load', p.length * 0.6, 0.22, p.width * 0.7, M.carton, 0, 0.44, 0);
         box(g, 'AMR_Body', p.length, 0.25, p.width, M.amr, 0, 0.16, 0);
         box(g, 'AMR_Top', p.length * 0.92, 0.04, p.width * 0.92, M.black, 0, 0.305, 0);
         for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) cyl(g, 'AMR_Wheel', 0.06, 0.04, M.black, x * p.length * 0.32, 0.06, z * (p.width / 2 + 0.01), 'z');
@@ -212,6 +220,36 @@
         box(g, 'AMR_Light', 0.02, 0.04, p.width * 0.8, M.green, p.length / 2 + 0.005, 0.16, 0);
       },
       footprint: p => [p.length, p.width]
+    },
+    route: {
+      label: 'AMR 경로', group: 'route',
+      defaults: () => ({ points: [] }),
+      build: (g, p) => {
+        const pts = p.points || [], line = mat(0x00b8d9, { emissive: 0x00b8d9, emissiveIntensity: 0.35 }), node = mat(0x00e8d0);
+        for (let k = 1; k < pts.length; k++) {
+          const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0);
+          const seg = box(g, 'Route_Segment', len, 0.006, 0.1, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
+          const arr = labelPlane('▶', 0.5, '#00e8d0'); arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
+        }
+        pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
+        if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
+        if (pts.length > 1) { const e = labelPlane('끝', 0.6, '#00e8d0'); const q = pts[pts.length - 1]; e.position.set(q[0], 0.02, q[1] + 0.3); g.add(e); }
+      },
+      footprint: () => [0.5, 0.5]
+    },
+    worker: {
+      label: '작업자', group: 'route',
+      defaults: () => ({ walkway: '', speed: 1.2, dwell: 4 }),
+      build: g => {
+        const vest = mat(0xff7a1a, { roughness: 0.7 }), skin = mat(0xe0b896, { roughness: 0.8 }), pants = mat(0x2b3442, { roughness: 0.8 });
+        for (const s of [-1, 1]) box(g, 'Worker_Leg', 0.12, 0.8, 0.14, pants, 0, 0.4, s * 0.1);
+        box(g, 'Worker_Body', 0.22, 0.6, 0.4, vest, 0, 1.1, 0);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), skin); head.name = 'Worker_Head'; head.position.y = 1.55; head.castShadow = true; g.add(head);
+        const hat = new THREE.Mesh(new THREE.SphereGeometry(0.135, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xf2c200)); hat.name = 'Worker_Helmet'; hat.position.y = 1.58; g.add(hat);
+        ring(g, 'Worker_Ring', 0.45, 0x2bb673, 0.6);
+        const warn = labelPlane('⚠', 0.9, '#ff3b30'); warn.name = 'Worker_Warning'; warn.rotation.x = 0; warn.position.y = 2.0; warn.visible = false; g.add(warn);
+      },
+      footprint: () => [0.6, 0.6]
     },
     charger: {
       label: '충전소', group: 'equipment',

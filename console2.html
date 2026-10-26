@@ -201,6 +201,14 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 #saveList button.on{border-color:var(--accent)}
 #saveList b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #saveList span{font-size:11px;color:var(--mute);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#motionList{display:grid;gap:6px;font-size:12px;line-height:1.5}
+#motionList .mrow{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+#motionList b{font-weight:600}
+#motionList .st{color:var(--mute)}
+#motionList .ng{color:var(--ng)}
+#motionList .ok{color:var(--ok)}
+#motionList h4{margin:6px 0 0;font-size:10.5px;letter-spacing:.14em;font-family:var(--mono);color:var(--dim);font-weight:500}
+#safeWarn{color:var(--ng);font-size:12px;line-height:1.5}
 #cellPick{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
 #saveList .empty{font-size:11.5px;color:var(--dim);line-height:1.5}
 @media (max-width: 900px){
@@ -227,6 +235,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
           <div class="bar"><div id="progBar"></div></div>
           <div id="rlines"></div>
           <div id="ikwarn" hidden></div>
+          <div id="safeWarn" hidden></div>
         </div>
       </div>
       <div class="hud tr">
@@ -329,6 +338,11 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
           <p id="ngNote"></p>
         </div>
 
+        <div class="sec" id="motionSec" hidden>
+          <h3>AMR · 작업자 · 안전</h3>
+          <div id="motionList"></div>
+        </div>
+
         <div class="sec" id="layoutSec" hidden>
           <h3>공장 레이아웃</h3>
           <dl class="spec" id="layoutSpec"></dl>
@@ -424,6 +438,18 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   });
 
   /* ---------- static panel content (captured from console 1 by the exporter) ---------- */
+  // AMRs, workers and safety warnings recorded with a factory save (timeline.motion / timeline.safety)
+  function renderMotion(f) {
+    const M = ROOT && ROOT.motion, has = !!(M && (Object.keys(M.amr).length || Object.keys(M.worker).length));
+    $('#motionSec').hidden = !has;
+    const warns = ROOT && ROOT.safety ? String(at(ROOT.safety, f)).split('|').filter(Boolean) : [];
+    $('#safeWarn').hidden = !warns.length; $('#safeWarn').textContent = warns.length ? '⚠ ' + warns.join(' · ') : '';
+    if (!has) return;
+    const e = t => String(t).replace(/[<>&"]/g, '');
+    const amr = Object.values(M.amr).map(a => `<div class="mrow"><b>${e(a.name)}</b><span class="st">${a.ok ? `${e(at(a.state, f))} · 운반 ${at(a.trips, f)}회` : `<span class="ng">${e(a.error || '경로 없음')}</span>`}</span>${a.ok ? `<span></span><span class="st">${e(a.from)} → ${e(a.to)} · 왕복 ${a.period.toFixed(0)} s</span>` : ''}</div>`).join('');
+    const wk = Object.values(M.worker).map(w => { const bad = warns.some(x => x.startsWith(w.name + ' ↔')); return `<div class="mrow"><b>${e(w.name)}</b><span class="${bad ? 'ng' : 'st'}">${e(at(w.state, f))}${bad ? ' · ⚠ 가동범위 안' : ''}</span></div>`; }).join('');
+    $('#motionList').innerHTML = (amr ? '<h4>AMR</h4>' + amr : '') + (wk ? '<h4>작업자</h4>' + wk : '') + '<h4>안전 경고</h4>' + (warns.length ? warns.map(w => `<div class="ng">⚠ ${e(w)}</div>`).join('') : '<div class="ok">위험 없음</div>');
+  }
   const FRAMES = () => (ROOT && ROOT.frames) || (TL && TL.frames) || 1;
   function chooseCell(id) {
     const cells = ROOT.version === 2 ? ROOT.cells : null;
@@ -492,7 +518,8 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
   const at = (segs, f) => { let lo = 0, hi = segs.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (segs[m][0] <= f) lo = m; else hi = m - 1; } return segs[lo][1]; };
   const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0'); };
   function render(f) {
-    if (!TL || f === lastF) return; lastF = f;
+    if (!TL) { if (ROOT && f !== lastF) { lastF = f; renderMotion(f); } return; } // a factory without station cells still has AMRs / workers
+    if (f === lastF) return; lastF = f;
     const phase = at(TL.phase, f), results = at(TL.results, f), N = TL.parts, step = at(TL.step, f);
     const judged = results.filter(r => r.ok != null), ok = judged.filter(r => r.ok).length, ng = judged.length - ok, anyNg = results.some(r => r.ok === false);
     $('#phase').textContent = PHASE_KO[phase]; $('#phase').dataset.p = phase;
@@ -506,6 +533,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     const fails = at(TL.ik, f); $('#ikwarn').hidden = !fails; $('#ikwarn').textContent = `도달 한계 근접 포즈 ${fails}건`;
     // tower lamp as console 1 drives it (blinking red/start omitted)
     const tw = { red: anyNg, amber: phase === 'running' || phase === 'closing', green: (phase === 'done' && !anyNg) || phase === 'idle' };
+    renderMotion(f);
     $('#tw').innerHTML = ['red', 'amber', 'green'].map(k => `<i class="${k} ${tw[k] ? 'on' : ''}"></i>`).join('');
     // result table
     if (results !== lastRes || phase === 'done' || phase === 'idle') {

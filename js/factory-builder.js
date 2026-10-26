@@ -24,13 +24,15 @@
   const PALETTE = [
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
+    ['AMR 경로 · 작업자', [['route', 'AMR 경로'], ['worker', '작업자']]],
     ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['amr', 'AMR'], ['charger', '충전소']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소' };
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자' };
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'amr', 'charger'];
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
   // numbering continues after the highest existing name of that type, so a deleted number is not reused
-  const LETTERED = ['walkway', 'zone'];
+  const LETTERED = ['walkway', 'zone', 'route'];
+  const FM = () => window.FactoryMotion;
   const toLetters = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
   const fromLetters = s => [...s].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
   function nextName(type) {
@@ -47,12 +49,14 @@
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
     walkway: [['length', '길이 (m)', 0.5, 0.5, 200], ['width', '폭 (m)', 0.1, 0.6, 6]],
-    zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color']],
+    zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color']],
     conveyor: [['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]], ['length', '길이 (m)', 0.5, 0.5, 60], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3]],
     robot: [['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
-    amr: [['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
-    charger: [['width', '폭 (m)', 0.05, 0.4, 2]]
+    amr: [['from', '출발 지점', 'place'], ['to', '도착 지점', 'place'], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
+    worker: [['walkway', '보행로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
+    route: []
   };
 
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
@@ -77,6 +81,13 @@
   }
   function defaultCellParams() { const s = S(); const d = clone(s.LAYOUT_DEFAULT); delete d.cell; return { variant: 'tube', slots: 6, beadW: 2.0, speed: 30, tol: 8, fault: 5, joints: null, inner: d }; }
   function syncActive() { const a = activeId && byId(activeId); if (a && !busy()) a.params = engineCellParams(); }
+  // AMR / worker plans and the route graph; recomputed when the document changes
+  let motionCache = null, motionKey = '';
+  function motion() {
+    const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params]));
+    if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); }
+    return motionCache;
+  }
   function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
   function initialDoc() {
     try { const v = JSON.parse(localStorage.getItem(STORE) || 'null'); if (v && v.objects) return v; } catch (e) {}
@@ -236,7 +247,58 @@
     const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p)) return null;
     const st = snap ? 0.1 : 0.01; p.x = Math.round(p.x / st) * st; p.z = Math.round(p.z / st) * st; return p;
   };
+  /* ---------- AMR route drawing: click points, double-click / Enter / right-click to finish ---------- */
+  let drawing = null; // { obj (when extending), pts: [[x, z]], preview }
+  function setRoutePoints(o, pts) {
+    o.x = pts[0][0]; o.z = pts[0][1]; o.rot = 0;
+    o.params = Object.assign(window.FactoryElements.defaults('route'), o.params || {}, { points: pts.map(([x, z]) => [r2(x - o.x), r2(z - o.z)]) });
+    buildView(o);
+  }
+  function startDrawing(obj) {
+    if (busy()) return note('사이클 중에는 그릴 수 없습니다', true);
+    cancelPlacing(); placing = 'route';
+    drawing = { obj: obj || null, pts: obj ? FM().routePoints(obj) : [], preview: null };
+    redrawPreview();
+    note('AMR 경로: 바닥을 클릭해 점을 찍습니다. 더블클릭·Enter·오른쪽 클릭으로 완료, Esc로 취소. 작업 구역을 지나는 구간은 놓이지 않습니다.');
+  }
+  function redrawPreview(cursor) {
+    const s = S(); if (drawing.preview) s.scene.remove(drawing.preview);
+    const pts = drawing.pts.concat(cursor ? [cursor] : []);
+    if (pts.length < 1) { drawing.preview = null; return; }
+    const o = { type: 'route', x: pts[0][0], z: pts[0][1], rot: 0, params: { points: pts.map(([x, z]) => [x - pts[0][0], z - pts[0][1]]) } };
+    drawing.preview = window.FactoryElements.build(o, doc.factory);
+    drawing.preview.traverse(m => { if (m.isMesh) m.raycast = () => {}; });
+    s.scene.add(drawing.preview);
+  }
+  // snap to an existing route point so routes join into one network
+  function snapToNode(p) {
+    let best = null, bd = 0.3;
+    for (const n of motion().G.nodes) { const d = Math.hypot(n.x - p.x, n.z - p.z); if (d < bd) { bd = d; best = n; } }
+    return best ? [best.x, best.z] : [r2(p.x), r2(p.z)];
+  }
+  function addDrawPoint(p) {
+    const q = snapToNode(p), pts = drawing.pts;
+    if (pts.length) {
+      const a = pts[pts.length - 1]; if (Math.hypot(q[0] - a[0], q[1] - a[1]) < 0.05) return;
+      const bad = FM().keepouts(doc).filter(s => FM().hits(a, q, s));
+      if (bad.length) return note(`이 구간은 작업 구역(${bad.map(s => s.name).join(', ')})을 지나서 놓을 수 없습니다`, true);
+    }
+    pts.push(q); redrawPreview();
+  }
+  function finishDrawing() {
+    const d = drawing; if (!d) return;
+    if (d.preview) S().scene.remove(d.preview);
+    drawing = null; placing = null;
+    if (d.pts.length < 2) { if (!d.obj) note('점이 2개 이상이어야 경로가 됩니다'); return; }
+    pushUndo();
+    const o = d.obj || { id: newId(), type: 'route', name: nextName('route'), x: 0, z: 0, rot: 0, params: {} };
+    if (!d.obj) doc.objects.push(o);
+    setRoutePoints(o, d.pts); store(); select(o.id); note(`${o.name}: 점 ${d.pts.length}개`);
+  }
+  function cancelDrawing() { if (!drawing) return; if (drawing.preview) S().scene.remove(drawing.preview); drawing = null; placing = null; }
+
   function startPlacing(type) {
+    if (type === 'route') return startDrawing(null);
     if (busy()) return note('사이클 중에는 배치할 수 없습니다', true);
     cancelPlacing(); placing = type;
     ghost = type === 'station'
@@ -247,8 +309,8 @@
     ghost.visible = false; S().scene.add(ghost);
     note(`${TYPE_LABEL[type]}: 바닥을 클릭해 놓습니다 (Esc 취소)`);
   }
-  function cancelPlacing() { if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
-  function moveGhost(e) { if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z; }
+  function cancelPlacing() { cancelDrawing(); if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
+  function moveGhost(e) { if (drawing) { const p = floorPoint(e); if (p) redrawPreview(snapToNode(p)); return; } if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z; }
   function placeAt(type, p) {
     pushUndo();
     const o = { id: newId(), type, name: nextName(type), x: p.x, z: p.z, rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
@@ -320,6 +382,13 @@
   #fbProps .inner button.on{border-color:var(--accent);color:var(--accent)}
   #fbProps .kind{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.12em}
   #fbProps .hint{color:var(--dim);font-size:11px;line-height:1.5;margin:0}
+  #fbProps .pts{display:grid;gap:3px;max-height:180px;overflow:auto}
+  #fbProps .pt{display:grid;grid-template-columns:18px 1fr 1fr 26px;gap:4px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--mute)}
+  #fbProps .pt button{background:var(--panel2);border:1px solid var(--line);color:var(--mute);border-radius:3px;cursor:pointer;padding:3px 0}
+  #fbSafety{display:grid;gap:3px;font-size:11.5px;line-height:1.45;max-height:110px;overflow:auto}
+  #fbSafety .ok{color:var(--ok)}
+  #fbSafety .ng{color:var(--ng)}
+  #fbPanel button[data-t=play].on{border-color:var(--accent);color:var(--accent)}
   .fb-hide{display:none!important}`;
   let panel, propSec, stationSecs = [], noteT;
   function note(t, warn) { const n = $('#fbNote'); if (!n) return; n.textContent = t; n.classList.toggle('err', !!warn); clearTimeout(noteT); if (!warn) noteT = setTimeout(() => { if (n.textContent === t) n.textContent = ''; }, 6000); }
@@ -334,9 +403,12 @@
           <button type="button" data-t="translate" title="이동 (T)">이동</button><button type="button" data-t="rotate" title="회전 (R)">회전</button>
           <button type="button" data-t="dup" title="복제 (Ctrl+D)">복제</button><button type="button" data-t="del" title="삭제 (Del)">삭제</button><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">되돌리기</button>
           <label><input type="checkbox" data-t="snap" checked> 스냅</label>
+          <button type="button" data-t="play" class="on" title="AMR · 작업자 · 로봇 · 컨베이어 움직임">⏸ 일시정지</button>
         </div>
         <h4>객체 목록</h4>
         <div id="fbTree"></div>
+        <h4>안전 경고</h4>
+        <div id="fbSafety"><span class="ok">위험 없음</span></div>
         <div id="fbNote"></div>
       </div>`;
     $('.view').appendChild(panel);
@@ -351,6 +423,7 @@
     panel.querySelector('[data-t=del]').onclick = remove;
     panel.querySelector('[data-t=undo]').onclick = undo;
     panel.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
+    panel.querySelector('[data-t=play]').onclick = e => { playing = !playing; e.target.classList.toggle('on', playing); e.target.textContent = playing ? '⏸ 일시정지' : '▶ 재생'; };
 
     // properties: the selected object's own settings, at the top of the right column
     const scroll = $('.side .scroll');
@@ -361,7 +434,7 @@
 
   function renderTree() {
     const t = $('#fbTree'); if (!t) return;
-    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['설비', EQUIPMENT]];
+    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['AMR 경로 · 작업자', ['route', 'worker']], ['설비', EQUIPMENT]];
     t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><i>공장</i>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, types]) => {
       const list = doc.objects.filter(o => types.includes(o.type));
       return list.length ? `<div class="grp">${g}</div>` + list.map(o => `<button type="button" data-id="${o.id}" class="${o.id === selectedId ? 'on' : ''}"><i>${TYPE_LABEL[o.type]}</i>${esc(o.name)}${o.id === activeId ? '<em>시뮬레이션</em>' : ''}</button>`).join('') : '';
@@ -370,6 +443,8 @@
   }
 
   function field(k, label, v, step, min, max) {
+    if (step === 'place') step = 'select', min = [['', '— 선택 —']].concat(FM().places(doc, motion().G).map(p => [p.ref, p.label]));
+    if (step === 'walkway') step = 'select', min = [['', '정지 (제자리)']].concat(doc.objects.filter(o => o.type === 'walkway').map(o => [o.id, o.name]));
     if (step === 'select') return `<label>${label}<select data-k="${k}">${min.map(([val, l]) => `<option value="${val}" ${String(v) === val ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     if (step === 'text') return `<label>${label}<input type="text" data-k="${k}" value="${esc(v)}" maxlength="30"></label>`;
     if (step === 'color') return `<label>${label}<input type="color" data-k="${k}" value="${esc(v)}"></label>`;
@@ -400,7 +475,20 @@
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
       html += `<div class="row">${FIELDS[o.type].map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, mn, mx)).join('')}</div>`;
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
-      if (o.type === 'amr') html += '<p class="hint">AMR 경로와 운반 작업은 다음 단계(경로 편집)에서 추가됩니다. 지금은 대기 위치로 배치됩니다.</p>';
+      if (o.type === 'amr') {
+        const pl = motion().amr[o.id];
+        html += pl && pl.ok
+          ? `<p class="hint">경로 길이 ${pl.length.toFixed(1)} m · 편도 ${pl.oneWay.toFixed(1)} s · 왕복 주기 ${pl.period.toFixed(1)} s (적재·하역 포함). 작업 구역을 지나는 구간은 사용하지 않고 가장 짧은 경로로 다닙니다.</p>`
+          : `<p class="hint" style="color:var(--warn)">${pl ? pl.error : '출발 지점과 도착 지점을 고르세요'}</p>`;
+      }
+      if (o.type === 'worker') html += `<p class="hint" id="fbWorkerSafety">보행로를 고르면 그 보행로 끝에서 끝까지 왕복합니다.</p>`;
+      if (o.type === 'route') {
+        const pts = FM().routePoints(o), G = motion().G, mine = G.edges.filter(e => e.route === o.id);
+        const blocked = mine.filter(e => e.blockedBy.length), cross = mine.filter(e => e.crosses.length);
+        html += `<h4 style="margin:4px 0 0">경로 점 (X, Z m)</h4><div class="pts">${pts.map(([x, z], i) => `<div class="pt"><span>${i + 1}</span><input type="number" step="0.1" data-pt="${i}" data-c="0" value="${r2(x)}"><input type="number" step="0.1" data-pt="${i}" data-c="1" value="${r2(z)}"><button type="button" data-ptdel="${i}" title="점 삭제">×</button></div>`).join('')}</div>
+          <div class="acts"><button type="button" data-a="extend">점 이어 그리기</button></div>
+          <p class="hint" style="${blocked.length ? 'color:var(--warn)' : ''}">${blocked.length ? `막힌 구간 ${blocked.length}개: ${[...new Set(blocked.flatMap(e => e.blockedBy))].join(', ')} — AMR은 이 구간을 쓰지 않습니다 (빨간 표시)` : '작업 구역을 지나는 구간 없음'}${cross.length ? ` · 보행로 교차 ${cross.length}곳 (노란 표시)` : ''}</p>`;
+      }
       if (o.type === 'robot') html += '<p class="hint">픽 위치(파랑)에서 집어 플레이스 위치(주황)에 놓는 동작을 반복합니다. 사이클 시간은 시뮬레이션 기준 (콘솔 2의 1x = SIM 4x).</p>';
     } else {
       html += `<h4 style="margin:4px 0 0">셀 내부 배치</h4><div class="inner">${Object.entries(INNER).map(([k, d]) => `<button type="button" data-inner="${k}" class="${innerSel === k ? 'on' : ''}">${d.label}</button>`).join('')}</div>
@@ -422,8 +510,18 @@
       placeObjectGroup(o); store(); select(o.id, innerSel);
     }));
     propSec.querySelectorAll('[data-inner]').forEach(b => b.addEventListener('click', () => select(o.id, b.dataset.inner)));
+    propSec.querySelectorAll('[data-pt]').forEach(i => i.addEventListener('change', () => {
+      const v = parseFloat(i.value); if (Number.isNaN(v)) return renderProps();
+      const pts = FM().routePoints(o); pts[+i.dataset.pt][+i.dataset.c] = v;
+      pushUndo(); setRoutePoints(o, pts); store(); select(o.id);
+    }));
+    propSec.querySelectorAll('[data-ptdel]').forEach(b => b.addEventListener('click', () => {
+      const pts = FM().routePoints(o); if (pts.length <= 2) return note('경로에는 점이 2개 이상 필요합니다', true);
+      pts.splice(+b.dataset.ptdel, 1); pushUndo(); setRoutePoints(o, pts); store(); select(o.id);
+    }));
     const act = (a, fn) => { const b = propSec.querySelector(`[data-a=${a}]`); if (b) b.onclick = fn; };
     act('dup', duplicate); act('del', remove);
+    act('extend', () => startDrawing(o));
     act('check', checkCycle);
     act('innerReset', () => { if (busy()) return; pushUndo(); const L = clone(S().LAYOUT_DEFAULT); L.cell = { x: o.x, z: o.z, rot: o.rot || 0 }; S().applyLayout(L); o.params = engineCellParams(); store(); select(o.id); });
   }
@@ -461,13 +559,47 @@
     const SPF = window.StationExport.SIM_PER_FRAME, FE = window.FactoryElements;
     const others = doc.objects.filter(o => o.type !== 'station');
     // the recording spans the longest cell cycle (or one robot cycle when there are no cells)
-    const frames = cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)));
+    const M = FM().plans(doc), loops = Object.values(M.amr).concat(Object.values(M.worker)).filter(p => p.ok && !p.still).map(p => p.period);
+    const frames = Math.min(Math.ceil(3600 / SPF), cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)), ...loops.map(p => Math.ceil(p / SPF))));
     const building = [], extra = [];
-    for (const o of others) { const g = FE.build(o, doc.factory); building.push(g); extra.push(...FE.drives(o, g, frames, SPF)); }
+    for (const o of others) {
+      const g = FE.build(o, doc.factory); building.push(g); extra.push(...FE.drives(o, g, frames, SPF));
+      const pl = o.type === 'amr' ? M.amr[o.id] : o.type === 'worker' ? M.worker[o.id] : null;
+      if (pl && pl.ok && !pl.still) extra.push(...rigMotion(g, pl, frames, SPF));
+    }
+    // station cells' R1 / R2 range circles
+    const rings = new THREE.Group(); rings.name = 'Range_Circles';
+    for (const c of FM().rangeCircles(doc, M, 0)) if (c.id.includes(':')) { const m = new THREE.Mesh(new THREE.RingGeometry(c.r - 0.04, c.r, 72), new THREE.MeshBasicMaterial({ color: 0xe8a019, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })); m.name = 'Range_' + c.name; m.rotation.x = -Math.PI / 2; m.position.set(c.x, 0.016, c.z); rings.add(m); }
+    building.push(rings);
     const { glb } = await window.StationExport.buildFactoryGlb(doc.factory, cells, building, extra, frames);
     const objects = doc.objects.map(o => ({ id: o.id, type: o.type, name: o.name, x: o.x, z: o.z, rot: o.rot || 0, params: o.type === 'station' ? undefined : o.params }));
     const timeline = window.StationExport.factoryTimeline(doc.factory, objects, cells, frames);
+    Object.assign(timeline, motionTimeline(M, frames, SPF));
     return { glb, timeline, doc: clone(doc) };
+  }
+
+  // AMR / worker motion for console 2: the element moves on a TX > TZ > RY rig recorded from its plan
+  function rigMotion(g, pl, frames, SPF) {
+    const q0 = pl.pose(0), mk = n => { const x = new THREE.Group(); x.name = g.name + '_' + n; return x; };
+    const tx = mk('TX'), tz = mk('TZ'), ry = mk('RY');
+    [...g.children].forEach(c => ry.add(c));
+    g.position.set(0, 0, 0); g.rotation.set(0, 0, 0);
+    tx.position.x = q0.x; tz.position.z = q0.z; ry.rotation.y = q0.yaw;
+    g.add(tx); tx.add(tz); tz.add(ry);
+    const sx = new Array(frames), sz = new Array(frames), sy = new Array(frames);
+    for (let f = 0; f < frames; f++) { const q = pl.pose(f * SPF); sx[f] = Math.round((q.x - q0.x) * 10000) / 10; sz[f] = Math.round((q.z - q0.z) * 10000) / 10; sy[f] = Math.round((q.yaw - q0.yaw) * 180 / Math.PI * 100) / 100; }
+    return [{ node: tx, dir: 'LinearX', rev: true, series: sx }, { node: tz, dir: 'LinearZ', rev: false, series: sz }, { node: ry, dir: 'RotationY', rev: true, series: sy }];
+  }
+  // per-frame states of AMRs / workers and safety warnings, as change points (console 2 panels)
+  function motionTimeline(M, frames, SPF) {
+    const seg = fn => { const out = []; for (let f = 0; f < frames; f++) { const v = fn(f * SPF); if (!out.length || out[out.length - 1][1] !== v) out.push([f, v]); } return out; };
+    const amr = {}, worker = {};
+    for (const o of doc.objects) {
+      if (o.type === 'amr') { const pl = M.amr[o.id]; amr[o.id] = { name: o.name, ok: !!(pl && pl.ok), error: pl && !pl.ok ? pl.error : '', from: pl && pl.fromLabel, to: pl && pl.toLabel, period: pl && pl.period, state: pl && pl.ok ? seg(t => pl.state(t)) : [[0, '대기']], trips: pl && pl.ok ? seg(t => pl.trips(t)) : [[0, 0]] }; }
+      if (o.type === 'worker') { const pl = M.worker[o.id]; worker[o.id] = { name: o.name, state: seg(t => pl.state(t)) }; }
+    }
+    const safety = seg(t => FM().safety(doc, M, t).map(w => w.text).join('|'));
+    return { motion: { amr, worker }, safety };
   }
 
   // a saved factory document, or a legacy one-station save (meta.summary) converted to one
@@ -500,13 +632,17 @@
     el.addEventListener('pointermove', moveGhost);
     el.addEventListener('pointerup', e => {
       const d = onPick.down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) >= 4) return;
+      if (drawing) { if (d[2] === 2) return finishDrawing(); const p = floorPoint(e); if (p) addDrawPoint(p); return; }
       if (placing) { if (d[2] === 2) return cancelPlacing(); const p = floorPoint(e), t = placing; cancelPlacing(); if (p) placeAt(t, p); return; }
       if (d[2] === 0) onPick(e);
     });
+    el.addEventListener('dblclick', () => { if (drawing) finishDrawing(); });
+    el.addEventListener('contextmenu', e => { if (drawing) e.preventDefault(); });
     el.addEventListener('dragover', e => { if (placing) { e.preventDefault(); moveGhost(e); } });
     el.addEventListener('drop', e => { e.preventDefault(); if (!placing) return; const p = floorPoint(e), t = placing; cancelPlacing(); if (p) placeAt(t, p); });
     addEventListener('keydown', e => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+      if (drawing && e.key === 'Enter') { finishDrawing(); return; }
       if (e.key === 'Escape') { cancelPlacing(); select(null); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
@@ -518,15 +654,64 @@
     $('.side').addEventListener('change', () => setTimeout(store, 50));
     $('.side').addEventListener('click', () => setTimeout(store, 300));
     setInterval(() => { if (helper) helper.update(); }, 250);
-    // conveyors spin and robots run their pick & place at console 1's SIM speed
-    const t0 = performance.now();
+    // conveyors spin, robots pick & place, AMRs drive their trips and workers walk, at console 1's SIM speed
+    let last = performance.now(), lastPanel = 0;
     const tick = now => {
-      const t = (now - t0) / 1000 * (S().cfg.sim || 1);
-      for (const o of doc.objects) if (o.type === 'conveyor' || o.type === 'robot') { const g = views.get(o.id); if (g) window.FactoryElements.animate(o, g, t); }
+      const dt = Math.min(0.1, (now - last) / 1000); last = now;
+      if (playing) clock += dt * (S().cfg.sim || 1);
+      const M = motion(), t = clock;
+      for (const o of doc.objects) {
+        const g = views.get(o.id); if (!g) continue;
+        if (o.type === 'conveyor' || o.type === 'robot') window.FactoryElements.animate(o, g, t);
+        else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
+          const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
+          if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
+        }
+      }
+      updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
     addEventListener('beforeunload', store);
+  }
+
+  /* ---------- range circles + safety ---------- */
+  let playing = true, clock = 0, safetyLayer = null;
+  const cellRings = new Map();
+  // station cells' R1 / R2 circles and the route edges that are blocked (red) or cross a walkway (yellow)
+  function buildSafetyLayer() {
+    const s = S(); if (!s || !motionCache) return;
+    if (safetyLayer) s.scene.remove(safetyLayer);
+    safetyLayer = new THREE.Group(); safetyLayer.name = 'safety-layer'; cellRings.clear();
+    for (const c of FM().rangeCircles(doc, motionCache, 0)) if (c.id.includes(':')) {
+      const m = new THREE.Mesh(new THREE.RingGeometry(c.r - 0.04, c.r, 72), new THREE.MeshBasicMaterial({ color: 0xe8a019, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.position.set(c.x, 0.016, c.z); m.raycast = () => {}; safetyLayer.add(m); cellRings.set(c.id, m);
+    }
+    for (const e of motionCache.G.edges) if (e.blockedBy.length || e.crosses.length) {
+      const a = motionCache.G.nodes[e.a], b = motionCache.G.nodes[e.b], len = Math.hypot(b.x - a.x, b.z - a.z);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.012, 0.16), new THREE.MeshBasicMaterial({ color: e.blockedBy.length ? 0xff3b30 : 0xffd400, transparent: true, opacity: 0.85 }));
+      m.position.set((a.x + b.x) / 2, 0.02, (a.z + b.z) / 2); m.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x); m.raycast = () => {}; safetyLayer.add(m);
+    }
+    s.scene.add(safetyLayer);
+  }
+  const ringOf = id => {
+    if (cellRings.has(id)) return cellRings.get(id);
+    const g = views.get(id); return g && (g.getObjectByName('Robot_Range') || g.getObjectByName('AMR_Safety'));
+  };
+  function updateSafety(M, t, panelToo) {
+    const list = FM().safety(doc, M, t), hot = new Set(list.map(w => w.circle.id)), bad = new Set(list.map(w => w.worker.id));
+    for (const c of FM().rangeCircles(doc, M, t)) { const r = ringOf(c.id); if (r) { r.material.color.set(hot.has(c.id) ? 0xff3b30 : (c.moving ? 0x00e8d0 : 0xe8a019)); r.material.opacity = hot.has(c.id) ? 0.9 : 0.45; } }
+    for (const o of doc.objects) if (o.type === 'worker') {
+      const g = views.get(o.id); if (!g) continue;
+      const w = g.getObjectByName('Worker_Warning'), r = g.getObjectByName('Worker_Ring');
+      if (w) { w.visible = bad.has(o.id); w.quaternion.copy(S().camera.quaternion); }
+      if (r) r.material.color.set(bad.has(o.id) ? 0xff3b30 : 0x2bb673);
+    }
+    if (!panelToo) return false;
+    const box = $('#fbSafety'); if (box) box.innerHTML = list.length ? list.map(w => `<span class="ng">⚠ ${esc(w.text)}</span>`).join('') : '<span class="ok">위험 없음</span>';
+    const ws = $('#fbWorkerSafety'), sel = selectedId && byId(selectedId);
+    if (ws && sel && sel.type === 'worker') { const mine = list.filter(w => w.worker.id === sel.id); ws.innerHTML = mine.length ? mine.map(w => `<span style="color:var(--ng)">⚠ ${esc(w.circle.name)} 가동범위 안</span>`).join('<br>') : '<span style="color:var(--ok)">안전 — 가동범위 밖</span>'; }
+    return true;
   }
 
   window.FactoryBuilder = { factory: () => ({ ...doc.factory }), doc: () => (syncActive(), clone(doc)), exportAll, loadDoc, docFromLegacy, busy };
