@@ -24,11 +24,13 @@
   const PALETTE = [
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
-    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소']]],
+    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소'],
+      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로' };
-  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'], MOVERS = ['amr', 'worker', 'route', 'walkroute'];
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기' };
+  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer']; // js/factory-machines.js
+  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
   // numbering continues after the highest existing name of that type, so a deleted number is not reused
@@ -61,6 +63,12 @@
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
     amr: [['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
+    conveyor2: [['length', '길이 (m)', 0.5, 2, 40], ['width', '폭 (m)', 0.05, 0.4, 1.5], ['h1', '아래층 높이 (m)', 0.05, 0.3, 1.5], ['h2', '위층 높이 (m)', 0.05, 0.8, 3], ['speed', '속도 (m/s)', 0.05, 0.05, 2], ['lift', '리프터 이동 시간 (s)', 0.5, 1, 30], ['pallets', '팔레트 수', 1, 1, 20]],
+    press: [['tonnage', '능력 (t)', 10, 10, 3000], ['spm', '분당 타수 (spm)', 1, 1, 120], ['stroke', '스트로크 (m)', 0.05, 0.05, 1], ['width', '폭 (m)', 0.1, 1, 6], ['depth', '깊이 (m)', 0.1, 1, 5], ['height', '높이 (m)', 0.1, 2.5, 8]],
+    injection: [['tonnage', '형체력 (t)', 10, 30, 3000], ['cycle', '사이클 (s)', 1, 5, 600], ['length', '길이 (m)', 0.1, 3, 15], ['width', '폭 (m)', 0.1, 1, 3]],
+    machining: [['cycle', '가공 사이클 (s)', 1, 10, 3600], ['width', '폭 (m)', 0.1, 1.6, 6], ['depth', '깊이 (m)', 0.1, 1.6, 6], ['height', '높이 (m)', 0.1, 2, 5]],
+    washer: [['length', '길이 (m)', 0.1, 1.5, 15], ['width', '폭 (m)', 0.05, 0.5, 2], ['height', '높이 (m)', 0.1, 1.5, 4], ['speed', '컨베이어 속도 (m/s)', 0.05, 0.05, 1], ['interval', '투입 간격 (s)', 0.5, 1, 120]],
+    transfer: [['cycle', '사이클 (s)', 0.5, 3, 120], ['span', '이송 거리 (m)', 0.1, 1.5, 12], ['depth', '깊이 (m)', 0.1, 0.6, 4], ['height', '높이 (m)', 0.1, 1.8, 5]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
     walkroute: []
@@ -512,7 +520,13 @@
     robot: '<path d="M5 21h8M9 21v-5l4-6 5 2M13 10l-2-4"/><circle cx="18" cy="12" r="1.5"/>',
     rack: '<path d="M4 3v18M20 3v18M4 8h16M4 14h16M4 20h16"/>',
     amr: '<rect x="3" y="8" width="18" height="9" rx="2"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/><path d="M8 8V5h8v3"/>',
-    charger: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="m13 7-3 5h4l-3 5"/>'
+    charger: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="m13 7-3 5h4l-3 5"/>',
+    conveyor2: '<rect x="3" y="5" width="18" height="4" rx="2"/><rect x="3" y="13" width="18" height="4" rx="2"/><path d="M5 9v4M19 9v4M5 17v4M19 17v4"/>',
+    press: '<path d="M4 21h16M6 21V4h12v17M6 7h12"/><rect x="9" y="9" width="6" height="4"/><path d="M8 17h8"/>',
+    injection: '<rect x="2" y="13" width="20" height="6" rx="1"/><rect x="4" y="7" width="7" height="6"/><path d="M11 10h8M16 10V5h3"/>',
+    machining: '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M12 6v6M10 12h4M7 17h10"/>',
+    washer: '<path d="M3 17h18M5 17V7h14v10"/><path d="M9 10v2M12 10v3M15 10v2"/>',
+    transfer: '<path d="M4 21V5h16v16M4 5h16"/><path d="M10 5v7M8 12h4M8 12v2M12 12v2"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]]];
@@ -658,7 +672,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="sample3" title="프레스·사출기·가공기·세척기·이재기·2층 컨베이어로 만든 가공 라인입니다 (Ctrl+Z로 되돌리기)">예시 공장 3</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -708,6 +722,7 @@
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
     on('[data-t=sample]', () => loadSample('sample-factory.json', '예시 공장'));
     on('[data-t=sample2]', () => loadSample('sample-factory-2.json', '예시 공장 2'));
+    on('[data-t=sample3]', () => loadSample('sample-factory-3.json', '예시 공장 3'));
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -862,7 +877,7 @@
       const f = doc.factory, n = t => doc.objects.filter(x => x.type === t).length;
       propSec.innerHTML = `<div class="kind">FACTORY</div><h3>공장</h3>
         <div class="row">${field('width', '가로 (m)', f.width, 0.5, 6, 300)}${field('depth', '세로 (m)', f.depth, 0.5, 6, 300)}${field('height', '높이 (m)', f.height, 0.5, 2.5, 40)}</div>
-        <p class="hint">셀 ${n('station')} · 컨베이어 ${n('conveyor')} · 로봇 ${n('robot')} · 랙 ${n('rack')} · AMR ${n('amr')} · 충전소 ${n('charger')} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
+        <p class="hint">셀 ${n('station')} · 컨베이어 ${n('conveyor')} · 로봇 ${n('robot')} · 랙 ${n('rack')} · AMR ${n('amr')} · 충전소 ${n('charger')} · 공정 설비 ${MACHINES.reduce((a, t) => a + n(t), 0)} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
       propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
         const v = parseFloat(i.value); if (!(v > 0)) return renderProps();
         const f2 = Object.assign({}, doc.factory, { [i.dataset.k]: Math.min(+i.max, Math.max(+i.min, v)) }), out = doc.objects.filter(o => FM().outside({ factory: f2 }, o));
@@ -914,7 +929,7 @@
         <p class="hint">장비를 고른 뒤 3D 화살표를 끌면 이 셀 안에서 옮겨집니다. 아래 제품·파라미터·도포 포인트가 이 셀의 설정이며, 사이클 시작은 이 셀을 시뮬레이션합니다.</p>
         <div class="acts"><button type="button" data-a="check">도달 검사</button><button type="button" data-a="innerReset">셀 내부 기본 배치</button></div>`;
     }
-    if (['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'].includes(o.type)) {
+    if (['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'].concat(MACHINES).includes(o.type)) {
       const pm = o.perm || {};
       html += `<h4>진입 허용</h4><div class="perm"><label class="chk"><input type="checkbox" data-perm="amr" ${pm.amr ? 'checked' : ''}> AMR 진입 허용</label><label class="chk"><input type="checkbox" data-perm="walk" ${pm.walk ? 'checked' : ''}> 보행 허용 (보행로 · 작업자)</label>
         <p class="hint">기본은 둘 다 금지입니다. 금지된 구역·작업 범위에는 AMR 경로, 보행로, 작업자가 들어갈 수 없습니다${o.type === 'zone' ? '. AMR은 구역 가장자리(1 m 이내 경로 점)에서 도킹합니다' : ''}.</p></div>`;
@@ -1074,7 +1089,8 @@
     rebuildAll(); select(null); store();
   }
   // example factories (examples/): 1 = cells, conveyors, racks, zones, chargers, AMRs, workers;
-  // 2 = the same plant with zone stock and AMR job lists (milk runs, charging, shipping)
+  // 2 = the same plant with zone stock and AMR job lists (milk runs, charging, shipping);
+  // 3 = a machining line of the general process equipment (press, transfer, machining, washer, two-level conveyor, injection)
   async function loadSample(file, label) {
     try {
       const d = await (await fetch('examples/' + file, { cache: 'no-store' })).json();
@@ -1141,7 +1157,7 @@
       const M = motion(), t = clock;
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
-        if (o.type === 'conveyor' || o.type === 'robot') window.FactoryElements.animate(o, g, t);
+        if (o.type === 'conveyor' || o.type === 'robot' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, t);
         else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }

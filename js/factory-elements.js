@@ -244,7 +244,8 @@
           return { node: g.getObjectByName(n), dir, rev: true, series };
         });
       },
-      footprint: p => [p.reach * 1.6, p.reach * 1.6]
+      footprint: p => [p.reach * 1.6, p.reach * 1.6],
+      cycle: p => Math.max(2, p.cycle)
     },
     rack: {
       label: '랙 · 버퍼', group: 'equipment',
@@ -388,7 +389,9 @@
 
   const animate = (obj, g, t) => { const T = TYPES[obj.type]; if (T.animate) T.animate(g, Object.assign(T.defaults(), obj.params || {}), t); };
   const drives = (obj, g, frames, simPerFrame) => { const T = TYPES[obj.type]; return T.drives ? T.drives(g, Object.assign(T.defaults(), obj.params || {}), frames, simPerFrame) : []; };
-  const cycleSeconds = obj => obj.type === 'robot' ? Math.max(2, Object.assign(TYPES.robot.defaults(), obj.params || {}).cycle) : 0;
+  const cycleSeconds = obj => { const T = TYPES[obj.type]; return T && T.cycle ? T.cycle(Object.assign(T.defaults(), obj.params || {})) : 0; };
 
-  window.FactoryElements = { TYPES, ZONE_KIND, conveyorPath, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
+  // js/factory-machines.js adds more equipment types with these helpers
+  const helpers = { M, mat, box, cyl, jog, ring, labelPlane, ease };
+  window.FactoryElements = { TYPES, ZONE_KIND, WORK_AREA, helpers, conveyorPath, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
 })();

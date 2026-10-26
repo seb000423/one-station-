@@ -27,6 +27,7 @@
   const CELL_FOOT = [2.8, 2.4], CELL_MARGIN = 0.3, AMR_MARGIN = 0.5, FR5_REACH = 0.922;
   const FE = () => window.FactoryElements;
   const P = o => FE().TYPES[o.type] ? Object.assign(FE().defaults(o.type, {}), o.params || {}) : (o.params || {}); // station cells are not library elements
+  const isMachine = o => (FE().MACHINES || []).includes(o.type); // js/factory-machines.js equipment
   const local2world = (o, x, z) => { const c = Math.cos(o.rot || 0), s = Math.sin(o.rot || 0); return [o.x + c * x + s * z, o.z - s * x + c * z]; };
   const world2local = (o, x, z) => { const dx = x - o.x, dz = z - o.z, c = Math.cos(o.rot || 0), s = Math.sin(o.rot || 0); return [c * dx - s * dz, s * dx + c * dz]; };
   const heading = (a, b) => Math.atan2(-(b[1] - a[1]), b[0] - a[0]); // yaw that points local +X along a→b
@@ -50,6 +51,7 @@
       else if (o.type === 'stairs') out.push(rect(o, p.width, p.run, 0.2));
       else if (o.type === 'zone') out.push(rect(o, p.w, p.d));
       else if (o.type === 'charger') out.push(Object.assign(rect(o, p.width, 0.25, 0.1), { name: o.name }));
+      else if (isMachine(o)) { const [w, d] = FE().footprint(o); out.push(rect(o, w, d, 0.15)); }
     }
     return out;
   }
@@ -93,11 +95,11 @@
       case 'zone': return rect(o, p.w, p.d);
       case 'worker': return { kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: 0.3 };
       case 'amr': return rect(o, p.length, p.width);
-      default: return null;
+      default: { if (isMachine(o)) { const [w, d] = FE().footprint(o); return rect(o, w, d); } return null; }
     }
   }
   // may o and q stand where their footprints overlap?
-  const MOVER = { worker: 'walk', walkway: 'walk', amr: 'amr' }, WORK = ['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'];
+  const MOVER = { worker: 'walk', walkway: 'walk', amr: 'amr' }, WORK = ['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'].concat(FE().MACHINES || []);
   function clash(o, q) {
     const mo = MOVER[o.type], mq = MOVER[q.type];
     if (mo && mq) return o.type === 'walkway' && q.type === 'walkway' ? false : false; // movers share space (workers on walkways, AMRs crossing)
