@@ -684,7 +684,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="sample" title="AMR·작업자·랙·충전소·셀·구역이 들어간 예시 공장을 불러옵니다 (Ctrl+Z로 되돌리기)">예시 공장</button><button type="button" data-t="sample2" title="예시 공장에 구역 재고와 AMR 작업 순서(밀크런·충전·출하)를 더한 버전입니다 (Ctrl+Z로 되돌리기)">예시 공장 2</button><button type="button" data-t="pedal" title="브레이크 페달 반자동 조립·검사 라인: 사각 팔레트 순환 + 수동 투입·압입·로봇·체결·검사·비전·수동 배출 (Ctrl+Z로 되돌리기)">페달 조립 라인</button><button type="button" data-t="smart" title="SmartFactory 교육용 조립 라인: 타원 팔레트 루프 + 로봇 3대와 경사 부품 선반, 프레스, 기능 검사 (Ctrl+Z로 되돌리기)">스마트팩토리 라인</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example1" title="FANUC CRX 로봇 3대가 컨베이어에서 집어 옮기고, AGV 2대가 단방향 루프로 출하 대기 → 보관 → 출하장을 오가는 예시입니다 (Ctrl+Z로 되돌리기)">Example 1</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -732,10 +732,7 @@
     on('[data-t=new]', newFactory);
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
-    on('[data-t=sample]', () => loadSample('sample-factory.json', '예시 공장'));
-    on('[data-t=sample2]', () => loadSample('sample-factory-2.json', '예시 공장 2'));
-    on('[data-t=pedal]', () => loadSample('sample-pedal-line.json', '페달 조립 라인'));
-    on('[data-t=smart]', () => loadSample('sample-smartfactory.json', '스마트팩토리 라인'));
+    on('[data-t=example1]', () => loadSample('example-1.json', 'Example 1'));
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -1101,10 +1098,8 @@
     doc = { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(d.objects || []) };
     rebuildAll(); select(null); store();
   }
-  // example factories (examples/): 1 = cells, conveyors, racks, zones, chargers, AMRs, workers;
-  // 2 = the same plant with zone stock and AMR job lists (milk runs, charging, shipping);
-  // pedal line / smart factory = pallet loop assembly lines after two TEMEX reference lines (brake pedal assembly & test,
-  // SmartFactory educational line)
+  // example factories (examples/): Example 1 = three FANUC CRX robots picking from a conveyor, two AGVs on a
+  // one-way loop (출하 대기 → 보관 → 출하장), a rack, a walkway with a worker
   async function loadSample(file, label) {
     try {
       const d = await (await fetch('examples/' + file, { cache: 'no-store' })).json();
