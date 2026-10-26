@@ -52,7 +52,32 @@
     // yaw: pick → place (0.25–0.5), place → pick (0.75–1.0); reach down at both ends
     const yaw = u < 0.25 ? a0 : u < 0.5 ? a0 + (a1 - a0) * seg(0.25, 0.5) : u < 0.75 ? a1 : a1 + (a0 - a1) * seg(0.75, 1);
     const down = u < 0.25 ? Math.sin(Math.PI * Math.min(1, u / 0.25)) : u >= 0.5 && u < 0.75 ? Math.sin(Math.PI * (u - 0.5) / 0.25) : 0;
-    return { j1: yaw, j2: -0.35 - 0.45 * down, j3: 1.2 + 0.25 * down, j4: -0.85 + 0.2 * down, carry: u >= 0.12 && u < 0.62 };
+    return { j1: yaw, j2: -0.35 - 0.45 * down, j3: 1.2 + 0.25 * down, j4: -0.85 + 0.2 * down, carry: u >= 0.12 && u < 0.62, down };
+  }
+  // the same pick & place on the FANUC CRX GLB (js/factory-assets.js): elbow-up IK of the wrist centre (A5) in
+  // the arm plane, flange pointing down. Joint angles (rad) for the wrappers Robot_J1 (in A1, about Y),
+  // Robot_J2 / J3 / J5 (in A2 / A3 / A5, about Z). At zero the upper arm points up and the forearm along local +X,
+  // and A1's authored yaw turns local +X to world −Z, hence the −90° on J1.
+  const CRX = { base: 0.5, shoulder: 0.245, upper: 0.71, fore: 0.54, tool: 0.16, side: 0.15 };
+  function crxPose(p, t) {
+    const q = robotPose(p, t), r = Math.min(p.reach * 0.75, CRX.upper + CRX.fore - 0.05);
+    const hs = CRX.base + CRX.shoulder, y = 0.12 + 0.45 * (1 - q.down) + CRX.tool - hs, r1 = r * (1 - 0.15 * (1 - q.down));
+    const d = Math.min(Math.hypot(r1, y), CRX.upper + CRX.fore - 1e-3);
+    const a = Math.atan2(y, r1) + Math.acos(Math.max(-1, Math.min(1, (CRX.upper ** 2 + d * d - CRX.fore ** 2) / (2 * CRX.upper * d))));
+    const b = Math.atan2(y - CRX.upper * Math.sin(a), r1 - CRX.upper * Math.cos(a));
+    const j2 = a - Math.PI / 2, j3 = b - j2;
+    // the flange sits CRX.side off the arm plane: turn J1 a little so the tool, not the plane, meets the pad
+    return { j1: q.j1 - Math.PI / 2 + Math.asin(CRX.side / Math.max(r1, CRX.side)), j2, j3, j5: -Math.PI / 2 - b, carry: q.carry };
+  }
+  const CRX_JOINTS = [['A1', 'Robot_J1', 'j1', 'y'], ['A2', 'Robot_J2', 'j2', 'z'], ['A3', 'Robot_J3', 'j3', 'z'], ['A5', 'Robot_J5', 'j5', 'z']];
+  const isCrx = g => !!g.getObjectByName('Robot_J5'); // the builder replaces g.userData, so look at the joints
+  // pick / place pads on the floor and the reach circle
+  function robotPads(g, p) {
+    for (const [n, ang, col] of [['Robot_Pick', p.pick, '#2f7dd1'], ['Robot_Place', p.place, '#d1782f']]) {
+      const rad = ang * Math.PI / 180, pad = box(g, n, 0.4, 0.01, 0.4, mat(new THREE.Color(col), { transparent: true, opacity: 0.6 }), Math.cos(rad) * p.reach * 0.75, 0.005, -Math.sin(rad) * p.reach * 0.75);
+      pad.castShadow = false;
+    }
+    ring(g, 'Robot_Range', p.reach, 0xe8a019, 0.45);
   }
   // conveyor centre line in its own frame. base(u) runs 0..len along local +X first (dir +1); at(s) runs along
   // the actual travel direction (dir −1 reverses it). Both return [x, z, yaw]. A 90° curve / 180° U-turn turns
@@ -208,10 +233,17 @@
     },
     robot: {
       label: '로봇', group: 'equipment',
-      defaults: () => ({ reach: 1.3, pick: -90, place: 90, cycle: 8 }),
+      defaults: () => ({ model: 'fanuc', reach: 1.3, pick: -90, place: 90, cycle: 8 }),
       build: (g, p) => {
         const R = p.reach, a = R * 0.48, b = R * 0.42;
         box(g, 'Robot_Pedestal', 0.5, 0.5, 0.5, M.robotDark, 0, 0.25, 0);
+        const crx = p.model === 'fanuc' && window.FactoryAssets && window.FactoryAssets.get('fanuc');
+        if (crx) {
+          crx.position.y = CRX.base; g.add(crx);
+          for (const [n, w] of CRX_JOINTS) { const node = crx.getObjectByName(n); if (node) FactoryAssets.jointWrap(node, w); }
+          robotPads(g, p); TYPES.robot.animate(g, p, 0);
+          return;
+        }
         const j1 = new THREE.Group(); j1.name = 'Robot_J1'; j1.position.y = 0.5; g.add(j1);
         cyl(j1, 'Robot_Base', 0.16, 0.22, M.robot, 0, 0.11, 0);
         const j2 = new THREE.Group(); j2.name = 'Robot_J2'; j2.position.y = 0.3; j1.add(j2);
@@ -223,24 +255,22 @@
         const j4 = new THREE.Group(); j4.name = 'Robot_J4'; j4.position.x = b; j3.add(j4);
         box(j4, 'Robot_Wrist', 0.12, 0.08, 0.08, M.robotDark, 0.06, 0, 0);
         box(j4, 'Robot_Gripper', 0.04, 0.16, 0.12, M.black, 0.14, 0, 0);
-        // pick / place pads on the floor
-        for (const [n, ang, col] of [['Robot_Pick', p.pick, '#2f7dd1'], ['Robot_Place', p.place, '#d1782f']]) {
-          const rad = ang * Math.PI / 180, pad = box(g, n, 0.4, 0.01, 0.4, mat(new THREE.Color(col), { transparent: true, opacity: 0.6 }), Math.cos(rad) * R * 0.75, 0.005, -Math.sin(rad) * R * 0.75);
-          pad.castShadow = false;
-        }
-        ring(g, 'Robot_Range', p.reach, 0xe8a019, 0.45);
+        robotPads(g, p);
         const pose = robotPose(p, 0); j1.rotation.y = pose.j1; j2.rotation.z = pose.j2; j3.rotation.z = pose.j3; j4.rotation.z = pose.j4;
       },
       animate: (g, p, t) => {
+        if (isCrx(g)) { const q = crxPose(p, t); for (const [, w, k, ax] of CRX_JOINTS) { const j = g.getObjectByName(w); if (j) j.rotation[ax] = q[k]; } return; }
         const q = robotPose(p, t), n = k => g.getObjectByName(k);
         n('Robot_J1').rotation.y = q.j1; n('Robot_J2').rotation.z = q.j2; n('Robot_J3').rotation.z = q.j3; n('Robot_J4').rotation.z = q.j4;
       },
       // recorded joint deltas (deg) from the authored pose; frames of simPerFrame seconds
       drives: (g, p, frames, simPerFrame) => {
-        const q0 = robotPose(p, 0), deg = 180 / Math.PI;
-        return [['Robot_J1', 'j1', 'RotationY'], ['Robot_J2', 'j2', 'RotationZ'], ['Robot_J3', 'j3', 'RotationZ'], ['Robot_J4', 'j4', 'RotationZ']].map(([n, k, dir]) => {
+        const crx = isCrx(g), pose = crx ? crxPose : robotPose, q0 = pose(p, 0), deg = 180 / Math.PI;
+        const joints = crx ? CRX_JOINTS.map(([, w, k, ax]) => [w, k, ax === 'y' ? 'RotationY' : 'RotationZ'])
+          : [['Robot_J1', 'j1', 'RotationY'], ['Robot_J2', 'j2', 'RotationZ'], ['Robot_J3', 'j3', 'RotationZ'], ['Robot_J4', 'j4', 'RotationZ']];
+        return joints.map(([n, k, dir]) => {
           const series = new Array(frames);
-          for (let f = 0; f < frames; f++) series[f] = Math.round((robotPose(p, f * simPerFrame)[k] - q0[k]) * deg * 100) / 100;
+          for (let f = 0; f < frames; f++) series[f] = Math.round((pose(p, f * simPerFrame)[k] - q0[k]) * deg * 100) / 100;
           return { node: g.getObjectByName(n), dir, rev: true, series };
         });
       },
@@ -268,9 +298,19 @@
     },
     amr: {
       label: 'AMR', group: 'equipment',
-      defaults: () => ({ length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5, stops: [] }), // stops: job list [{ at, act, dwell }]
+      defaults: () => ({ model: 'agv', length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5, stops: [] }), // stops: job list [{ at, act, dwell }]
       build: (g, p) => {
         ring(g, 'AMR_Safety', Math.hypot(p.length, p.width) / 2 + 0.5, 0x00e8d0, 0.5);
+        const agv = p.model === 'agv' && window.FactoryAssets && window.FactoryAssets.get('agv');
+        if (agv) { // pallet stacker: drive unit front (+Z) turned to the travel direction (+X), forks trail; scaled to the width
+          agv.traverse(o => { if (/^Safety_Field/.test(o.name)) o.visible = false; }); // the AMR_Safety ring shows that
+          const turn = new THREE.Group(); turn.add(agv); agv.rotation.y = Math.PI / 2;
+          const m = FactoryAssets.placed(turn, 'AMR_Model', [Infinity, p.width]); g.add(m);
+          const fk = new THREE.Box3();
+          for (const n of ['Fork_L', 'Fork_R']) { const f = m.getObjectByName(n); if (f) fk.union(FactoryAssets.bounds(f, g)); }
+          if (!fk.isEmpty()) { const c = fk.getCenter(new THREE.Vector3()); box(g, 'AMR_Load', (fk.max.x - fk.min.x) * 0.85, 0.3, p.width * 0.9, M.carton, c.x, fk.max.y + 0.15, c.z); }
+          return;
+        }
         box(g, 'AMR_Load', p.length * 0.6, 0.22, p.width * 0.7, M.carton, 0, 0.44, 0);
         box(g, 'AMR_Body', p.length, 0.25, p.width, M.amr, 0, 0.16, 0);
         box(g, 'AMR_Top', p.length * 0.92, 0.04, p.width * 0.92, M.black, 0, 0.305, 0);

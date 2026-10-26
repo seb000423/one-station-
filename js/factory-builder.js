@@ -59,9 +59,9 @@
       ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
       ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
       ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
-    robot: [['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
+    robot: [['model', '모델', 'select', [['fanuc', 'FANUC CRX-10iA/L (3D 모델)'], ['simple', '단순 형상']]], ['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
-    amr: [['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    amr: [['model', '모델', 'select', [['agv', 'AGV (3D 모델)'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
     conveyor2: [['length', '길이 (m)', 0.5, 2, 40], ['width', '폭 (m)', 0.05, 0.4, 1.5], ['h1', '아래층 높이 (m)', 0.05, 0.3, 1.5], ['h2', '위층 높이 (m)', 0.05, 0.8, 3], ['speed', '속도 (m/s)', 0.05, 0.05, 2], ['lift', '리프터 이동 시간 (s)', 0.5, 1, 30], ['pallets', '팔레트 수', 1, 1, 20]],
     press: [['tonnage', '능력 (t)', 10, 10, 3000], ['spm', '분당 타수 (spm)', 1, 1, 120], ['stroke', '스트로크 (m)', 0.05, 0.05, 1], ['width', '폭 (m)', 0.1, 1, 6], ['depth', '깊이 (m)', 0.1, 1, 5], ['height', '높이 (m)', 0.1, 2.5, 8]],
@@ -1129,6 +1129,14 @@
     const pref = (doc.objects.find(o => o.type === 'station') || {}).id;
     rebuildAll(pref);
     ensureGizmo().then(() => select(null)).catch(e => note(e.message, true));
+    // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive
+    const USES = { fanuc: 'robot', agv: 'amr' };
+    addEventListener('factory-assets-ready', e => {
+      const type = USES[e.detail.id]; if (!type || !doc) return;
+      doc.objects.filter(o => o.type === type).forEach(o => { buildView(o); placeObjectGroup(o); });
+      if (selectedId && byId(selectedId) && byId(selectedId).type === type) select(selectedId);
+    });
+    if (window.FactoryAssets) FactoryAssets.preload(Object.keys(USES));
     renderTree(); renderProps();
     const el = s.renderer.domElement;
     el.addEventListener('pointerdown', e => { onPick.down = [e.clientX, e.clientY, e.button]; });
