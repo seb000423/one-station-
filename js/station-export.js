@@ -276,9 +276,10 @@
   }
 
   // Merges recorded cells and static building elements into one GLB with one looping drive recording.
-  // cells: [{ id, rec: recordCell() result }]; building: [THREE.Object3D]; factory: { width, depth, height }.
+  // cells: [{ id, rec: recordCell() result }]; building: [THREE.Object3D]; extra: recorded drives of building
+  // equipment ({ node, dir, rev, series }); factory: { width, depth, height }.
   // Shorter cell cycles hold their last (idle) frame until the longest one ends; then everything loops.
-  async function buildFactoryGlb(factory, cells, building) {
+  async function buildFactoryGlb(factory, cells, building, extra = [], minFrames = 1) {
     await loadExporter();
     const root = new THREE.Group(); root.name = 'ONE_STATION';
     root.add(window.FactoryElements ? window.FactoryElements.buildShell(factory, { walls: false }) : buildFactory(factory));
@@ -292,7 +293,8 @@
       o.name = n; seen.add(n);
     });
     const pathOf = o => { const p = []; for (let c = o; c; c = c.parent) p.unshift(c.name); return p.join('/'); };
-    const all = cells.flatMap(c => c.rec.drives), frames = cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : 1;
+    // building elements may carry their own jog drives (conveyor rollers): keep those, record the rest
+    const all = cells.flatMap(c => c.rec.drives).concat(extra), frames = Math.max(minFrames, ...cells.map(c => c.rec.info.frames));
     all.forEach(d => { d.node.userData = { realvirtual: { Drive: { Direction: d.dir, ReverseDirection: d.rev, TargetSpeed: 1000, UseLimits: false } } }; });
     const positions = new Array(frames * all.length);
     all.forEach((d, j) => { const s = d.series, n = s.length; for (let f = 0; f < frames; f++) positions[f * all.length + j] = s[f < n ? f : n - 1]; });
@@ -336,5 +338,5 @@
     return g;
   }
 
-  window.StationExport = { recordCell, buildFactoryGlb, factoryTimeline, exportStation, checkCycle, DT };
+  window.StationExport = { recordCell, buildFactoryGlb, factoryTimeline, exportStation, checkCycle, DT, SIM_PER_FRAME: H * SUB };
 })();

@@ -24,16 +24,35 @@
   const PALETTE = [
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
-    ['설비', [['station', '원스테이션 셀']]]
+    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['amr', 'AMR'], ['charger', '충전소']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역' };
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소' };
+  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'amr', 'charger'];
+  // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
+  // numbering continues after the highest existing name of that type, so a deleted number is not reused
+  const LETTERED = ['walkway', 'zone'];
+  const toLetters = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+  const fromLetters = s => [...s].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
+  function nextName(type) {
+    const base = TYPE_LABEL[type], re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (LETTERED.includes(type) ? ' ([A-Z]+)$' : ' (\\d+)$'));
+    let hi = -1;
+    for (const o of doc.objects) { if (o.type !== type) continue; const m = re.exec(o.name); if (m) hi = Math.max(hi, LETTERED.includes(type) ? fromLetters(m[1]) : +m[1] - 1); }
+    return `${base} ${LETTERED.includes(type) ? toLetters(hi + 1) : hi + 2}`;
+  }
+  // walkways and zones show their name on the floor
+  const syncLabel = o => { if (LETTERED.includes(o.type)) { o.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); o.params.label = o.name; } };
   const FIELDS = { // building element settings: key, label, step, min, max
     column: [['w', '가로 (m)', 0.1, 0.1, 3], ['d', '세로 (m)', 0.1, 0.1, 3], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
     walkway: [['length', '길이 (m)', 0.5, 0.5, 200], ['width', '폭 (m)', 0.1, 0.6, 6]],
-    zone: [['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['label', '이름', 'text'], ['color', '색', 'color']]
+    zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color']],
+    conveyor: [['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]], ['length', '길이 (m)', 0.5, 0.5, 60], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3]],
+    robot: [['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
+    rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
+    amr: [['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    charger: [['width', '폭 (m)', 0.05, 0.4, 2]]
   };
 
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
@@ -232,8 +251,8 @@
   function moveGhost(e) { if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z; }
   function placeAt(type, p) {
     pushUndo();
-    const o = { id: newId(), type, name: `${TYPE_LABEL[type]} ${doc.objects.filter(x => x.type === type).length + 1}`, x: p.x, z: p.z, rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
-    clampToFactory(o); doc.objects.push(o);
+    const o = { id: newId(), type, name: nextName(type), x: p.x, z: p.z, rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
+    syncLabel(o); clampToFactory(o); doc.objects.push(o);
     if (type !== 'station') buildView(o);
     select(o.id); if (type === 'station') placeObjectGroup(o);
     store(); note(`${o.name}을(를) 놓았습니다`);
@@ -242,8 +261,8 @@
     const o = selectedId && byId(selectedId); if (!o) return;
     if (busy()) return note('사이클 중에는 복제할 수 없습니다', true);
     syncActive(); pushUndo();
-    const c = clone(o); c.id = newId(); c.name = o.name.replace(/\s*\d*$/, '') + ' ' + (doc.objects.filter(x => x.type === o.type).length + 1);
-    c.x = o.x + 1; c.z = o.z + 1; clampToFactory(c); doc.objects.push(c);
+    const c = clone(o); c.id = newId(); c.name = nextName(o.type);
+    c.x = o.x + 1; c.z = o.z + 1; syncLabel(c); clampToFactory(c); doc.objects.push(c);
     if (c.type !== 'station') buildView(c);
     select(c.id); if (c.type === 'station') placeObjectGroup(c);
     store(); note(`${c.name}을(를) 만들었습니다`);
@@ -290,6 +309,7 @@
   #fbProps{display:grid;gap:10px}
   #fbProps .row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
   #fbProps label{display:grid;gap:3px;color:var(--mute);font-size:11px;min-width:0}
+  #fbProps select{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:6px 7px;border-radius:3px;font:inherit;font-size:12px}
   #fbProps input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:6px 7px;border-radius:3px;font:inherit;font-family:var(--mono);font-size:12px}
   #fbProps input[type=color]{padding:2px;height:30px}
   #fbProps input:focus{outline:none;border-color:var(--accent)}
@@ -341,7 +361,7 @@
 
   function renderTree() {
     const t = $('#fbTree'); if (!t) return;
-    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['설비', ['station']]];
+    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['설비', EQUIPMENT]];
     t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><i>공장</i>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, types]) => {
       const list = doc.objects.filter(o => types.includes(o.type));
       return list.length ? `<div class="grp">${g}</div>` + list.map(o => `<button type="button" data-id="${o.id}" class="${o.id === selectedId ? 'on' : ''}"><i>${TYPE_LABEL[o.type]}</i>${esc(o.name)}${o.id === activeId ? '<em>시뮬레이션</em>' : ''}</button>`).join('') : '';
@@ -350,6 +370,7 @@
   }
 
   function field(k, label, v, step, min, max) {
+    if (step === 'select') return `<label>${label}<select data-k="${k}">${min.map(([val, l]) => `<option value="${val}" ${String(v) === val ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
     if (step === 'text') return `<label>${label}<input type="text" data-k="${k}" value="${esc(v)}" maxlength="30"></label>`;
     if (step === 'color') return `<label>${label}<input type="color" data-k="${k}" value="${esc(v)}"></label>`;
     return `<label>${label}<input type="number" data-k="${k}" step="${step}" min="${min}" max="${max}" value="${v}"></label>`;
@@ -362,7 +383,7 @@
       const f = doc.factory, n = t => doc.objects.filter(x => x.type === t).length;
       propSec.innerHTML = `<div class="kind">FACTORY</div><h3>공장</h3>
         <div class="row">${field('width', '가로 (m)', f.width, 0.5, 6, 300)}${field('depth', '세로 (m)', f.depth, 0.5, 6, 300)}${field('height', '높이 (m)', f.height, 0.5, 2.5, 40)}</div>
-        <p class="hint">설비 ${n('station')} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
+        <p class="hint">셀 ${n('station')} · 컨베이어 ${n('conveyor')} · 로봇 ${n('robot')} · 랙 ${n('rack')} · AMR ${n('amr')} · 충전소 ${n('charger')} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
       propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
         const v = parseFloat(i.value); if (!(v > 0)) return renderProps();
         pushUndo(); doc.factory[i.dataset.k] = Math.min(+i.max, Math.max(+i.min, v));
@@ -378,6 +399,9 @@
     if (!isCell) {
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
       html += `<div class="row">${FIELDS[o.type].map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, mn, mx)).join('')}</div>`;
+      if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
+      if (o.type === 'amr') html += '<p class="hint">AMR 경로와 운반 작업은 다음 단계(경로 편집)에서 추가됩니다. 지금은 대기 위치로 배치됩니다.</p>';
+      if (o.type === 'robot') html += '<p class="hint">픽 위치(파랑)에서 집어 플레이스 위치(주황)에 놓는 동작을 반복합니다. 사이클 시간은 시뮬레이션 기준 (콘솔 2의 1x = SIM 4x).</p>';
     } else {
       html += `<h4 style="margin:4px 0 0">셀 내부 배치</h4><div class="inner">${Object.entries(INNER).map(([k, d]) => `<button type="button" data-inner="${k}" class="${innerSel === k ? 'on' : ''}">${d.label}</button>`).join('')}</div>
         <p class="hint">장비를 고른 뒤 3D 화살표를 끌면 이 셀 안에서 옮겨집니다. 아래 제품·파라미터·도포 포인트가 이 셀의 설정이며, 사이클 시작은 이 셀을 시뮬레이션합니다.</p>
@@ -385,9 +409,9 @@
     }
     html += `<div class="acts"><button type="button" data-a="dup">복제</button><button type="button" data-a="del">삭제</button></div>`;
     propSec.innerHTML = html;
-    propSec.querySelector('[data-n]').addEventListener('change', e => { pushUndo(); o.name = e.target.value.trim() || o.name; if (o.type !== 'station') { buildView(o); select(o.id); } store(); renderTree(); });
+    propSec.querySelector('[data-n]').addEventListener('change', e => { pushUndo(); o.name = e.target.value.trim() || o.name; syncLabel(o); if (o.type !== 'station') { buildView(o); select(o.id); } store(); renderTree(); });
     propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
-      const k = i.dataset.k, raw = i.type === 'number' ? parseFloat(i.value) : i.value;
+      const k = i.dataset.k, raw = i.type === 'number' || (k === 'p.dir') ? parseFloat(i.value) : i.value;
       if (i.type === 'number' && Number.isNaN(raw)) return renderProps();
       pushUndo();
       if (k === 'rot') o.rot = THREE.MathUtils.degToRad(raw);
@@ -434,8 +458,13 @@
     } catch (e) { throw new Error((e && e.message) || String(e)); }
     finally { if (keep) applyCellToEngine(keep); else S().CELL.visible = false; }
     progress('모델 만드는 중…'); await new Promise(r => setTimeout(r, 40));
-    const building = doc.objects.filter(o => o.type !== 'station').map(o => window.FactoryElements.build(o, doc.factory));
-    const { glb, frames } = await window.StationExport.buildFactoryGlb(doc.factory, cells, building);
+    const SPF = window.StationExport.SIM_PER_FRAME, FE = window.FactoryElements;
+    const others = doc.objects.filter(o => o.type !== 'station');
+    // the recording spans the longest cell cycle (or one robot cycle when there are no cells)
+    const frames = cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)));
+    const building = [], extra = [];
+    for (const o of others) { const g = FE.build(o, doc.factory); building.push(g); extra.push(...FE.drives(o, g, frames, SPF)); }
+    const { glb } = await window.StationExport.buildFactoryGlb(doc.factory, cells, building, extra, frames);
     const objects = doc.objects.map(o => ({ id: o.id, type: o.type, name: o.name, x: o.x, z: o.z, rot: o.rot || 0, params: o.type === 'station' ? undefined : o.params }));
     const timeline = window.StationExport.factoryTimeline(doc.factory, objects, cells, frames);
     return { glb, timeline, doc: clone(doc) };
@@ -489,6 +518,14 @@
     $('.side').addEventListener('change', () => setTimeout(store, 50));
     $('.side').addEventListener('click', () => setTimeout(store, 300));
     setInterval(() => { if (helper) helper.update(); }, 250);
+    // conveyors spin and robots run their pick & place at console 1's SIM speed
+    const t0 = performance.now();
+    const tick = now => {
+      const t = (now - t0) / 1000 * (S().cfg.sim || 1);
+      for (const o of doc.objects) if (o.type === 'conveyor' || o.type === 'robot') { const g = views.get(o.id); if (g) window.FactoryElements.animate(o, g, t); }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
     addEventListener('beforeunload', store);
   }
 

@@ -454,7 +454,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
       const f = L.factory, xz = o => `X ${o.x.toFixed(2)} · Z ${o.z.toFixed(2)} m`;
       $('#layoutSpec').innerHTML = [
         ['공장', `${fac.width} × ${fac.depth} m · 높이 ${fac.height} m`],
-        ...(objs ? [['구성', `셀 ${cnt('station')} · 기둥 ${cnt('column')} · 벽 ${cnt('wall')} · 출입문 ${cnt('door')} · 계단 ${cnt('stairs')} · 보행로 ${cnt('walkway')} · 구역 ${cnt('zone')}`]] : []),
+        ...(objs ? [['설비', `셀 ${cnt('station')} · 컨베이어 ${cnt('conveyor')} · 로봇 ${cnt('robot')} · 랙 ${cnt('rack')} · AMR ${cnt('amr')} · 충전소 ${cnt('charger')}`], ['건물·동선', `기둥 ${cnt('column')} · 벽 ${cnt('wall')} · 출입문 ${cnt('door')} · 계단 ${cnt('stairs')} · 보행로 ${cnt('walkway')} · 구역 ${cnt('zone')}`]] : []),
         ['셀 위치', `${xz(L.cell)} · ${Math.round(L.cell.rot * 180 / Math.PI)}°`],
         ['포지셔너', xz(L.positioner)], ['도포 로봇 R2', xz(L.r2)], ['DMC 리더', xz(L.dmc)], ['저울', xz(L.scale)],
         ['지그 열 / R1 레일', `Z ${L.jig.z.toFixed(2)} / ${L.rail.z.toFixed(2)} m`]
