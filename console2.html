@@ -504,8 +504,19 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     } catch (e) {}
     return null;
   }
+  // closer to console 1's look: less flat ambient, a stronger key light with soft shadows
+  function tuneLights(v) {
+    if (!v || v.__oneStationLights) return;
+    try {
+      if (v.ambientLight) v.ambientLight.intensity = 1.0;
+      if (v.dirLight) { v.dirLight.intensity = 2.0; v.dirLight.castShadow = true; }
+      v.__oneStationLights = true;
+      if (v.markRenderDirty) v.markRenderDirty();
+      if (v.markShadowsDirty) v.markShadowsDirty();
+    } catch (e) {}
+  }
   function currentFrame() {
-    if (!viewer || !viewer.playback) viewer = findViewer();
+    if (!viewer || !viewer.playback) { viewer = findViewer(); tuneLights(viewer); }
     if (viewer && viewer.playback) return viewer.playback.frame;
     try {
       const t = frame.contentDocument.querySelector('[data-testid="sim-clock"]').textContent.split(':').map(Number);

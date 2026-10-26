@@ -159,6 +159,7 @@
     const size = Math.max(f.width, f.depth), gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / 0.5)), 0x2c323b, 0x1b1f25);
     s.grid.geometry.dispose(); s.grid.geometry = gh.geometry;
     s.scene.fog.far = Math.max(24, Math.hypot(f.width, f.depth) * 1.6);
+    if (s.fitLights) s.fitLights(f);
     s.controls.maxDistance = Math.max(9, Math.hypot(f.width, f.depth) * 1.1);
   }
   function buildView(o) {
@@ -185,7 +186,11 @@
       tc = new THREE.TransformControls(s.camera, s.renderer.domElement);
       tc.setSize(0.8); setSnap(snap);
       tc.addEventListener('dragging-changed', e => { s.controls.enabled = !e.value; if (e.value) pushUndo(); else commitDrag(); });
-      tc.addEventListener('objectChange', () => { if (helper) helper.update(); refreshTransformFields(); });
+      tc.addEventListener('objectChange', () => {
+        if (helper) helper.update(); refreshTransformFields();
+        const o = selectedId && byId(selectedId), g = o && !innerSel && groupOf(o.id);
+        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); helper.material.color.set(why ? 0xff3b30 : 0x00e8d0); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
+      });
       s.scene.add(tc);
       proxy = new THREE.Object3D(); proxy.name = 'inner-proxy';
       const mk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.35, depthTest: false }));
@@ -218,7 +223,10 @@
       if (innerSel === 'jig' || innerSel === 'rail') L[innerSel].z = v(p.z, ZMIN, ZMAX); else L[innerSel] = { x: v(p.x, XMIN, XMAX), z: v(p.z, ZMIN, ZMAX) };
       s.applyLayout(L); o.params = engineCellParams(); store(); select(o.id, innerSel); return;
     }
-    const g = groupOf(o.id); o.x = g.position.x; o.z = g.position.z; o.rot = r2(g.rotation.y * 1e4) / 1e4; clampToFactory(o); placeObjectGroup(o);
+    const g = groupOf(o.id), next = Object.assign({}, o, { x: r2(g.position.x), z: r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
+    const why = blockedBy(next);
+    if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0x00e8d0); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
+    o.x = next.x; o.z = next.z; o.rot = next.rot; placeObjectGroup(o);
     store(); if (helper) helper.update(); renderProps(); renderTree();
   }
   function onPick(e) {
@@ -310,8 +318,16 @@
     note(`${TYPE_LABEL[type]}: 바닥을 클릭해 놓습니다 (Esc 취소)`);
   }
   function cancelPlacing() { cancelDrawing(); if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
-  function moveGhost(e) { if (drawing) { const p = floorPoint(e); if (p) redrawPreview(snapToNode(p)); return; } if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z; }
+  function moveGhost(e) {
+    if (drawing) { const p = floorPoint(e); if (p) redrawPreview(snapToNode(p)); return; }
+    if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true; ghost.position.x = p.x; ghost.position.z = p.z;
+    const why = blockedBy(candidate(placing, p)), bad = !!why;
+    if (bad !== ghost.userData.bad) { ghost.userData.bad = bad; ghost.traverse(o => { if (o.isMesh) { if (!o.userData.c0) o.userData.c0 = o.material.color.clone(); o.material.color.copy(bad ? new THREE.Color(0xff3b30) : o.userData.c0); } }); }
+    if (bad) note(`여기에는 놓을 수 없습니다: ${why}`, true);
+  }
+  const candidate = (type, p) => ({ id: '__ghost', type, name: TYPE_LABEL[type], x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) });
   function placeAt(type, p) {
+    const why = blockedBy(candidate(type, p)); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
     pushUndo();
     const o = { id: newId(), type, name: nextName(type), x: p.x, z: p.z, rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
     syncLabel(o); clampToFactory(o); doc.objects.push(o);
@@ -319,12 +335,30 @@
     select(o.id); if (type === 'station') placeObjectGroup(o);
     store(); note(`${o.name}을(를) 놓았습니다`);
   }
+  function clearAll() {
+    if (busy()) return note('사이클 중에는 지울 수 없습니다', true);
+    const n = doc.objects.length; if (!n) return note('지울 객체가 없습니다');
+    if (!confirm(`배치한 객체 ${n}개(셀·설비·건물·경로·작업자)를 모두 지웁니다.\n공장 크기(${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m)는 그대로 둡니다.\n\nCtrl+Z(되돌리기)로 되돌릴 수 있습니다.`)) return;
+    pushUndo(); doc.objects = []; rebuildAll(); select(null); store(); note(`객체 ${n}개를 지웠습니다 (Ctrl+Z로 되돌리기)`);
+  }
+  // where o may not stand: overlapping another object's size / work area, or outside the factory
+  function blockedBy(o) {
+    if (FM().outside(doc, o)) return '공장 밖으로 나갑니다';
+    const hit = FM().collisions(doc, o); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : '';
+  }
   function duplicate() {
     const o = selectedId && byId(selectedId); if (!o) return;
     if (busy()) return note('사이클 중에는 복제할 수 없습니다', true);
     syncActive(); pushUndo();
     const c = clone(o); c.id = newId(); c.name = nextName(o.type);
-    c.x = o.x + 1; c.z = o.z + 1; syncLabel(c); clampToFactory(c); doc.objects.push(c);
+    // the nearest free spot around the original (spiral, 0.5 m steps)
+    let found = false;
+    for (let ring = 1; ring <= 30 && !found; ring++) for (let k = 0; k < ring * 8 && !found; k++) {
+      const a = (k / (ring * 8)) * Math.PI * 2; c.x = r2(o.x + Math.cos(a) * ring * 0.5); c.z = r2(o.z + Math.sin(a) * ring * 0.5);
+      found = !blockedBy(c);
+    }
+    if (!found) { undoStack.pop(); return note('복제할 빈자리가 없습니다', true); }
+    syncLabel(c); doc.objects.push(c);
     if (c.type !== 'station') buildView(c);
     select(c.id); if (c.type === 'station') placeObjectGroup(c);
     store(); note(`${c.name}을(를) 만들었습니다`);
@@ -358,9 +392,9 @@
   #fbPanel .pal button[draggable]{cursor:grab}
   #fbPanel .tools{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
   #fbPanel .tools label{display:flex;align-items:center;gap:4px;color:var(--mute);font-size:11px;margin-left:auto}
-  #fbTree{flex:1;min-height:60px;overflow:auto;display:grid;align-content:start;gap:2px}
-  #fbTree .grp{font-size:10.5px;color:var(--dim);margin:6px 0 2px;font-family:var(--mono);letter-spacing:.1em}
-  #fbTree button{display:flex;gap:6px;align-items:center;text-align:left;background:transparent;border:1px solid transparent;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #fbTree{flex:1;min-height:60px;overflow:auto;display:flex;flex-direction:column;gap:2px;padding:2px 2px 4px}
+  #fbTree .grp{font-size:10.5px;color:var(--dim);margin:6px 0 2px;font-family:var(--mono);letter-spacing:.1em;line-height:1.6;flex:none}
+  #fbTree button{flex:none;display:flex;gap:6px;align-items:center;text-align:left;background:transparent;border:1px solid transparent;padding:5px 8px;min-height:28px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #fbTree button.on{border-color:var(--accent);background:rgba(0,232,208,.06)}
   #fbTree i{font-style:normal;color:var(--dim);font-size:10.5px}
   #fbTree em{font-style:normal;color:var(--accent);font-size:10px;margin-left:auto}
@@ -385,7 +419,8 @@
   #fbProps .pts{display:grid;gap:3px;max-height:180px;overflow:auto}
   #fbProps .pt{display:grid;grid-template-columns:18px 1fr 1fr 26px;gap:4px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--mute)}
   #fbProps .pt button{background:var(--panel2);border:1px solid var(--line);color:var(--mute);border-radius:3px;cursor:pointer;padding:3px 0}
-  #fbSafety{display:grid;gap:3px;font-size:11.5px;line-height:1.45;max-height:110px;overflow:auto}
+  #fbSafety{display:grid;gap:3px;font-size:11.5px;line-height:1.6;max-height:110px;overflow:auto;padding:2px 0}
+  #fbPanel h4{line-height:1.6}
   #fbSafety .ok{color:var(--ok)}
   #fbSafety .ng{color:var(--ng)}
   #fbPanel button[data-t=play].on{border-color:var(--accent);color:var(--accent)}
@@ -401,8 +436,8 @@
         ${PALETTE.map(([g, items]) => `<h4>${g}</h4><div class="pal">${items.map(([t, l]) => `<button type="button" draggable="true" data-place="${t}">${l}</button>`).join('')}</div>`).join('')}
         <div class="tools">
           <button type="button" data-t="translate" title="이동 (T)">이동</button><button type="button" data-t="rotate" title="회전 (R)">회전</button>
-          <button type="button" data-t="dup" title="복제 (Ctrl+D)">복제</button><button type="button" data-t="del" title="삭제 (Del)">삭제</button><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">되돌리기</button>
-          <label><input type="checkbox" data-t="snap" checked> 스냅</label>
+          <button type="button" data-t="dup" title="복제 (Ctrl+D)">복제</button><button type="button" data-t="del" title="삭제 (Del)">삭제</button><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">되돌리기</button><button type="button" data-t="clear" title="배치한 객체를 모두 지웁니다">전체 지우기</button>
+          <label title="이동 0.1 m, 회전 15° 단위로 맞춥니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label>
           <button type="button" data-t="play" class="on" title="AMR · 작업자 · 로봇 · 컨베이어 움직임">⏸ 일시정지</button>
         </div>
         <h4>객체 목록</h4>
@@ -422,6 +457,7 @@
     panel.querySelector('[data-t=dup]').onclick = duplicate;
     panel.querySelector('[data-t=del]').onclick = remove;
     panel.querySelector('[data-t=undo]').onclick = undo;
+    panel.querySelector('[data-t=clear]').onclick = clearAll;
     panel.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
     panel.querySelector('[data-t=play]').onclick = e => { playing = !playing; e.target.classList.toggle('on', playing); e.target.textContent = playing ? '⏸ 일시정지' : '▶ 재생'; };
 
@@ -461,7 +497,9 @@
         <p class="hint">셀 ${n('station')} · 컨베이어 ${n('conveyor')} · 로봇 ${n('robot')} · 랙 ${n('rack')} · AMR ${n('amr')} · 충전소 ${n('charger')} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
       propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
         const v = parseFloat(i.value); if (!(v > 0)) return renderProps();
-        pushUndo(); doc.factory[i.dataset.k] = Math.min(+i.max, Math.max(+i.min, v));
+        const f2 = Object.assign({}, doc.factory, { [i.dataset.k]: Math.min(+i.max, Math.max(+i.min, v)) }), out = doc.objects.filter(o => FM().outside({ factory: f2 }, o));
+        if (out.length) { note(`공장을 줄일 수 없습니다: ${out.map(o => o.name).join(', ')}이(가) 밖으로 나갑니다`, true); return renderProps(); }
+        pushUndo(); doc.factory[i.dataset.k] = f2[i.dataset.k];
         buildShell(); doc.objects.forEach(x => { clampToFactory(x); if (x.type !== 'station') buildView(x); placeObjectGroup(x); });
         store(); renderTree(); renderProps();
       }));
@@ -501,11 +539,14 @@
     propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
       const k = i.dataset.k, raw = i.type === 'number' || (k === 'p.dir') ? parseFloat(i.value) : i.value;
       if (i.type === 'number' && Number.isNaN(raw)) return renderProps();
+      const next = clone(o);
+      if (k === 'rot') next.rot = THREE.MathUtils.degToRad(raw);
+      else if (k === 'x' || k === 'z') next[k] = raw;
+      else { next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); next.params[k.slice(2)] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw; }
+      const why = blockedBy(next); if (why) { note(`바꿀 수 없습니다: ${why}`, true); return renderProps(); }
       pushUndo();
-      if (k === 'rot') o.rot = THREE.MathUtils.degToRad(raw);
-      else if (k === 'x' || k === 'z') o[k] = raw;
-      else { o.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); o.params[k.slice(2)] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw; }
-      clampToFactory(o);
+      o.x = next.x; o.z = next.z; o.rot = next.rot; if (next.params) o.params = next.params;
+      if (o.type === 'station' && o.id === activeId) S().applyLayout(Object.assign({ cell: { x: o.x, z: o.z, rot: o.rot || 0 } }, engineCellParams().inner));
       if (o.type !== 'station' && k.startsWith('p.')) buildView(o);
       placeObjectGroup(o); store(); select(o.id, innerSel);
     }));
@@ -633,13 +674,13 @@
     el.addEventListener('pointerup', e => {
       const d = onPick.down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) >= 4) return;
       if (drawing) { if (d[2] === 2) return finishDrawing(); const p = floorPoint(e); if (p) addDrawPoint(p); return; }
-      if (placing) { if (d[2] === 2) return cancelPlacing(); const p = floorPoint(e), t = placing; cancelPlacing(); if (p) placeAt(t, p); return; }
+      if (placing) { if (d[2] === 2) return cancelPlacing(); const p = floorPoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); return; }
       if (d[2] === 0) onPick(e);
     });
     el.addEventListener('dblclick', () => { if (drawing) finishDrawing(); });
     el.addEventListener('contextmenu', e => { if (drawing) e.preventDefault(); });
     el.addEventListener('dragover', e => { if (placing) { e.preventDefault(); moveGhost(e); } });
-    el.addEventListener('drop', e => { e.preventDefault(); if (!placing) return; const p = floorPoint(e), t = placing; cancelPlacing(); if (p) placeAt(t, p); });
+    el.addEventListener('drop', e => { e.preventDefault(); if (!placing) return; const p = floorPoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); });
     addEventListener('keydown', e => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
       if (drawing && e.key === 'Enter') { finishDrawing(); return; }

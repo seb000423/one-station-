@@ -58,6 +58,63 @@
   }
   const inside = (pt, s) => hits(pt, pt, s);
 
+  /* ---------- placement footprints: objects may not overlap each other's size or work area ---------- */
+  // solid footprint of an object (rect or circle in world metres), or null when it can share space
+  // (AMRs, workers, routes, ordinary zones). Robots occupy their whole reach circle (work area).
+  function footprint(o) {
+    const p = P(o);
+    switch (o.type) {
+      case 'station': { const [cx, cz] = local2world(o, 0, -0.275); return Object.assign(rect(o, CELL_FOOT[0], CELL_FOOT[1]), { cx, cz }); }
+      case 'robot': return { kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: p.reach };
+      case 'conveyor': return rect(o, p.length, p.width + 0.1);
+      case 'rack': return rect(o, p.bays * p.bayWidth, p.depth);
+      case 'column': return rect(o, p.w, p.d);
+      case 'wall': return rect(o, p.length, p.thickness);
+      case 'stairs': return rect(o, p.width, p.run);
+      case 'door': return rect(o, p.width + 0.16, p.thickness);
+      case 'charger': return rect(o, p.width, 0.25);
+      case 'walkway': return rect(o, p.length, p.width);
+      case 'zone': return p.kind === 'keepout' ? rect(o, p.w, p.d) : null;
+      default: return null;
+    }
+  }
+  const corners = s => { const c = Math.cos(s.rot), sn = Math.sin(s.rot); return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [s.cx + c * a * s.hw + sn * b * s.hd, s.cz - sn * a * s.hw + c * b * s.hd]); };
+  function overlap(a, b, eps = 0.01) {
+    if (a.kind === 'circle' && b.kind === 'circle') return Math.hypot(a.cx - b.cx, a.cz - b.cz) < a.r + b.r - eps;
+    if (a.kind === 'circle' || b.kind === 'circle') {
+      const c = a.kind === 'circle' ? a : b, r = a.kind === 'circle' ? b : a;
+      const dx = c.cx - r.cx, dz = c.cz - r.cz, co = Math.cos(r.rot), sn = Math.sin(r.rot), lx = co * dx - sn * dz, lz = sn * dx + co * dz;
+      const qx = Math.max(-r.hw, Math.min(r.hw, lx)), qz = Math.max(-r.hd, Math.min(r.hd, lz));
+      return Math.hypot(lx - qx, lz - qz) < c.r - eps;
+    }
+    // separating axis test on the two rectangles' edge normals
+    const A = corners(a), B = corners(b);
+    for (const R of [a, b]) for (const ang of [R.rot, R.rot + Math.PI / 2]) {
+      const ax = [Math.cos(ang), -Math.sin(ang)], pr = pts => pts.map(([x, z]) => x * ax[0] + z * ax[1]);
+      const pa = pr(A), pb = pr(B);
+      if (Math.max(...pa) <= Math.min(...pb) + eps || Math.max(...pb) <= Math.min(...pa) + eps) return false;
+    }
+    return true;
+  }
+  // which objects would o overlap (by name); walkways only clash with equipment, not with zones
+  function collisions(doc, o) {
+    const s = footprint(o); if (!s) return [];
+    const out = [];
+    for (const q of doc.objects) {
+      if (q.id === o.id) continue;
+      const t = footprint(q); if (!t) continue;
+      if ((o.type === 'walkway' && q.type === 'zone') || (q.type === 'walkway' && o.type === 'zone')) continue;
+      if (overlap(s, t)) out.push(q.name);
+    }
+    return out;
+  }
+  // the footprint must stay inside the factory floor
+  function outside(doc, o) {
+    const s = footprint(o) || { kind: 'circle', cx: o.x, cz: o.z, r: 0.3 }, W = doc.factory.width / 2, D = doc.factory.depth / 2;
+    const pts = s.kind === 'circle' ? [[s.cx - s.r, s.cz - s.r], [s.cx + s.r, s.cz + s.r]] : corners(s);
+    return pts.some(([x, z]) => x < -W - 1e-6 || x > W + 1e-6 || z < -D - 1e-6 || z > D + 1e-6);
+  }
+
   /* ---------- route graph ---------- */
   function graph(doc) {
     const nodes = [], edges = [], ko = keepouts(doc), ww = walkways(doc);
@@ -197,5 +254,5 @@
     return out;
   }
 
-  window.FactoryMotion = { graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
+  window.FactoryMotion = { footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
 })();
