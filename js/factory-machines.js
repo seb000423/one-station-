@@ -1,6 +1,7 @@
 // General manufacturing equipment for the factory builder (console 1) and the factory export, registered
 // into js/factory-elements.js: two-level conveyor (pallet loop with end lifts), press, injection moulding
-// machine, machining centre, tunnel washer and gantry transfer (이재기). Each is built from its parameters
+// machine, machining centre, tunnel washer, gantry transfer (이재기), vacuum brazing furnace, welding cell
+// and helium leak tester. Each is built from its parameters
 // in metres (local +X = length / flow direction) and has a repeating cycle: animate(g, p, t) poses it in
 // console 1, drives() records the same motion for console 2 (linear axes in mm, rotations in degrees, as
 // deltas from the pose at t = 0). Travelling items (pallets, washer parts) are shown in console 1 only.
@@ -294,7 +295,133 @@
     cycle: p => Math.max(3, p.cycle)
   };
 
-  Object.assign(FE.TYPES, { conveyor2, press, injection, machining, washer, transfer });
-  FE.WORK_AREA.push('conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer');
-  FE.MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer'];
+  /* ---------- vacuum brazing furnace: door opens, the charge cart rolls in, heat cycle, cart out ---------- */
+  function fuPose(p, t) {
+    const u = phase(t, Math.max(20, p.cycle));
+    const door = u < 0.05 ? seg(u, 0, 0.05) : u < 0.14 ? 1 : u < 0.19 ? 1 - seg(u, 0.14, 0.19) : u < 0.84 ? 0 : u < 0.89 ? seg(u, 0.84, 0.89) : u < 0.97 ? 1 : 1 - seg(u, 0.97, 1);
+    const cart = u < 0.05 ? 0 : u < 0.14 ? seg(u, 0.05, 0.14) : u < 0.89 ? 1 : u < 0.96 ? 1 - seg(u, 0.89, 0.96) : 0;
+    const heat = u >= 0.19 && u < 0.84 ? Math.sin(Math.PI * (u - 0.19) / 0.65) : 0;
+    return { door, cart, heat };
+  }
+  const furnace = {
+    label: '진공 브레이징로', group: 'equipment',
+    // horizontal front-loading vacuum furnace; cycle compressed (real brazing runs take hours); temp is the label only
+    defaults: () => ({ width: 3.0, depth: 3.2, height: 3.0, cycle: 120, temp: 1100 }),
+    build: (g, p) => {
+      const W = p.width, D = p.depth, R = Math.min(W, p.height) * 0.42, cy = R + 0.45;
+      for (const s of [-1, 1]) box(g, 'FU_Saddle', 0.3, cy - 0.2, D * 0.7, C.dark, s * R * 0.6, (cy - 0.2) / 2, 0);
+      const ves = cyl(g, 'FU_Vessel', R, D, C.bodyLight, 0, cy, 0, 'z'); ves.children[0].material = mat(0xdfe5ea, { metalness: 0.5, roughness: 0.35 });
+      cyl(g, 'FU_BackCap', R * 0.96, 0.12, C.steel, 0, cy, -D / 2 - 0.06, 'z');
+      const glow = cyl(g, 'FU_Hot', R * 0.8, 0.02, mat(0xff6a00, { emissive: 0xff5a00, emissiveIntensity: 0, transparent: true, opacity: 0, depthWrite: false }), 0, cy, D / 2 + 0.005, 'z'); glow.children[0].castShadow = false;
+      // door: hinged at the left of the opening
+      const hinge = grp(g, 'FU_Door', -R, cy, D / 2 + 0.08);
+      cyl(hinge, 'FU_DoorDisc', R, 0.16, C.steel, R, 0, 0, 'z'); box(hinge, 'FU_DoorClamp', 0.2, 0.5, 0.2, C.dark, 2 * R - 0.05, 0, 0.05);
+      // loading rails and the cart with a basket of cores
+      for (const s of [-1, 1]) box(g, 'FU_Rail', 0.06, 0.06, 1.9, C.steel, s * 0.45, 0.43, D / 2 + 1.0);
+      box(g, 'FU_RailStand', 1.1, 0.4, 0.2, C.dark, 0, 0.2, D / 2 + 1.85);
+      const cart = grp(g, 'FU_Cart', 0, 0, D / 2 + 1.1);
+      box(cart, 'FU_CartFrame', 1.0, 0.08, 1.4, C.dark, 0, 0.5, 0);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) box(cart, 'FU_Core', 0.26, 0.42, 0.55, C.steel, -0.33 + i * 0.33, 0.76, -0.32 + j * 0.64);
+      box(g, 'FU_Pump', 0.9, 1.1, 0.9, C.body, W / 2 + 0.1, 0.55, -D / 2 + 0.5);
+      box(g, 'FU_Cabinet', 0.6, 1.9, 0.5, C.bodyLight, -W / 2 - 0.1, 0.95, -D / 2 + 0.4);
+      panel(g, W / 2 + 0.2, 1.3, D / 2 - 0.2, -Math.PI / 6);
+      lampTower(g, -W / 2 - 0.1, 1.9, -D / 2 + 0.4);
+      titled(g, `진공 브레이징로 ${p.temp}°C`, 2.6, D / 2 + 2.3);
+      furnace.animate(g, p, 0);
+    },
+    animate: (g, p, t) => {
+      const q = fuPose(p, t), D = p.depth, n = k => g.getObjectByName(k);
+      const d = n('FU_Door'); if (d) d.rotation.y = q.door * Math.PI * 0.55;
+      const c = n('FU_Cart'); if (c) c.position.z = D / 2 + 1.1 - q.cart * (D / 2 + 1.0);
+      const h = n('FU_Hot'); if (h) { const m = h.children[0].material; m.opacity = q.heat * 0.9; m.emissiveIntensity = q.heat * 1.5; }
+    },
+    drives: (g, p, frames, spf) => record(g, frames, spf, [['FU_Door', 'RotationY', true, t => fuPose(p, t).door * Math.PI * 0.55], ['FU_Cart', 'LinearZ', false, t => -fuPose(p, t).cart * (p.depth / 2 + 1.0)]]),
+    footprint: p => [p.width + 1.4, p.depth + 2.4],
+    cycle: p => Math.max(20, p.cycle)
+  };
+
+  /* ---------- welding cell: a robot welds the part on a turning positioner behind curtains ---------- */
+  function wePose(p, t) {
+    const u = phase(t, Math.max(10, p.cycle)), weld = u >= 0.15 && u < 0.85, w = weld ? (u - 0.15) / 0.7 : 0;
+    const j1 = weld ? 0.25 * Math.sin(w * 2 * Math.PI * 3) : u < 0.15 ? -0.6 * (1 - seg(u, 0, 0.15)) : -0.6 * seg(u, 0.85, 1);
+    return { weld, pos: weld ? w * 2 * Math.PI : 0, j1, j2: weld ? -0.15 + 0.08 * Math.sin(w * Math.PI * 10) : -0.45 };
+  }
+  const welder = {
+    label: '용접 셀', group: 'equipment',
+    defaults: () => ({ width: 3.0, depth: 3.0, cycle: 60 }),
+    build: (g, p) => {
+      const W = p.width, D = p.depth, H = 2.2;
+      box(g, 'WE_Floor', W, 0.04, D, C.dark, 0, 0.02, 0).castShadow = false;
+      for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(g, 'WE_Post', 0.06, H, 0.06, C.yellow, x * W / 2, H / 2, z * D / 2);
+      const curtain = mat(0xe8a019, { transparent: true, opacity: 0.35, depthWrite: false });
+      box(g, 'WE_Curtain', W, H - 0.1, 0.01, curtain, 0, H / 2, -D / 2).castShadow = false;
+      for (const s of [-1, 1]) box(g, 'WE_Curtain', 0.01, H - 0.1, D, curtain, s * W / 2, H / 2, 0).castShadow = false;
+      box(g, 'WE_CurtainFront', W * 0.45, H - 0.1, 0.01, curtain, -W * 0.27, H / 2, D / 2).castShadow = false;
+      // positioner with the cooler housing
+      box(g, 'WE_PosBase', 0.7, 0.75, 0.7, C.body, 0.4, 0.375, 0);
+      const pos = grp(g, 'WE_Positioner', 0.4, 0.8, 0); cyl(pos, 'WE_Table', 0.4, 0.06, C.steel, 0, 0, 0);
+      box(pos, 'WE_Housing', 0.25, 0.25, 0.6, C.part, 0, 0.16, 0); for (const s of [-1, 1]) box(pos, 'WE_Flange', 0.4, 0.4, 0.04, C.steel, 0, 0.18, s * 0.3);
+      // robot with torch
+      box(g, 'WE_RobotBase', 0.4, 0.5, 0.4, C.dark, -0.7, 0.25, 0);
+      const j1 = grp(g, 'WE_J1', -0.7, 0.5, 0); cyl(j1, 'WE_Turret', 0.15, 0.2, M.robot, 0, 0.1, 0);
+      const j2 = grp(j1, 'WE_J2', 0, 0.3, 0); box(j2, 'WE_Arm', 0.9, 0.12, 0.12, M.robot, 0.45, 0, 0);
+      const tip = grp(j2, 'WE_Tip', 0.9, 0, 0); box(tip, 'WE_Torch', 0.05, 0.3, 0.05, C.dark, 0, -0.15, 0);
+      const spark = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat(0xfff2a8, { emissive: 0xffe066, emissiveIntensity: 2 })); spark.name = 'WE_Spark'; spark.position.y = -0.32; tip.add(spark);
+      box(g, 'WE_Source', 0.5, 0.8, 0.6, C.body, -W / 2 + 0.35, 0.4, -D / 2 + 0.4);
+      panel(g, W / 2 + 0.15, 1.2, D / 2 - 0.3, -Math.PI / 4);
+      lampTower(g, W / 2 - 0.05, H, -D / 2 + 0.05);
+      titled(g, '용접 셀', 1.8, D / 2 + 0.7);
+      welder.animate(g, p, 0);
+    },
+    animate: (g, p, t) => {
+      const q = wePose(p, t), n = k => g.getObjectByName(k);
+      const pos = n('WE_Positioner'); if (pos) pos.rotation.y = q.pos;
+      const j1 = n('WE_J1'), j2 = n('WE_J2'); if (j1) j1.rotation.y = q.j1; if (j2) j2.rotation.z = q.j2;
+      const sp = n('WE_Spark'); if (sp) { sp.visible = q.weld && Math.sin(t * 37) > -0.3; sp.scale.setScalar(0.7 + 0.5 * Math.abs(Math.sin(t * 23))); }
+    },
+    drives: (g, p, frames, spf) => record(g, frames, spf, [['WE_Positioner', 'RotationY', true, t => wePose(p, t).pos], ['WE_J1', 'RotationY', true, t => wePose(p, t).j1], ['WE_J2', 'RotationZ', true, t => wePose(p, t).j2]]),
+    footprint: p => [p.width + 0.6, p.depth + 0.6],
+    cycle: p => Math.max(10, p.cycle)
+  };
+
+  /* ---------- helium leak tester: the bell comes down over the part, test, result lamp ---------- */
+  function ltPose(p, t) {
+    const T = Math.max(10, p.cycle), u = phase(t, T), k = Math.floor(t / T);
+    const bell = u < 0.12 ? seg(u, 0, 0.12) : u < 0.8 ? 1 : u < 0.92 ? 1 - seg(u, 0.8, 0.92) : 0;
+    const ng = ((Math.abs(k) * 2654435761) % 1000) / 10 < p.ng; // deterministic: about ng % of the cycles fail
+    return { bell, testing: u >= 0.12 && u < 0.8, result: u >= 0.8 ? (ng ? 'ng' : 'ok') : '' };
+  }
+  const leaktest = {
+    label: '리크 테스터', group: 'equipment',
+    // ng: share of parts failing (%) — shown by the result lamp
+    defaults: () => ({ width: 2.0, depth: 1.6, height: 2.2, cycle: 40, ng: 5 }),
+    build: (g, p) => {
+      const W = p.width, D = p.depth, H = p.height;
+      box(g, 'LT_Base', W, 0.9, D, C.bodyLight, 0, 0.45, 0);
+      box(g, 'LT_Fixture', 0.7, 0.08, 0.5, C.dark, 0, 0.94, 0.05);
+      box(g, 'LT_Part', 0.3, 0.25, 0.45, C.part, 0, 1.105, 0.05);
+      for (const s of [-1, 1]) box(g, 'LT_Column', 0.12, H - 0.9, 0.12, C.body, s * 0.55, 0.9 + (H - 0.9) / 2, -0.25);
+      box(g, 'LT_Top', 1.25, 0.15, 0.3, C.body, 0, H, -0.25);
+      const bell = grp(g, 'LT_Bell', 0, 0, 0); box(bell, 'LT_Chamber', 0.75, 0.55, 0.62, mat(0x9aa6b2, { metalness: 0.6, roughness: 0.35, transparent: true, opacity: 0.85 }), 0, 1.6, 0.05); box(bell, 'LT_Cylinder', 0.08, 0.5, 0.08, C.steel, 0, 2.0, 0.05);
+      for (let i = 0; i < 2; i++) cyl(g, 'LT_HeBottle', 0.11, 1.3, mat(0x7a8b99, { metalness: 0.5 }), W / 2 + 0.2, 0.65, -D / 2 + 0.2 + i * 0.28);
+      box(g, 'LT_Detector', 0.45, 0.5, 0.45, C.body, -W / 2 + 0.3, 1.15, -D / 2 + 0.3);
+      [['LT_LampOK', 0x2bb673, -0.18], ['LT_LampNG', 0xe5484d, 0], ['LT_LampRun', 0xe8a019, 0.18]].forEach(([nm, col, x]) => cyl(g, nm, 0.06, 0.08, mat(col, { emissive: col, emissiveIntensity: 0 }), x, H + 0.15, -0.25));
+      panel(g, W / 2 - 0.25, 1.25, D / 2 + 0.05, 0);
+      titled(g, '헬륨 리크 테스트', 2.0, D / 2 + 0.7);
+      leaktest.animate(g, p, 0);
+    },
+    animate: (g, p, t) => {
+      const q = ltPose(p, t), n = k => g.getObjectByName(k);
+      const b = n('LT_Bell'); if (b) b.position.y = -0.33 * q.bell;
+      const lamp = (k, on) => { const l = n(k); if (l) l.children[0].material.emissiveIntensity = on ? 1.6 : 0; };
+      lamp('LT_LampRun', q.testing && Math.sin(t * 8) > 0); lamp('LT_LampOK', q.result === 'ok'); lamp('LT_LampNG', q.result === 'ng');
+    },
+    drives: (g, p, frames, spf) => record(g, frames, spf, [['LT_Bell', 'LinearY', false, t => -0.33 * ltPose(p, t).bell]]),
+    footprint: p => [p.width + 0.7, p.depth + 0.8],
+    cycle: p => Math.max(10, p.cycle)
+  };
+
+  Object.assign(FE.TYPES, { conveyor2, press, injection, machining, washer, transfer, furnace, welder, leaktest });
+  FE.MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest'];
+  FE.WORK_AREA.push(...FE.MACHINES);
 })();
