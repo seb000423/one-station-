@@ -6,7 +6,8 @@
 // In console 1 every model mesh becomes one InstancedMesh per group (hundreds of conveyors stay a few dozen draw
 // calls); the factory export (console 2) gets plain meshes instead, because three r147's GLTFExporter does not write
 // instancing. Robot arms in robot cells stay real clones so they keep their idle sway. The demo layouts
-// (assets/layouts/) are built from these groups by tools/unity-demo-layout.py.
+// (assets/layouts/) are built from these groups by tools/factory-warehouse-layout.py. Single belt models can also carry
+// moving products (params.flow), and the builder's AMRs, workers and doors get Asset Store models (end of file).
 (function () {
   const FE = window.FactoryElements, FU = window.FactoryUnity, T = FE && FE.TYPES.ufmodel;
   if (!T || !FU || !window.FactoryAssets) return;
@@ -104,9 +105,64 @@
     return p._ext;
   }
 
-  T.build = (g, p) => (p.items && p.items.length ? buildGroup(g, p) : build(g, p));
-  T.animate = (g, p, t) => (p.items ? animateGroup(g, p, t) : animate(g, p, t));
-  T.drives = (g, p, frames, spf) => (p.items ? [] : drives(g, p, frames, spf));
+  // a belt model with params.flow = { speed m/s, pitch m, item: catalog key }: items ride its local Z axis on
+  // the belt top, entering at -Z and leaving at +Z (dir -1 reverses), evenly spaced, forever
+  const flowLen = p => FU.CATALOG[p.model].size[2] * Math.max(0.1, p.scale || 1);
+  const flowTop = p => FU.CATALOG[p.model].size[1] * Math.max(0.1, p.scale || 1);
+  const flowCount = p => Math.max(1, Math.floor(flowLen(p) / Math.max(0.3, p.flow.pitch || 1.2)));
+  const flowZ = (p, k, t) => { const L = flowLen(p), n = flowCount(p), u = ((t * (p.flow.speed || 0.3) / L + k / n) % 1 + 1) % 1; return (u - 0.5) * L * (p.flow.dir === -1 ? -1 : 1); };
+  function buildFlow(g, p) {
+    const key = p.flow.item || 'product', c = FU.CATALOG[key]; if (!c) return;
+    const lane = new THREE.Group(); lane.name = 'UF_Flow'; g.add(lane);
+    for (let k = 0; k < flowCount(p); k++) {
+      const holder = new THREE.Group(); holder.name = 'UF_Flow_' + (k + 1); holder.position.y = flowTop(p) + (p.flow.lift || 0); lane.add(holder);
+      const m = A.get(c.parts[0][0]); if (m) holder.add(A.placed(m, 'UF_Flow_Item')); else A.load(c.parts[0][0]).catch(() => {});
+    }
+    animateFlow(g, p, 0);
+  }
+  function animateFlow(g, p, t) { const lane = g.getObjectByName('UF_Flow'); if (lane) lane.children.forEach((h, k) => { h.position.z = flowZ(p, k, t); }); }
+  // console 2: each item's Z travel (mm) from its start, a LinearZ drive per item
+  const flowDrives = (g, p, frames, spf) => { const lane = g.getObjectByName('UF_Flow'); return lane ? lane.children.map((h, k) => {
+    const z0 = flowZ(p, k, 0), series = new Array(frames); for (let f = 0; f < frames; f++) series[f] = Math.round((flowZ(p, k, f * spf) - z0) * 10000) / 10;
+    return { node: h, dir: 'LinearZ', rev: false, series };
+  }) : []; };
+
+  // the factory export (console 2) draws single models through the group path too, so they get the LOD shapes
+  const hasLod = key => FU.CATALOG[key] && FU.CATALOG[key].parts.some(([id]) => A.MODELS[id + LOD]);
+  T.build = (g, p) => {
+    if (p.items && p.items.length) return buildGroup(g, p);
+    if (FE.inView && !FE.inView() && hasLod(p.model)) buildGroup(g, Object.assign({}, p, { items: [[p.model, 0, 0, 0, 0]] })); else build(g, p);
+    if (p.flow && FU.CATALOG[p.model]) buildFlow(g, p);
+  };
+  T.animate = (g, p, t) => { if (p.items) return animateGroup(g, p, t); animate(g, p, t); if (p.flow) animateFlow(g, p, t); };
+  T.drives = (g, p, frames, spf) => (p.items ? [] : drives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : []));
   T.footprint = p => (p.items && p.items.length ? extent(p) : footprint(p));
-  const cycle = T.cycle; T.cycle = p => (p.items ? 0 : cycle(p));
+  const cycle = T.cycle; T.cycle = p => (p.items ? 0 : p.flow ? Math.max(cycle(p), flowLen(p) / (p.flow.speed || 0.3)) : cycle(p));
+
+  // Asset Store vehicles and people for the builder's movers: an AMR with params.model 'uw_forklift' or
+  // 'uw_palletrobot' and every worker use the warehouse models (front turned to local +X, the travel
+  // direction); AMR_Load (a pallet with a carton) shows while it carries. Until a model loads the
+  // procedural shape stands in. A door with params.open has no leaf, so movers visibly pass through it.
+  const TY = FE.TYPES, LOAD = { uw_forklift: [1.55, 0.18], uw_palletrobot: [0, 0.14] }; // load x, y in the AMR frame
+  const front = (m, name) => { const turn = new THREE.Group(); turn.add(m); m.rotation.y = Math.PI / 2; return A.placed(turn, name); };
+  const amrBuild = TY.amr.build;
+  TY.amr.build = (g, p) => {
+    const m = LOAD[p.model] && A.get(p.model);
+    if (!m) { if (LOAD[p.model]) A.load(p.model).catch(() => {}); return amrBuild(g, Object.assign({}, p, { model: LOAD[p.model] ? 'simple' : p.model })); }
+    g.add(front(m, 'AMR_Model'));
+    const load = new THREE.Group(); load.name = 'AMR_Load'; const [lx, ly] = LOAD[p.model]; load.position.set(lx, ly, 0); g.add(load);
+    const pal = A.get('uw_pallet'), box = A.get('uw_cardboard_a1');
+    if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {});
+    if (box) { const b = A.placed(box, 'AMR_Carton'); b.position.y = 0.13; load.add(b); } else A.load('uw_cardboard_a1').catch(() => {});
+  };
+  const workerBuild = TY.worker.build;
+  TY.worker.build = (g, p, f) => {
+    const m = A.get('uw_worker');
+    workerBuild(g, p, f); // ring and the ⚠ warning stay; the box figure goes once the model is here
+    if (!m) return;
+    g.children.filter(o => /^Worker_(Leg|Body|Head|Helmet)$/.test(o.name)).forEach(o => g.remove(o));
+    g.add(front(m, 'Worker_Model'));
+  };
+  const doorBuild = TY.door.build;
+  TY.door.build = (g, p, f) => { doorBuild(g, p, f); if (p.open) { const leaf = g.getObjectByName('Door_Leaf'); if (leaf) g.remove(leaf); } };
 })();

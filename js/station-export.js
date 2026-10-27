@@ -304,7 +304,7 @@
       DrivesRecording_compact: { fixedDeltaTime: DT, numberFrames: frames, driveCount: all.length, drives: all.map((d, id) => ({ id, path: pathOf(d.node) })), sequences: [{ name: 'Cycle', startFrame: 0, endFrame: frames - 1 }], positions }
     } };
     root.updateMatrixWorld(true);
-    const glb = await new Promise((ok, fail) => new THREE.GLTFExporter().parse(root, ok, fail, { binary: true, onlyVisible: true }));
+    const glb = await new Promise((ok, fail) => new THREE.GLTFExporter().parse(root, ok, fail, { binary: true, onlyVisible: true, maxTextureSize: 512 }));
     return { glb, frames, drives: all.length };
   }
 
