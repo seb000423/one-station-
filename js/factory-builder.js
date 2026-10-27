@@ -25,7 +25,7 @@
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소'],
-      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반'], ['ufmodel', '설비 모델 (Unity Factory)']]],
+      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
   const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
@@ -38,11 +38,12 @@
   const FM = () => window.FactoryMotion;
   const toLetters = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
   const fromLetters = s => [...s].reduce((a, c) => a * 26 + c.charCodeAt(0) - 64, 0) - 1;
-  function nextName(type) {
-    const base = TYPE_LABEL[type], re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (LETTERED.includes(type) ? ' ([A-Z]+)$' : ' (\\d+)$'));
+  function nextName(type, label) {
+    const base = label || TYPE_LABEL[type], sep = /\d$/.test(base) ? '-' : ' '; // '리크 테스트 작업대 1-2', not '… 1 2'
+    const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (LETTERED.includes(type) ? ' ([A-Z]+)$' : sep + '(\\d+)$'));
     let hi = -1;
     for (const o of doc.objects) { if (o.type !== type) continue; const m = re.exec(o.name); if (m) hi = Math.max(hi, LETTERED.includes(type) ? fromLetters(m[1]) : +m[1] - 1); }
-    return `${base} ${LETTERED.includes(type) ? toLetters(hi + 1) : hi + 2}`;
+    return LETTERED.includes(type) ? `${base} ${toLetters(hi + 1)}` : base + sep + (hi + 2);
   }
   // walkways and zones show their name on the floor
   const syncLabel = o => { if (LETTERED.includes(o.type)) { o.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); o.params.label = o.name; } };
@@ -360,17 +361,20 @@
   }
   function cancelDrawing() { if (!drawing) return; if (drawing.preview) S().scene.remove(drawing.preview); drawing = null; placing = null; }
 
-  function startPlacing(type) {
-    if (PATHS.includes(type)) return startDrawing(null, type);
+  // a palette entry is a type, or 'ufmodel:<catalog key>' for a model tile (type + model preset)
+  const splitPlace = s => { const [type, model] = s.split(':'); return { type, model }; };
+  function startPlacing(place) {
+    if (PATHS.includes(place)) return startDrawing(null, place);
+    const { type, model } = splitPlace(place);
     if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
-    cancelPlacing(); placing = type;
+    cancelPlacing(); placing = place;
     ghost = type === 'station'
       ? new THREE.Mesh(new THREE.BoxGeometry(CELL_FOOT[0], 2, CELL_FOOT[1]), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.18, depthWrite: false }))
-      : window.FactoryElements.build({ type, x: 0, z: 0 }, doc.factory);
+      : window.FactoryElements.build({ type, x: 0, z: 0, params: candidate(place, { x: 0, z: 0 }).params }, doc.factory);
     if (type === 'station') ghost.position.y = 1;
     ghost.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = Math.min(0.5, o.material.opacity); o.material.depthWrite = false; o.raycast = () => {}; } });
     ghost.visible = false; S().scene.add(ghost);
-    note(`${TYPE_LABEL[type]}: 바닥을 클릭해 놓습니다 (Esc 취소)`);
+    note(`${modelLabel(type, model)}: 바닥을 클릭해 놓습니다 (Esc 취소)`);
   }
   function cancelPlacing() { cancelDrawing(); if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
   function moveGhost(e) {
@@ -381,15 +385,18 @@
     if (bad !== ghost.userData.bad) { ghost.userData.bad = bad; ghost.traverse(o => { if (o.isMesh) { if (!o.userData.c0) o.userData.c0 = o.material.color.clone(); o.material.color.copy(bad ? new THREE.Color(0xff3b30) : o.userData.c0); } }); }
     if (bad) note(`여기에는 놓을 수 없습니다: ${why}`, true);
   }
-  const candidate = (type, p) => {
-    const c = { id: '__ghost', type, name: TYPE_LABEL[type], x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
+  const modelLabel = (type, model) => (model && window.FactoryUnity && FactoryUnity.CATALOG[model] ? FactoryUnity.CATALOG[model].label : TYPE_LABEL[type]);
+  const candidate = (place, p) => {
+    const { type, model } = splitPlace(place);
+    const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
+    if (model) c.params.model = model;
     if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
     return c;
   };
-  function placeAt(type, p) {
-    const cand = candidate(type, p), why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
+  function placeAt(place, p) {
+    const cand = candidate(place, p), type = cand.type, why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
     pushUndo();
-    const o = { id: newId(), type, name: nextName(type), x: cand.x, z: cand.z, rot: cand.rot, params: cand.params };
+    const o = { id: newId(), type, name: nextName(type, cand.model && cand.name), x: cand.x, z: cand.z, rot: cand.rot, params: cand.params };
     syncLabel(o); if (!cand.snapped) clampToFactory(o); doc.objects.push(o);
     if (type !== 'station') buildView(o);
     select(o.id); if (type === 'station') placeObjectGroup(o);
@@ -543,7 +550,14 @@
     ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
-  const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]]];
+  // 모델 tab: every equipment model (js/factory-unity.js CATALOG) as its own thumbnail tile, grouped, searchable
+  function modelTiles() {
+    const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
+    const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    return '<input class="find" type="search" placeholder="모델 검색">' + U.GROUPS.map(g => `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${Object.entries(U.CATALOG).filter(([, c]) => c.group === g).map(([k, c]) =>
+      `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} m: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`).join('')}</div></div>`).join('');
+  }
+  const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]], ['models', '모델', null]];
   const css = `
   .fb-on .view .hud.tr{display:none}
   .fb-on .view .hud.tl{left:262px;top:var(--fbbar,58px)}
@@ -579,12 +593,19 @@
   #fbPanel .fbBody{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
   #fbPanel button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:5px 8px;border-radius:3px;cursor:pointer;font:inherit;font-size:11.5px;line-height:1.4}
   #fbPanel button:hover{border-color:var(--mute)}
-  #fbPanel .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
+  #fbPanel .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
   #fbPanel .tabs button{padding:6px 2px;font-size:11px;line-height:1.35;white-space:nowrap}
   #fbPanel .tabs button.on{border-color:var(--accent);color:var(--accent);background:rgba(0,232,208,.06)}
   #fbPanel .pal{display:grid;grid-template-columns:1fr 1fr;gap:4px}
   #fbPanel .pal button{display:flex;align-items:center;gap:6px;padding:7px 8px;text-align:left;cursor:grab;line-height:1.4}
   #fbPanel .pal button svg{flex:none;color:var(--accent)}
+  #fbPanel .pal.models{display:block;max-height:52vh;overflow-y:auto;padding-right:2px}
+  #fbPanel .pal .find{box-sizing:border-box;width:100%;height:26px;margin-bottom:6px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 8px;border-radius:3px;font:inherit;font-size:12px}
+  #fbPanel .pal .mgrp h4{margin:6px 0 4px;font-family:var(--mono);font-size:10px;font-weight:400;letter-spacing:.14em;color:var(--dim)}
+  #fbPanel .pal .tiles{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  #fbPanel .pal button.tile{flex-direction:column;align-items:stretch;gap:3px;padding:4px;text-align:center;font-size:11px;line-height:1.25}
+  #fbPanel .pal .tile img{width:100%;aspect-ratio:1;object-fit:contain;background:rgba(255,255,255,.04);border-radius:2px}
+  #fbPanel .pal [hidden]{display:none}
   #fbPanel details{border-top:1px solid var(--line);padding-top:6px;min-height:0;display:flex;flex-direction:column}
   #fbPanel details[open].grow{flex:1}
   #fbPanel summary{cursor:pointer;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);line-height:1.8;list-style:none;display:flex;justify-content:space-between}
@@ -686,7 +707,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example1" title="FANUC CRX 로봇 3대가 컨베이어에서 집어 옮기고, AGV 2대가 단방향 루프로 출하 대기 → 보관 → 출하장을 오가는 예시입니다 (Ctrl+Z로 되돌리기)">Example 1</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -720,7 +741,10 @@
     const showTab = k => {
       tab = k; panel.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === k));
       const pal = panel.querySelector('.pal'), items = TABS.find(t => t[0] === k)[2];
-      pal.innerHTML = items.map(([t, l]) => `<button type="button" draggable="true" data-place="${t}" title="${l}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기">${icon(t)}<span>${l}</span></button>`).join('');
+      pal.classList.toggle('models', !items);
+      pal.innerHTML = items ? items.map(([t, l]) => `<button type="button" draggable="true" data-place="${t}" title="${l}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기">${icon(t)}<span>${l}</span></button>`).join('') : modelTiles();
+      const find = pal.querySelector('.find');
+      if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); pal.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); pal.querySelectorAll('.mgrp').forEach(g => { g.hidden = !g.querySelector('.tile:not([hidden])'); }); };
       pal.querySelectorAll('[data-place]').forEach(b => {
         b.addEventListener('click', () => startPlacing(b.dataset.place));
         b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', b.dataset.place); startPlacing(b.dataset.place); });
@@ -734,7 +758,6 @@
     on('[data-t=new]', newFactory);
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
-    on('[data-t=example1]', () => loadSample('example-1.json', 'Example 1'));
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -1099,15 +1122,6 @@
     pushUndo();
     doc = { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(d.objects || []) };
     rebuildAll(); select(null); store();
-  }
-  // example factories (examples/): Example 1 = three FANUC CRX robots picking from a conveyor, two AGVs on a
-  // one-way loop (출하 대기 → 보관 → 출하장), a rack, a walkway with a worker
-  async function loadSample(file, label) {
-    try {
-      const d = await (await fetch('examples/' + file, { cache: 'no-store' })).json();
-      if (playing || clock > 0) simRestart();
-      loadDoc(d); view('all'); note(`${label}을(를) 불러왔습니다 · ▶ 시작으로 시뮬레이션 (Ctrl+Z로 되돌리기)`);
-    } catch (e) { note(`${label}을(를) 불러오지 못했습니다: ` + e.message, true); }
   }
   function docFromLegacy(meta) {
     const m = meta.summary || {}, L = m.layout || {}, p = defaultCellParams();

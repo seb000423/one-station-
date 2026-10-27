@@ -4,7 +4,8 @@
 // otherwise (the caller then builds its procedural fallback). When a model finishes loading the page gets a
 // 'factory-assets-ready' event ({ detail: { id } }) and the builder rebuilds the objects that use it.
 // Models come from the realvirtual WEB library already in this repo (realvirtual/library, AGPL-3.0 like the
-// rest of realvirtual/). To add a model: put the .glb under assets/models/, add an entry to MODELS.
+// rest of realvirtual/). To add a model: put the .glb under assets/models/, add an entry to MODELS. Files may be
+// Draco or meshopt (EXT_meshopt_compression) compressed.
 (function () {
   const LOADERS = 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/';
   const MODELS = {
@@ -24,6 +25,12 @@
     ['uf_arm', 'Arm', '6축 로봇팔'], ['uf_product', 'Product', '가공품 트레이'],
     ['uf_ctrl1', 'Controller_1', '제어반 (대형)'], ['uf_ctrl2', 'Controller_2', '조작반 (램프)'], ['uf_ctrl3', 'Controller_3', '조작반 (램프) B']
   ]) MODELS[id] = { url: UF + file + '.glb', label };
+  // EGR cooler assembly line workstations (converted from the line's CAD, fasteners removed, meshopt compressed)
+  const EGR = 'assets/models/egr-line/';
+  for (const [id, file, label] of [
+    ['egr_st01', 'station-01', '조립 작업대 1'], ['egr_st02', 'station-02', '조립 작업대 2'], ['egr_st03', 'station-03', '리크 테스트 작업대 1'],
+    ['egr_st04', 'station-04', '리크 테스트 작업대 2'], ['egr_st05', 'station-05', '검사 · 포장 작업대'], ['egr_rack', 'rack-sliding', '슬라이딩 부품 랙'], ['egr_pallet', 'pallet', '팔레트']
+  ]) MODELS[id] = { url: EGR + file + '.glb', label };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>
 
@@ -31,9 +38,9 @@
     const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('load failed: ' + src)); document.head.appendChild(s);
   });
   const getLoader = () => loader || (loader = (async () => {
-    await script(LOADERS + 'GLTFLoader.js'); await script(LOADERS + 'DRACOLoader.js');
+    await script(LOADERS + 'GLTFLoader.js'); await script(LOADERS + 'DRACOLoader.js'); await script(LOADERS.replace('loaders/', 'libs/') + 'meshopt_decoder.js');
     const draco = new THREE.DRACOLoader(); draco.setDecoderPath('realvirtual/draco/');
-    const L = new THREE.GLTFLoader(); L.setDRACOLoader(draco); return L;
+    const L = new THREE.GLTFLoader(); L.setDRACOLoader(draco); L.setMeshoptDecoder(window.MeshoptDecoder); return L;
   })());
   function load(id) {
     const m = MODELS[id]; if (!m) return Promise.reject(new Error('unknown model ' + id));
