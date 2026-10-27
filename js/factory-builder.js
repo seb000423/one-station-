@@ -203,13 +203,13 @@
     const floor = shell.getObjectByName('Factory_Floor'); if (floor) floor.visible = false; // console 1 keeps its own floor
     s.scene.add(shell);
     s.floor.geometry.dispose(); s.floor.geometry = new THREE.PlaneGeometry(f.width, f.depth);
-    const size = Math.max(f.width, f.depth), cellM = size > 20 ? 1 : 0.5, gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / cellM)), 0x56606c, 0x47505a); // 1 m cells on large floors
+    const size = Math.max(f.width, f.depth), cellM = size > 20 ? 1 : 0.5, gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / cellM)), 0x45525a, 0x37434b); // 1 m cells on large floors
     s.grid.material.dispose(); s.grid.material = gh.material;
     s.grid.geometry.dispose(); s.grid.geometry = gh.geometry;
     // no distance fog (it darkened the factory when zooming out); a brighter, even space sized to the factory
     s.scene.fog = null;
-    s.scene.background = new THREE.Color(0x343b44);
-    s.floor.material.color.set(0x3a414a); s.floor.material.needsUpdate = true;
+    s.scene.background = new THREE.Color(0x1f2a31);
+    s.floor.material.color.set(0x2b373e); s.floor.material.needsUpdate = true;
     s.renderer.toneMappingExposure = 1.0;
     const M = Math.max(f.width, f.depth, f.height);
     s.camera.far = Math.max(80, M * 8); s.camera.updateProjectionMatrix();
@@ -244,11 +244,11 @@
         if (helper) helper.update(); refreshTransformFields();
         const o = selectedId && byId(selectedId), g = o && !innerSel && groupOf(o.id);
         if (g && o.type === 'conveyor') { const sn = FF().snap(doc, Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); if (sn) { g.position.set(sn.x, 0, sn.z); g.rotation.set(0, sn.rot, 0); if (helper) helper.update(); } snapNote = sn ? sn.text : ''; }
-        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); helper.material.color.set(why ? 0xff3b30 : 0x00e8d0); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
+        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); helper.material.color.set(why ? 0xff3b30 : 0xeec539); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
       });
       s.scene.add(tc);
       proxy = new THREE.Object3D(); proxy.name = 'inner-proxy';
-      const mk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.35, depthTest: false }));
+      const mk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.35, depthTest: false }));
       mk.renderOrder = 10; proxy.add(mk);
     });
   }
@@ -267,7 +267,7 @@
         innerSel = inner; const L = s.layoutParams(); s.CELL.add(proxy); proxy.position.set(...INNER[inner].at(L)); tc.attach(proxy);
       } else tc.attach(g);
       setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate');
-      helper = new THREE.BoxHelper(g, 0x00e8d0); s.scene.add(helper);
+      helper = new THREE.BoxHelper(g, 0xeec539); s.scene.add(helper);
     }
     renderTree(); renderProps();
     const tsel = $('#fbTarget'); if (tsel) { tsel.value = selectedId || ''; viewButtons(); }
@@ -281,7 +281,7 @@
     }
     const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, next = Object.assign({}, o, { x: exact ? g.position.x : r2(g.position.x), z: exact ? g.position.z : r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
     const why = blockedBy(next);
-    if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0x00e8d0); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
+    if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0xeec539); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
     o.x = next.x; o.z = next.z; o.rot = next.rot; placeObjectGroup(o); fitFloor(o);
     store(); if (helper) helper.update(); renderProps(); renderTree();
     if (o.type === 'conveyor') conveyorNote(o, snapNote); snapNote = '';
@@ -372,7 +372,7 @@
     if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
     cancelPlacing(); placing = place;
     ghost = type === 'station'
-      ? new THREE.Mesh(new THREE.BoxGeometry(CELL_FOOT[0], 2, CELL_FOOT[1]), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.18, depthWrite: false }))
+      ? new THREE.Mesh(new THREE.BoxGeometry(CELL_FOOT[0], 2, CELL_FOOT[1]), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.18, depthWrite: false }))
       : window.FactoryElements.build({ type, x: 0, z: 0, params: candidate(place, { x: 0, z: 0 }).params }, doc.factory);
     if (type === 'station') ghost.position.y = 1;
     ghost.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = Math.min(0.5, o.material.opacity); o.material.depthWrite = false; o.raycast = () => {}; } });
@@ -606,7 +606,7 @@
   #fbPanel button:hover{border-color:var(--mute)}
   #fbPanel .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
   #fbPanel .tabs button{padding:6px 2px;font-size:11px;line-height:1.35;white-space:nowrap}
-  #fbPanel .tabs button.on{border-color:var(--accent);color:var(--accent);background:rgba(0,232,208,.06)}
+  #fbPanel .tabs button.on{border-color:var(--accent);color:var(--accent);background:rgba(238,197,57,.06)}
   #fbPanel .pal{display:grid;grid-template-columns:1fr 1fr;gap:4px}
   #fbPanel .pal button{display:flex;align-items:center;gap:6px;padding:7px 8px;text-align:left;cursor:grab;line-height:1.4}
   #fbPanel .pal button svg{flex:none;color:var(--accent)}
@@ -628,7 +628,7 @@
   #fbTree .grp{font-size:10.5px;color:var(--dim);margin:6px 0 2px;font-family:var(--mono);letter-spacing:.1em;line-height:1.6;flex:none}
   #fbTree button{flex:none;display:flex;gap:6px;align-items:center;text-align:left;background:transparent;border:1px solid transparent;padding:5px 8px;min-height:28px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #fbTree button svg{flex:none;color:var(--dim)}
-  #fbTree button.on{border-color:var(--accent);background:rgba(0,232,208,.06)}
+  #fbTree button.on{border-color:var(--accent);background:rgba(238,197,57,.06)}
   #fbTree em{font-style:normal;color:var(--accent);font-size:10px;margin-left:auto}
   #fbSafety{display:grid;gap:3px;font-size:11.5px;line-height:1.6;max-height:120px;overflow:auto;padding:2px 0}
   #fbSafety .ok{color:var(--ok)}
@@ -1331,7 +1331,7 @@
   };
   function updateSafety(M, t, panelToo) {
     const list = FM().safety(doc, M, t), hot = new Set(list.map(w => w.circle.id)), bad = new Set(list.map(w => w.worker.id));
-    for (const c of FM().rangeCircles(doc, M, t)) { const r = ringOf(c.id); if (r) { r.material.color.set(hot.has(c.id) ? 0xff3b30 : (c.moving ? 0x00e8d0 : 0xe8a019)); r.material.opacity = hot.has(c.id) ? 0.9 : 0.45; } }
+    for (const c of FM().rangeCircles(doc, M, t)) { const r = ringOf(c.id); if (r) { r.material.color.set(hot.has(c.id) ? 0xff3b30 : (c.moving ? 0xeec539 : 0xe8a019)); r.material.opacity = hot.has(c.id) ? 0.9 : 0.45; } }
     for (const o of doc.objects) if (o.type === 'worker') {
       const g = views.get(o.id); if (!g) continue;
       const w = g.getObjectByName('Worker_Warning'), r = g.getObjectByName('Worker_Ring');

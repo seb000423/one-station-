@@ -12,8 +12,8 @@
 /* Copied from console.html (console 1) so both consoles look the same. */
 /* Layout: full-bleed 3D viewport left, parameter rail right (POLYTWIN-style console). Single dark look by design. */
 :root{
-  --bg:#0b0d10; --panel:#101317; --panel2:#151a1f; --line:#232930; --fg:#e6e8eb; --mute:#8a929c; --dim:#5a626c;
-  --accent:#00e8d0; --accent-ink:#021a18; --ok:#3ddc84; --ng:#ff4d4f; --warn:#ffb020; --brand:#006282;
+  --bg:#000000; --panel:#0a0a0b; --panel2:#141516; --line:#26282b; --fg:#ececec; --mute:#8f9296; --dim:#5d6064;
+  --accent:#eec539; --accent-ink:#1d1600; --ok:#3ddc84; --ng:#ff4d4f; --warn:#ffb020; --brand:#006282;
   --sans:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   color-scheme:dark;
@@ -89,14 +89,14 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 372px;min-height:0}
 .vcard{text-align:left;background:var(--panel2);border:1px solid var(--line);padding:10px 11px;border-radius:3px;cursor:pointer;display:grid;gap:3px}
 .vcard strong{font-size:13px;font-weight:600}
 .vcard span{font-size:11.5px;color:var(--mute)}
-.vcard.on{border-color:var(--accent);background:#0a1c1b}
+.vcard.on{border-color:var(--accent);background:#1c1708}
 .vcard.on strong{color:var(--accent)}
 .lbl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline;font-size:12.5px;color:var(--fg)}
 .lbl small{font-family:var(--mono);color:var(--mute);font-size:11px}
 .lbl output{font-family:var(--mono);color:var(--accent);font-size:12px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
 .seg button{background:var(--panel2);border:1px solid var(--line);padding:8px 4px;font-size:12px;border-radius:3px;cursor:pointer;white-space:nowrap}
-.seg button.on{border-color:var(--accent);color:var(--accent);background:#0a1c1b;font-weight:600}
+.seg button.on{border-color:var(--accent);color:var(--accent);background:#1c1708;font-weight:600}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
 .seg button:focus-visible,.vcard:focus-visible{outline:1px solid var(--accent)}
 .cellchips{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
@@ -144,9 +144,9 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 .simrow .seg{flex:1}
 .simrow .seg button{padding:5px 0;font-family:var(--mono);font-size:11.5px}
 .actions{display:grid;grid-template-columns:1fr auto;gap:6px}
-#start{background:#0a1716;border:1px solid var(--accent);color:var(--accent);padding:13px;font-weight:700;letter-spacing:.14em;font-size:13px;border-radius:3px;cursor:pointer}
+#start{background:#1c1708;border:1px solid var(--accent);color:var(--accent);padding:13px;font-weight:700;letter-spacing:.14em;font-size:13px;border-radius:3px;cursor:pointer}
 #start:hover{background:var(--accent);color:var(--accent-ink)}
-#start:disabled{opacity:.4;cursor:wait;background:#0a1716;color:var(--accent)}
+#start:disabled{opacity:.4;cursor:wait;background:#1c1708;color:var(--accent)}
 #reset{background:var(--panel2);border:1px solid var(--line);padding:0 16px;border-radius:3px;cursor:pointer;color:var(--mute)}
 #reset:hover{color:var(--fg)}
 .spec{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;margin:0}
@@ -171,15 +171,15 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 <style>
 /* ONE MONITOR shell: the 3D view (realvirtual WEB in a same-origin iframe, its own chrome hidden) fills the
    window; a sparse top bar, floating view / status cards, a data drawer and the shared sim panel sit on top. */
-:root{--bg:#070b11;--navy:#0b1220}
+:root{--navy:#000}
 body{background:var(--navy)}
 .app{display:block;position:relative}
 main{display:block;position:absolute;inset:0}
-.view{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 0%,#14202e 0%,var(--navy) 55%,#060a10 100%)}
+.view{position:absolute;inset:0;background:linear-gradient(180deg,#000 0%,#000 22%,#25323a 62%,#182731 100%)}
 #rv{display:block;width:100%;height:100%;border:0;background:transparent;opacity:0;transition:opacity .5s}
 #rv.ready{opacity:1}
 .top{position:absolute;left:0;right:0;top:0;z-index:9;height:56px;border:0;gap:22px;
-  background:linear-gradient(180deg,rgba(5,8,12,.92) 0%,rgba(5,8,12,.55) 70%,rgba(5,8,12,0) 100%)}
+  background:#000}
 .brand{display:flex;align-items:baseline;gap:8px;color:#fff;text-decoration:none;font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.32em;white-space:nowrap}
 .brand b{color:var(--accent);font-weight:600}
 .brand span{color:var(--dim);font-weight:400;letter-spacing:.12em;font-size:11.5px}
@@ -190,7 +190,7 @@ main{display:block;position:absolute;inset:0}
 .crumbs .live i{width:6px;height:6px;border-radius:50%;background:var(--dim);display:block}
 .crumbs .live.on i{background:var(--ok);box-shadow:0 0 8px var(--ok)}
 .pills{margin-left:auto;display:flex;align-items:center;gap:8px}
-.pill{height:30px;display:inline-flex;align-items:center;padding:0 14px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:rgba(10,14,20,.8);color:var(--fg);font:inherit;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pill{height:30px;display:inline-flex;align-items:center;padding:0 14px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:#000;color:var(--fg);font:inherit;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap}
 .pill:hover{border-color:rgba(255,255,255,.2)}
 .pill.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .pill.primary:hover{filter:brightness(1.08)}
@@ -198,13 +198,13 @@ main{display:block;position:absolute;inset:0}
 .pill.ghost{background:none;border-color:transparent;color:var(--mute)}
 .pill.ghost:hover{color:var(--fg)}
 .pill:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
-.hud.views{top:68px;left:16px;display:flex;align-items:center;gap:2px;padding:4px;background:rgba(7,9,13,.85);border:1px solid rgba(255,255,255,.06);border-radius:5px}
+.hud.views{top:68px;left:16px;display:flex;align-items:center;gap:2px;padding:4px;background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.08);border-radius:5px}
 .hud.views > span{font-size:11.5px;color:var(--mute);padding:0 10px 0 8px}
 .hud.views .chip{background:none;border:1px solid transparent;color:var(--mute);padding:5px 11px;border-radius:3px}
 .hud.views .chip:hover{color:var(--fg)}
 .hud.views .chip.on{border-color:rgba(255,255,255,.75);color:#fff;background:none}
 .view .tl{top:116px;left:16px;width:280px}
-.view .card{background:rgba(7,9,13,.85);border-color:rgba(255,255,255,.06);border-radius:5px}
+.view .card{background:rgba(0,0,0,.88);border-color:rgba(255,255,255,.08);border-radius:5px}
 .view .status{padding:11px 13px;gap:8px}
 #clock{font-size:17px}
 .offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--navy);z-index:8}
@@ -213,7 +213,7 @@ main{display:block;position:absolute;inset:0}
 .offline a{color:var(--accent)}
 .offline button{margin-top:14px;font:inherit;background:var(--accent);color:var(--accent-ink);border:0;padding:8px 16px;font-weight:600;cursor:pointer}
 /* data drawer (was the right column) */
-.side{position:absolute;right:16px;top:64px;bottom:136px;width:372px;z-index:8;border:1px solid rgba(255,255,255,.07);border-radius:6px;background:rgba(9,12,17,.96);
+.side{position:absolute;right:16px;top:64px;bottom:136px;width:372px;z-index:8;border:1px solid rgba(255,255,255,.07);border-radius:6px;background:rgba(0,0,0,.95);
   box-shadow:0 18px 50px rgba(0,0,0,.5);transform:translateX(calc(100% + 24px));transition:transform .25s ease;visibility:hidden}
 .app.data-open .side{transform:none;visibility:visible}
 .side .dhead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 12px 18px;border-bottom:1px solid var(--line)}
@@ -444,12 +444,12 @@ main{display:block;position:absolute;inset:0}
      same-origin iframe gets a stylesheet: only the 3D canvas and its AGPL "Powered by realvirtual WEB"
      line stay, restyled small in the corner (the AGPL notice must remain visible). */
   const SKIN = `
-    html,body{background:#0b1220!important}
+    html,body{background:#000!important}
     #react-root{display:none!important}
     body>*:not(#app):not(#rv-watermark):not(#loading-overlay):not(script):not(style){display:none!important}
     #app>*:not(#rv-viewport){display:none!important}
     #rv-viewport{inset:0!important;left:0!important;right:0!important;top:0!important;bottom:0!important;width:auto!important;height:auto!important}
-    #loading-overlay{background:#0b1220!important}
+    #loading-overlay{background:#000!important}
     #rv-watermark{bottom:10px!important;right:14px!important;padding:2px 6px!important;font-size:10.5px!important;background:transparent!important;color:rgba(255,255,255,.4)!important;letter-spacing:.02em!important}
     #rv-watermark:hover{color:rgba(255,255,255,.85)!important}
     @media (max-width:899px){#rv-watermark{bottom:2px!important;right:4px!important;font-size:8px!important}}`;
@@ -591,8 +591,8 @@ main{display:block;position:absolute;inset:0}
     try {
       if (v.ambientLight) v.ambientLight.intensity = 1.0;
       if (v.dirLight) { v.dirLight.intensity = 2.0; v.dirLight.castShadow = true; }
-      if (v.scene && v.scene.background && v.scene.background.set) v.scene.background.set(0x0e1826);
-      const gm = v.groundMesh && v.groundMesh.material; if (gm && gm.color) { gm.color.set(0x2a3a4c); gm.needsUpdate = true; }
+      if (v.scene && v.scene.background && v.scene.background.set) v.scene.background.set(0x1f2a31);
+      const gm = v.groundMesh && v.groundMesh.material; if (gm && gm.color) { gm.color.set(0x2e3a40); gm.needsUpdate = true; }
       v.__oneStationLights = true; frame.classList.add('ready');
       if (v.markRenderDirty) v.markRenderDirty();
       if (v.markShadowsDirty) v.markShadowsDirty();

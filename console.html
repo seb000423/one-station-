@@ -12,8 +12,8 @@
 <style>
 /* Layout: full-bleed 3D viewport left, parameter rail right (POLYTWIN-style console). Single dark look by design. */
 :root{
-  --bg:#0b0d10; --panel:#101317; --panel2:#151a1f; --line:#232930; --fg:#e6e8eb; --mute:#8a929c; --dim:#5a626c;
-  --accent:#00e8d0; --accent-ink:#021a18; --ok:#3ddc84; --ng:#ff4d4f; --warn:#ffb020; --brand:#006282;
+  --bg:#000000; --panel:#0a0a0b; --panel2:#141516; --line:#26282b; --fg:#ececec; --mute:#8f9296; --dim:#5d6064;
+  --accent:#eec539; --accent-ink:#1d1600; --ok:#3ddc84; --ng:#ff4d4f; --warn:#ffb020; --brand:#006282;
   --sans:"IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   color-scheme:dark;
@@ -89,14 +89,14 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 372px;min-height:0}
 .vcard{text-align:left;background:var(--panel2);border:1px solid var(--line);padding:10px 11px;border-radius:3px;cursor:pointer;display:grid;gap:3px}
 .vcard strong{font-size:13px;font-weight:600}
 .vcard span{font-size:11.5px;color:var(--mute)}
-.vcard.on{border-color:var(--accent);background:#0a1c1b}
+.vcard.on{border-color:var(--accent);background:#1c1708}
 .vcard.on strong{color:var(--accent)}
 .lbl{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline;font-size:12.5px;color:var(--fg)}
 .lbl small{font-family:var(--mono);color:var(--mute);font-size:11px}
 .lbl output{font-family:var(--mono);color:var(--accent);font-size:12px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
 .seg button{background:var(--panel2);border:1px solid var(--line);padding:8px 4px;font-size:12px;border-radius:3px;cursor:pointer;white-space:nowrap}
-.seg button.on{border-color:var(--accent);color:var(--accent);background:#0a1c1b;font-weight:600}
+.seg button.on{border-color:var(--accent);color:var(--accent);background:#1c1708;font-weight:600}
 .seg button:disabled{opacity:.35;cursor:not-allowed}
 .seg button:focus-visible,.vcard:focus-visible{outline:1px solid var(--accent)}
 .cellchips{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
@@ -144,9 +144,9 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 .simrow .seg{flex:1}
 .simrow .seg button{padding:5px 0;font-family:var(--mono);font-size:11.5px}
 .actions{display:grid;grid-template-columns:1fr auto;gap:6px}
-#start{background:#0a1716;border:1px solid var(--accent);color:var(--accent);padding:13px;font-weight:700;letter-spacing:.14em;font-size:13px;border-radius:3px;cursor:pointer}
+#start{background:#1c1708;border:1px solid var(--accent);color:var(--accent);padding:13px;font-weight:700;letter-spacing:.14em;font-size:13px;border-radius:3px;cursor:pointer}
 #start:hover{background:var(--accent);color:var(--accent-ink)}
-#start:disabled{opacity:.4;cursor:wait;background:#0a1716;color:var(--accent)}
+#start:disabled{opacity:.4;cursor:wait;background:#1c1708;color:var(--accent)}
 #reset{background:var(--panel2);border:1px solid var(--line);padding:0 16px;border-radius:3px;cursor:pointer;color:var(--mute)}
 #reset:hover{color:var(--fg)}
 .spec{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12px;margin:0}
@@ -523,7 +523,7 @@ const M = {
   rubber: std(0x0f1012, 0, 0.9),
   gold: std(0xc9a64a, 0.9, 0.35),
   yellow: std(0xe0b21c, 0.2, 0.55),
-  path: new THREE.LineDashedMaterial({ color: 0x00e8d0, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 })
+  path: new THREE.LineDashedMaterial({ color: 0xeec539, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 })
 };
 [M.cabinet, M.pom, M.black, M.white, M.cap, M.brand, M.yellow, M.rubber].forEach(m => m.envMapIntensity = 0.45);
 M.top.envMapIntensity = 0.6;
@@ -625,12 +625,12 @@ function buildRobot(parent, x, z, kind) {
     mesh(new THREE.CylinderGeometry(0.0007, 0.0009, 0.031, 10).rotateX(-Math.PI / 2), M.steel, tool).position.z = 0.2215;  // 1" needle
     const hose = new THREE.CatmullRomCurve3([[0, 0.012, 0.062], [0, 0.05, 0.05], [0, 0.07, 0.0], [0, 0.06, -0.06], [0, 0.04, -0.1]].map(p => new THREE.Vector3(...p)));
     mesh(new THREE.TubeGeometry(hose, 24, 0.0035, 8), std(0xd8dde2, 0, 0.6), tool);
-    glow = new THREE.Mesh(new THREE.SphereGeometry(0.004, 16, 12), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.0 }));
+    glow = new THREE.Mesh(new THREE.SphereGeometry(0.004, 16, 12), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.0 }));
     glow.position.z = 0.238; tool.add(glow);
   }
   // reach envelope (shown on demand): filled shell + wire + equator ring
   const reach = new THREE.Group(); reach.position.z = 0.152; root.add(reach); reach.visible = cfg.reach;
-  const rc = kind === 'handler' ? 0x2fa7d6 : 0x00e8d0;
+  const rc = kind === 'handler' ? 0x2fa7d6 : 0xeec539;
   reach.add(new THREE.Mesh(new THREE.SphereGeometry(0.922, 48, 24), new THREE.MeshBasicMaterial({ color: rc, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide })));
   reach.add(new THREE.Mesh(new THREE.SphereGeometry(0.924, 24, 12), new THREE.MeshBasicMaterial({ color: rc, wireframe: true, transparent: true, opacity: 0.32 })));
   reach.add(new THREE.Mesh(new THREE.TorusGeometry(0.922, 0.004, 6, 96), new THREE.MeshBasicMaterial({ color: rc })));
@@ -940,7 +940,7 @@ function buildStation() {
   const hmi = canvasTex(512, 320, (ctx, w, h, st) => {
     st = st || { ok: 0, ng: 0, phase: '대기', n: 0, N: 0 };
     ctx.fillStyle = '#0d1014'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#00e8d0'; ctx.fillRect(0, 0, w, 6);
+    ctx.fillStyle = '#eec539'; ctx.fillRect(0, 0, w, 6);
     ctx.fillStyle = '#e6e8eb'; ctx.font = '600 30px "IBM Plex Sans KR", sans-serif'; ctx.fillText('ONE AUTOMATION', 24, 52);
     ctx.fillStyle = '#8a929c'; ctx.font = '500 22px "IBM Plex Mono", monospace'; ctx.fillText('STATE  ' + st.phase, 24, 96);
     ctx.fillText('PART   ' + st.n + ' / ' + st.N, 24, 130);
@@ -964,7 +964,7 @@ function buildStation() {
     box(nestW, 0.04, 0.34, M.pom, sx, TABLE_Y + 0.04, JIG_Z, jig);
     box(nestW * 0.6, 0.004, 0.24, M.black, sx, NEST_TOP - 0.001, JIG_Z, jig);
     for (const dz of [-0.15, 0.15]) cyl(0.005, 0.02, M.steel, sx + nestW / 2 - 0.012, NEST_TOP + 0.008, JIG_Z + dz, jig);
-    const sm = lamp(0x00e8d0);
+    const sm = lamp(0xeec539);
     box(0.02, 0.02, 0.02, M.black, sx, TABLE_Y + 0.03, JIG_Z + 0.2, jig);
     cyl(0.006, 0.004, sm, sx, TABLE_Y + 0.03, JIG_Z + 0.211, jig, G.cylZ);
     sensors.push(sm);
@@ -1592,7 +1592,7 @@ function startCycle() {
             const t = Math.max(0, Math.min(1, a)); p.obj.visible = a > 0;
             const T = jigPose(i).slice(); T[7] += (1 - smooth(t)) * 0.3; p.setPose(T);
           }
-          if (a >= 1) ST.sensors[i].emissiveIntensity = 1.2, ST.sensors[i].emissive.set(0x00e8d0);
+          if (a >= 1) ST.sensors[i].emissiveIntensity = 1.2, ST.sensors[i].emissive.set(0xeec539);
         });
       }
     }),

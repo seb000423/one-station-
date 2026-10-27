@@ -219,7 +219,7 @@
         const nA = Math.max(1, Math.round(P.len / 1.2));
         for (let i = 0; i < nA; i++) {
           const [x, z, yaw] = P.at((i + 0.5) * P.len / nA), a = new THREE.Group(); a.name = 'Conveyor_Arrow'; a.position.set(x, H + r + 0.006, z); a.rotation.y = yaw;
-          const arrow = labelPlane('▶', 0.35, 'rgba(0,232,208,.7)', true); arrow.position.y = 0; a.add(arrow); g.add(a);
+          const arrow = labelPlane('▶', 0.35, 'rgba(238,197,57,.7)', true); arrow.position.y = 0; a.add(arrow); g.add(a);
         }
         // where items are put on / taken off
         for (const [on, s, text, color] of [[p.source, 0, '투입', '#7cc4ff'], [p.sink, P.len, '배출', '#ffb37c']]) {
@@ -300,7 +300,7 @@
       label: 'AMR', group: 'equipment',
       defaults: () => ({ model: 'agv', length: 0.9, width: 0.6, speed: 1.2, payload: 300, battery: 100, from: '', to: '', dwell: 5, stops: [] }), // stops: job list [{ at, act, dwell }]
       build: (g, p) => {
-        ring(g, 'AMR_Safety', Math.hypot(p.length, p.width) / 2 + 0.5, 0x00e8d0, 0.5);
+        ring(g, 'AMR_Safety', Math.hypot(p.length, p.width) / 2 + 0.5, 0xeec539, 0.5);
         const agv = p.model === 'agv' && window.FactoryAssets && window.FactoryAssets.get('agv');
         if (agv) { // pallet stacker: drive unit front (+Z) turned to the travel direction (+X), forks trail; scaled to the width
           agv.traverse(o => { if (/^Safety_Field/.test(o.name)) o.visible = false; }); // the AMR_Safety ring shows that
@@ -324,16 +324,16 @@
       label: 'AMR 경로', group: 'route',
       defaults: () => ({ points: [], oneway: false }),
       build: (g, p) => {
-        const pts = p.points || [], line = mat(0x00b8d9, { emissive: 0x00b8d9, emissiveIntensity: 0.35 }), node = mat(0x00e8d0);
+        const pts = p.points || [], line = mat(0xd9a92b, { emissive: 0xd9a92b, emissiveIntensity: 0.35 }), node = mat(0xeec539);
         for (let k = 1; k < pts.length; k++) {
           const [x0, z0] = pts[k - 1], [x1, z1] = pts[k], len = Math.hypot(x1 - x0, z1 - z0);
           const seg = box(g, 'Route_Segment', len, 0.006, 0.06, line, (x0 + x1) / 2, 0.009, (z0 + z1) / 2); seg.rotation.y = Math.atan2(-(z1 - z0), x1 - x0); seg.castShadow = false;
-          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#00e8d0', true); // direction arrows stay on the floor
+          const arr = labelPlane(p.oneway ? '▶' : '◀▶', 0.5, '#eec539', true); // direction arrows stay on the floor
           arr.position.set((x0 + x1) / 2, 0.016, (z0 + z1) / 2); arr.rotation.z = Math.atan2(-(z1 - z0), x1 - x0); g.add(arr);
         }
         pts.forEach(([x, z], k) => { const n = cyl(g, 'Route_Point_' + (k + 1), 0.09, 0.02, node, x, 0.012, z); n.children[0].castShadow = false; });
-        if (pts.length) { const s = labelPlane('출발', 0.8, '#00e8d0'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
-        if (pts.length > 1) { const e = labelPlane('끝', 0.6, '#00e8d0'); const q = pts[pts.length - 1]; e.position.set(q[0], 0.02, q[1] + 0.3); g.add(e); }
+        if (pts.length) { const s = labelPlane('출발', 0.8, '#eec539'); s.position.set(pts[0][0], 0.02, pts[0][1] + 0.3); g.add(s); }
+        if (pts.length > 1) { const e = labelPlane('끝', 0.6, '#eec539'); const q = pts[pts.length - 1]; e.position.set(q[0], 0.02, q[1] + 0.3); g.add(e); }
       },
       footprint: () => [0.5, 0.5]
     },

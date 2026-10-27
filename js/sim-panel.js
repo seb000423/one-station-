@@ -5,10 +5,10 @@
   const css = `
   .spnl{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:7;width:min(760px,calc(100% - 32px));
     display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:6px 18px;padding:14px 20px 14px 16px;
-    background:rgba(7,9,13,.94);border:1px solid rgba(255,255,255,.07);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.45);
+    background:rgba(0,0,0,.92);border:1px solid rgba(255,255,255,.08);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.45);
     font-family:var(--sans,system-ui,sans-serif);color:var(--fg,#e6e8eb);backdrop-filter:blur(8px)}
   .spnl button{font:inherit;color:inherit;cursor:pointer}
-  .spnl .sp-play{width:46px;height:46px;border-radius:50%;border:0;background:var(--accent,#00e8d0);color:var(--accent-ink,#021a18);display:grid;place-items:center;transition:transform .12s}
+  .spnl .sp-play{width:46px;height:46px;border-radius:50%;border:0;background:var(--accent,#eec539);color:var(--accent-ink,#1d1600);display:grid;place-items:center;transition:transform .12s}
   .spnl .sp-play:hover{transform:scale(1.05)}
   .spnl .sp-play svg{width:16px;height:16px;fill:currentColor}
   .spnl .sp-mid{display:grid;gap:6px;min-width:0}
@@ -16,13 +16,13 @@
   .spnl .sp-eye{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .spnl .sp-time{margin-left:auto;letter-spacing:.12em;font-variant-numeric:tabular-nums;white-space:nowrap}
   .spnl .sp-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .spnl select{width:100%;min-width:0;height:30px;background:#0d1117;color:var(--fg,#e6e8eb);border:1px solid rgba(255,255,255,.09);border-radius:3px;padding:0 10px;font:inherit;font-size:12px;cursor:pointer}
+  .spnl select{width:100%;min-width:0;height:30px;background:#000;color:var(--fg,#e6e8eb);border:1px solid rgba(255,255,255,.09);border-radius:3px;padding:0 10px;font:inherit;font-size:12px;cursor:pointer}
   .spnl select:disabled{opacity:.45;cursor:default}
-  .spnl select:focus-visible,.spnl button:focus-visible{outline:1px solid var(--accent,#00e8d0);outline-offset:2px}
+  .spnl select:focus-visible,.spnl button:focus-visible{outline:1px solid var(--accent,#eec539);outline-offset:2px}
   .spnl .sp-bar{position:relative;height:14px;cursor:pointer;touch-action:none}
   .spnl .sp-bar::before{content:"";position:absolute;left:0;right:0;top:6px;height:2px;background:rgba(255,255,255,.1);border-radius:1px}
-  .spnl .sp-bar i{position:absolute;left:0;top:6px;height:2px;background:var(--accent,#00e8d0);border-radius:1px}
-  .spnl .sp-bar b{position:absolute;top:3px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--accent,#00e8d0);box-shadow:0 0 0 3px rgba(0,232,208,.18)}
+  .spnl .sp-bar i{position:absolute;left:0;top:6px;height:2px;background:var(--accent,#eec539);border-radius:1px}
+  .spnl .sp-bar b{position:absolute;top:3px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--accent,#eec539);box-shadow:0 0 0 3px rgba(238,197,57,.18)}
   .spnl .sp-bar.off{cursor:default}
   .spnl .sp-bar.off b{display:none}
   .spnl .sp-speed{background:none;border:1px solid transparent;border-radius:3px;padding:6px 8px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;color:var(--mute,#8a929c);min-width:42px}
