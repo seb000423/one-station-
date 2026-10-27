@@ -533,5 +533,5 @@
     return out;
   }
 
-  window.FactoryMotion = { walkBlocks, walkBlocked, perm, clash, footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
+  window.FactoryMotion = { backdrop, walkBlocks, walkBlocked, perm, clash, footprint, overlap, collisions, outside, graph, keepouts, walkways, hits, inside, routePoints, local2world, world2local, places, placeNode, shortest, amrPlan, workerPlan, plans, rangeCircles, workerPos, safety, JOIN };
 })();

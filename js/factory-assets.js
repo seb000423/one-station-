@@ -26,7 +26,7 @@
     ['uf_ctrl1', 'Controller_1', '제어반 (대형)'], ['uf_ctrl2', 'Controller_2', '조작반 (램프)'], ['uf_ctrl3', 'Controller_3', '조작반 (램프) B']
   ]) MODELS[id] = { url: UF + file + '.glb', label };
   for (const [id, file, label] of [
-    ['uf_building', 'Building', '공장 건물 (Unity Factory)'],
+    ['uf_building', 'Building', '공장 건물'],
     ['uf_cart', 'Cart', '운반 카트'],
     ['uf_wagon', 'Wagon', '부품 왜건'],
     ['uf_worker', 'Worker', '작업자 (공장)'],

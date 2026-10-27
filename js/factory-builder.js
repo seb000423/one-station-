@@ -9,7 +9,9 @@
 // (js/station-export.js) and saves the document with the factory.
 (function () {
   const TC_URL = 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/TransformControls.js';
-  const STORE = 'one-station-factory-v2', OLD_STORE = 'one-station-layout-v1';
+  const STORE = 'one-station-factory-v3'; // v3: only Asset Store models (earlier local layouts held the home-made equipment)
+  // the scene ONE BUILDER opens with and 예시 공정 보기 loads: the first entry of assets/layouts/index.json
+  const EXAMPLES = 'assets/layouts/';
   const FACTORY_DEFAULT = { width: 20, depth: 14, height: 6 };
   const TABLE_Y = 0.85, BASE_Y = 0.95, CELL_FOOT = [2.8, 2.4];
   const ZMIN = -1.25, ZMAX = 0.7, XMIN = -2.4, XMAX = 2.4; // equipment limits inside a cell (enclosure z span)
@@ -24,12 +26,13 @@
   const PALETTE = [
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
-    ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소'],
-      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
   const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
-  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest', 'palletloop', 'asmstation', 'flowrack', 'ufmodel']; // js/factory-machines.js, js/factory-unity.js
+  const MACHINES = ['ufmodel']; // js/factory-unity.js: equipment comes only from the Asset Store models (모델 tab)
+  // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
+  // chargers, process machines) is dropped when a saved layout is opened
+  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel'];
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
@@ -62,7 +65,7 @@
       ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
     robot: [['model', '모델', 'select', [['fanuc', 'FANUC CRX-10iA/L (3D 모델)'], ['simple', '단순 형상']]], ['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100]],
-    amr: [['model', '모델', 'select', [['agv', 'AGV (3D 모델)'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    amr: [['model', '모델', 'select', [['agv', 'AGV (3D 모델)'], ['uw_forklift', '지게차'], ['uw_palletrobot', '팔레트 운반 로봇'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
     conveyor2: [['length', '길이 (m)', 0.5, 2, 40], ['width', '폭 (m)', 0.05, 0.4, 1.5], ['h1', '아래층 높이 (m)', 0.05, 0.3, 1.5], ['h2', '위층 높이 (m)', 0.05, 0.8, 3], ['speed', '속도 (m/s)', 0.05, 0.05, 2], ['lift', '리프터 이동 시간 (s)', 0.5, 1, 30], ['pallets', '팔레트 수', 1, 1, 20]],
     press: [['tonnage', '능력 (t)', 10, 10, 3000], ['spm', '분당 타수 (spm)', 1, 1, 120], ['stroke', '스트로크 (m)', 0.05, 0.05, 1], ['width', '폭 (m)', 0.1, 1, 6], ['depth', '깊이 (m)', 0.1, 1, 5], ['height', '높이 (m)', 0.1, 2.5, 8]],
@@ -114,15 +117,15 @@
     return motionCache;
   }
   function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
+  // a document with only the supported types; returns how many objects were dropped
+  function sanitize(d) {
+    const objects = (d.objects || []).filter(o => o && KEEP.includes(o.type) && window.FactoryElements.TYPES[o.type]);
+    return { doc: { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(objects) }, dropped: (d.objects || []).length - objects.length };
+  }
+  const emptyDoc = () => ({ version: 2, factory: { ...FACTORY_DEFAULT }, objects: [] });
   function initialDoc() {
-    try { const v = JSON.parse(localStorage.getItem(STORE) || 'null'); if (v && v.objects) return v; } catch (e) {}
-    const d = { version: 2, factory: { ...FACTORY_DEFAULT }, objects: [] }, p = defaultCellParams();
-    try { // layout editor (phase A) settings become the first cell
-      const old = JSON.parse(localStorage.getItem(OLD_STORE) || 'null');
-      if (old) { d.factory = { ...FACTORY_DEFAULT, ...old.factory }; for (const k of Object.keys(INNER)) if (old[k]) p.inner[k] = old[k]; d.objects.push({ id: 'c1', type: 'station', name: '원스테이션 셀 1', x: old.cell.x, z: old.cell.z, rot: old.cell.rot || 0, params: p }); }
-    } catch (e) {}
-    if (!d.objects.length) d.objects.push({ id: 'c1', type: 'station', name: '원스테이션 셀 1', x: 0, z: 0, rot: 0, params: p });
-    return d;
+    try { const v = JSON.parse(localStorage.getItem(STORE) || 'null'); if (v && v.objects) return sanitize(v).doc; } catch (e) {}
+    return null; // first visit: the example scene (loadExample)
   }
   function pushUndo() { syncActive(); undoStack.push(JSON.stringify({ doc, activeId })); if (undoStack.length > 60) undoStack.shift(); }
   function undo() {
@@ -279,7 +282,7 @@
     const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, next = Object.assign({}, o, { x: exact ? g.position.x : r2(g.position.x), z: exact ? g.position.z : r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
     const why = blockedBy(next);
     if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0x00e8d0); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
-    o.x = next.x; o.z = next.z; o.rot = next.rot; placeObjectGroup(o);
+    o.x = next.x; o.z = next.z; o.rot = next.rot; placeObjectGroup(o); fitFloor(o);
     store(); if (helper) helper.update(); renderProps(); renderTree();
     if (o.type === 'conveyor') conveyorNote(o, snapNote); snapNote = '';
   }
@@ -397,10 +400,12 @@
     const cand = candidate(place, p), type = cand.type, why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
     pushUndo();
     const o = { id: newId(), type, name: nextName(type, cand.model && cand.name), x: cand.x, z: cand.z, rot: cand.rot, params: cand.params };
-    syncLabel(o); if (!cand.snapped) clampToFactory(o); doc.objects.push(o);
+    const grew = fitFloor(o);
+    syncLabel(o); if (!cand.snapped && !grew) clampToFactory(o); doc.objects.push(o);
     if (type !== 'station') buildView(o);
     select(o.id); if (type === 'station') placeObjectGroup(o);
-    store(); if (type === 'conveyor') conveyorNote(o, cand.snapped, true); else note(`${o.name}을(를) 놓았습니다`);
+    store(); if (type === 'conveyor') conveyorNote(o, cand.snapped, true); else note(`${o.name}을(를) 놓았습니다${grew ? ` · 공장 바닥을 ${doc.factory.width}×${doc.factory.depth} m로 넓혔습니다` : ''}`);
+    if (grew) renderProps();
   }
   /* ---------- conveyors: links, live items ---------- */
   const FF = () => window.FactoryFlow;
@@ -486,8 +491,19 @@
   }
   // where o may not stand: overlapping another object's size / work area, or outside the factory
   function blockedBy(o) {
-    if (FM().outside(doc, o)) return '공장 밖으로 나갑니다';
+    if (FM().outside(doc, o) && !FM().backdrop(o)) return '공장 밖으로 나갑니다'; // a building shell grows the floor instead (fitFloor)
     const hit = FM().collisions(doc, o); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : '';
+  }
+  // a building shell (공장 건물, 창고 건물) bigger than the floor: grow the floor around it, so the shell can be placed
+  // and equipment can then go inside it
+  function fitFloor(o) {
+    if (!FM().backdrop(o) || !FM().outside(doc, o)) return false;
+    const s = FM().footprint(o), c = Math.cos(s.rot), sn = Math.sin(s.rot), f = doc.factory;
+    const ex = Math.abs(c) * s.hw + Math.abs(sn) * s.hd, ez = Math.abs(sn) * s.hw + Math.abs(c) * s.hd;
+    f.width = Math.min(300, Math.max(f.width, Math.ceil(2 * (Math.abs(s.cx) + ex) + 1)));
+    f.depth = Math.min(300, Math.max(f.depth, Math.ceil(2 * (Math.abs(s.cz) + ez) + 1)));
+    buildShell(); if (['all', 'front', 'top'].includes(lastView)) fitFactory(lastView);
+    return true;
   }
   function duplicate() {
     const o = selectedId && byId(selectedId); if (!o) return;
@@ -557,7 +573,7 @@
     return '<input class="find" type="search" placeholder="모델 검색">' + U.GROUPS.map(g => `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${Object.entries(U.CATALOG).filter(([, c]) => c.group === g).map(([k, c]) =>
       `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} m: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`).join('')}</div></div>`).join('');
   }
-  const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]], ['models', '모델', null]];
+  const TABS = [['models', '모델', null], ['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
   const css = `
   .fb-on .view .hud.tr{display:none}
   .fb-on .view .hud.tl{left:262px;top:var(--fbbar,58px)}
@@ -593,7 +609,7 @@
   #fbPanel .fbBody{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
   #fbPanel button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:5px 8px;border-radius:3px;cursor:pointer;font:inherit;font-size:11.5px;line-height:1.4}
   #fbPanel button:hover{border-color:var(--mute)}
-  #fbPanel .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
+  #fbPanel .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
   #fbPanel .tabs button{padding:6px 2px;font-size:11px;line-height:1.35;white-space:nowrap}
   #fbPanel .tabs button.on{border-color:var(--accent);color:var(--accent);background:rgba(0,232,208,.06)}
   #fbPanel .pal{display:grid;grid-template-columns:1fr 1fr;gap:4px}
@@ -695,7 +711,7 @@
   .fbModal .acts{display:flex;justify-content:flex-end}
   .fbModal .acts button{display:inline-block;padding:7px 14px}
   @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:0 7px;font-size:11.5px} }`;
-  let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'building';
+  let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'models';
   // short messages appear as a toast in the 3D view and fade out
   function note(t, warn) {
     let n = $('#fbToast'); if (!n) { n = document.createElement('div'); n.id = 'fbToast'; $('.view').appendChild(n); }
@@ -707,7 +723,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example" title="예시 공정(공장 + 창고)을 엽니다. 지금 배치는 Ctrl+Z로 되돌릴 수 있습니다">예시 공정 보기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
@@ -756,6 +772,7 @@
     panel.querySelector('[data-t=min]').onclick = () => { panel.classList.toggle('min'); panel.querySelector('[data-t=min]').textContent = panel.classList.contains('min') ? '+' : '–'; };
     const on = (sel, fn) => { const b = bar.querySelector(sel); if (b) b.onclick = fn; };
     on('[data-t=new]', newFactory);
+    on('[data-t=example]', () => { if (!doc.objects.length || confirm(`예시 공정을 엽니다. 지금 배치(객체 ${doc.objects.length}개)는 Ctrl+Z로 되돌릴 수 있습니다.`)) loadExample(); });
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
     on('[data-t=clear]', clearAll);
@@ -856,7 +873,7 @@
   function newFactory() {
     if (busy()) return note('사이클 중에는 바꿀 수 없습니다', true);
     if (!confirm('새 공장을 시작합니다. 지금 배치(객체 ' + doc.objects.length + '개)와 공장 크기가 기본값으로 바뀝니다.\nCtrl+Z(되돌리기)로 되돌릴 수 있습니다.')) return;
-    pushUndo(); doc = { version: 2, factory: { ...FACTORY_DEFAULT }, objects: [{ id: newId(), type: 'station', name: '원스테이션 셀 1', x: 0, z: 0, rot: 0, params: defaultCellParams() }] };
+    pushUndo(); doc = emptyDoc();
     rebuildAll(); select(null); store(); view('all'); note('새 공장을 시작했습니다');
   }
 
@@ -912,7 +929,7 @@
       const f = doc.factory, n = t => doc.objects.filter(x => x.type === t).length;
       propSec.innerHTML = `<div class="kind">FACTORY</div><h3>공장</h3>
         <div class="row">${field('width', '가로 (m)', f.width, 0.5, 6, 300)}${field('depth', '세로 (m)', f.depth, 0.5, 6, 300)}${field('height', '높이 (m)', f.height, 0.5, 2.5, 40)}</div>
-        <p class="hint">셀 ${n('station')} · 컨베이어 ${n('conveyor')} · 로봇 ${n('robot')} · 랙 ${n('rack')} · AMR ${n('amr')} · 충전소 ${n('charger')} · 공정 설비 ${MACHINES.reduce((a, t) => a + n(t), 0)} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
+        <p class="hint">모델 ${n('ufmodel')} · AMR ${n('amr')} · 작업자 ${n('worker')} · 기둥 ${n('column')} · 벽 ${n('wall')} · 출입문 ${n('door')} · 계단 ${n('stairs')} · 보행로 ${n('walkway')} · 구역 ${n('zone')}<br>왼쪽 팔레트에서 요소를 골라 바닥에 놓고, 객체를 클릭하면 여기에 그 객체의 설정이 나옵니다.</p>`;
       propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
         const v = parseFloat(i.value); if (!(v > 0)) return renderProps();
         const f2 = Object.assign({}, doc.factory, { [i.dataset.k]: Math.min(+i.max, Math.max(+i.min, v)) }), out = doc.objects.filter(o => FM().outside({ factory: f2 }, o));
@@ -984,7 +1001,7 @@
       o.x = next.x; o.z = next.z; o.rot = next.rot; if (next.params) o.params = next.params;
       if (o.type === 'station' && o.id === activeId) S().applyLayout(Object.assign({ cell: { x: o.x, z: o.z, rot: o.rot || 0 } }, engineCellParams().inner));
       if (o.type !== 'station' && k.startsWith('p.')) buildView(o);
-      placeObjectGroup(o); store(); select(o.id, innerSel);
+      placeObjectGroup(o); fitFloor(o); store(); select(o.id, innerSel);
     }));
     propSec.querySelectorAll('[data-inner]').forEach(b => b.addEventListener('click', () => select(o.id, b.dataset.inner)));
     propSec.querySelectorAll('[data-pt]').forEach(i => i.addEventListener('change', () => {
@@ -1117,11 +1134,22 @@
   }
 
   // a saved factory document, or a legacy one-station save (meta.summary) converted to one
-  function loadDoc(d) {
+  function loadDoc(d, opts = {}) {
     if (busy()) throw new Error('사이클 중에는 불러올 수 없습니다');
-    pushUndo();
-    doc = { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(d.objects || []) };
-    rebuildAll(); select(null); store();
+    if (!opts.noUndo) pushUndo();
+    const r = sanitize(d); doc = r.doc;
+    rebuildAll(); select(null); store(); view('all');
+    if (r.dropped) note(`더 이상 쓰지 않는 자체 제작 설비 ${r.dropped}개는 빼고 열었습니다`, true);
+  }
+  // the bundled example scene (first entry of assets/layouts/index.json)
+  async function loadExample(opts = {}) {
+    if (busy()) return note('시뮬레이션 중에는 불러올 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
+    note('예시 공정 불러오는 중…');
+    try {
+      const get = async f => { const r = await fetch(EXAMPLES + f, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return r.json(); };
+      const ex = (await get('index.json'))[0]; if (!ex) throw new Error('예시 없음');
+      loadDoc(await get(ex.file), opts); note(`${ex.name}을(를) 열었습니다`);
+    } catch (e) { note('예시 공정을 불러오지 못했습니다: ' + e.message, true); }
   }
   function docFromLegacy(meta) {
     const m = meta.summary || {}, L = m.layout || {}, p = defaultCellParams();
@@ -1137,15 +1165,17 @@
     world = new THREE.Group(); world.name = 'factory-objects'; s.scene.add(world);
     buildPanel(); document.querySelector('.app').classList.add('fb-on');
     doc = initialDoc();
-    const pref = (doc.objects.find(o => o.type === 'station') || {}).id;
-    rebuildAll(pref);
+    const first = !doc; if (first) doc = emptyDoc();
+    rebuildAll();
+    if (first) loadExample({ noUndo: true });
     ensureGizmo().then(() => select(null)).catch(e => note(e.message, true));
     // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive
-    const USES = { fanuc: 'robot', agv: 'amr' };
+    // AMRs and workers can wear Asset Store models too (forklift, pallet robot, worker: js/factory-unity-groups.js)
+    const USES = { fanuc: ['robot'], agv: ['amr'], uw_forklift: ['amr'], uw_palletrobot: ['amr'], uw_worker: ['worker'] };
     addEventListener('factory-assets-ready', e => {
-      const type = USES[e.detail.id] || (window.FactoryUnity && FactoryUnity.assetIds().includes(e.detail.id) ? 'ufmodel' : null); if (!type || !doc) return;
-      doc.objects.filter(o => o.type === type).forEach(o => { buildView(o); placeObjectGroup(o); });
-      if (selectedId && byId(selectedId) && byId(selectedId).type === type) select(selectedId);
+      const id = e.detail.id, types = (USES[id] || []).concat(window.FactoryUnity && FactoryUnity.assetIds().includes(id) ? ['ufmodel'] : []); if (!types.length || !doc) return;
+      doc.objects.filter(o => types.includes(o.type)).forEach(o => { buildView(o); placeObjectGroup(o); });
+      if (selectedId && byId(selectedId) && types.includes(byId(selectedId).type)) select(selectedId);
     });
     if (window.FactoryAssets) FactoryAssets.preload(Object.keys(USES));
     renderTree(); renderProps();

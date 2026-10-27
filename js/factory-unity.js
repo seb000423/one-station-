@@ -7,8 +7,8 @@
 // The arm (alone or in the cell) idles with a slow joint sway: animate() in console 1, drives() for console 2.
 // Unity's "Unity Warehouse" asset (building, pallet racks, forklifts, pallets, boxes, workers; assets/models/unity-warehouse/)
 // and the Unity Factory building, carts and workers come in the same way, one part each.
-// The same type also places the EGR cooler assembly line workstations (assets/models/egr-line/). Every catalog
-// entry is its own palette tile (모델 tab) with a thumbnail from assets/models/thumbs/.
+// The EGR cooler line workstations (assets/models/egr-line/) stay in the catalog for saved layouts but are not in the
+// palette. Every other catalog entry is its own palette tile (모델 tab) with a thumbnail from assets/models/thumbs/.
 (function () {
   const FE = window.FactoryElements; if (!FE) return;
   const { mat, box } = FE.helpers;
@@ -16,7 +16,7 @@
 
   // id → { label, size: [x, y, z] m, parts: [[asset id, x, y, z]] }  (parts share the GLB origin; the Unity
   // prefab offsets are mirrored in X because the GLBs come out of Blender's FBX import, not Unity's)
-  const UF = 'Unity Factory', UW = 'Unity Warehouse', EGR = 'EGR 조립 라인';
+  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인'; // group names shown in the 모델 tab
   const CATALOG = {
     line01: { label: '캐비닛 벨트 유닛', group: UF, size: [0.93, 1.26, 0.90], parts: [['uf_line01', 0, 0, 0]] },
     line02: { label: '소형 벨트 유닛', group: UF, size: [0.69, 0.89, 0.69], parts: [['uf_line02', 0, 0, 0]] },
@@ -33,7 +33,7 @@
     ctrl2: { label: '조작반 (램프)', group: UF, size: [0.40, 1.25, 1.52], parts: [['uf_ctrl2', 0, 0, 0]] },
     ctrl3: { label: '조작반 (램프) B', group: UF, size: [0.40, 1.25, 1.59], parts: [['uf_ctrl3', 0, 0, 0]] },
     product: { label: '가공품 트레이', group: UF, size: [0.32, 0.17, 0.50], parts: [['uf_product', 0, 0, 0]] },
-    uf_building: { label: '공장 건물 (Unity Factory)', group: UF, size: [67.37, 9.55, 67.34], parts: [['uf_building', 0, 0, 0]] },
+    uf_building: { label: '공장 건물', group: UF, size: [67.37, 9.55, 67.34], parts: [['uf_building', 0, 0, 0]] },
     uf_cart: { label: '운반 카트', group: UF, size: [0.56, 1.01, 0.94], parts: [['uf_cart', 0, 0, 0]] },
     uf_wagon: { label: '부품 왜건', group: UF, size: [0.59, 1.08, 1.56], parts: [['uf_wagon', 0, 0, 0]] },
     uf_worker: { label: '작업자 (공장)', group: UF, size: [0.80, 1.82, 0.40], parts: [['uf_worker', 0, 0, 0]] },
@@ -68,9 +68,11 @@
     egr_rack: { label: '슬라이딩 부품 랙', group: EGR, size: [0.47, 1.54, 1.48], parts: [['egr_rack', 0, 0, 0]] },
     egr_pallet: { label: '팔레트', group: EGR, size: [1.0, 0.15, 1.2], parts: [['egr_pallet', 0, 0, 0]] }
   };
-  // palette tiles: one per catalog entry (모델 tab), images rendered by tools/render-thumbs.cjs
+  // palette tiles: one per catalog entry (모델 tab), images rendered by tools/render-thumbs.cjs. Only the Asset Store
+  // groups are offered; the EGR workstations stay in the catalog so saved layouts that use them still open.
+  const GROUPS = [UF, UW];
   const thumb = k => 'assets/models/thumbs/' + k + '.webp';
-  const OPTIONS = Object.entries(CATALOG).map(([k, v]) => [k, v.label]);
+  const OPTIONS = Object.entries(CATALOG).filter(([, v]) => GROUPS.includes(v.group)).map(([k, v]) => [k, v.label]);
   const entry = p => CATALOG[p.model] || CATALOG.line01;
   const assetIds = () => [...new Set(Object.values(CATALOG).flatMap(c => c.parts.map(x => x[0])))];
 
@@ -115,6 +117,6 @@
     cycle: p => (entry(p).parts.some(x => x[0] === 'uf_arm') ? Math.max(4, p.cycle) : 0)
   };
   FE.TYPES.ufmodel = ufmodel;
-  if (FE.MACHINES && !FE.MACHINES.includes('ufmodel')) FE.MACHINES.push('ufmodel');
-  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS: [UF, UW, EGR], thumb, assetIds };
+  FE.MACHINES = ['ufmodel']; // the only equipment type left (footprints, collisions, animation)
+  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS, thumb, assetIds };
 })();
