@@ -584,15 +584,10 @@
   #fbBar{position:absolute;left:8px;right:8px;top:8px;z-index:6;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 10px;font-size:12px}
   #fbBar .grp{display:flex;align-items:center;gap:4px}
   #fbBar .grp > span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);margin-right:2px}
-  #fbBar button,#fbBar select,#fbSim button,#fbSim select{box-sizing:border-box;height:28px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 9px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px;line-height:26px}
-  #fbSim{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:12px;white-space:nowrap}
-  #fbSim > span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);margin-right:2px}
-  #fbSim button:hover{border-color:var(--mute)}
-  #fbSim button.primary{border-color:var(--accent);color:var(--accent)}
-  #fbSim button.on{background:rgba(0,232,208,.1)}
-  #fbSim label{display:flex;align-items:center;gap:4px;color:var(--mute);font-size:11.5px}
-  #fbSim #fbClock{font-family:var(--mono);font-weight:500;color:var(--fg);min-width:44px;text-align:right}
-  .fb-cell #fbSim{left:auto;right:8px;transform:none;top:var(--fbbar,58px);bottom:auto} /* clear of the cell's joint read-out and step bar */
+  #fbBar button,#fbBar select{box-sizing:border-box;height:28px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 9px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px;line-height:26px}
+  .fb-on #fbSim{left:calc(50% + 126px);width:min(760px,calc(100% - 300px))} /* centred right of the palette column */
+  .fb-on .view .hud.bl{bottom:132px} /* the cell's joint read-out clears the sim panel */
+  .fb-on .view .hud.bc{display:none} /* the cell's step bar: steps are in the sim panel's list */
   #fbBar button.following{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
   #fbBar #fbTarget{max-width:180px}
   #fbBar button:hover{border-color:var(--mute)}
@@ -732,14 +727,14 @@
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
       <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
     $('.view').appendChild(bar);
-    // simulation controls: their own box at the bottom centre of the 3D view
-    simBox = document.createElement('div'); simBox.id = 'fbSim'; simBox.className = 'card';
-    simBox.innerHTML = `<span>시뮬레이션</span>
-      <button type="button" data-t="play" class="primary" title="셀 사이클·로봇·컨베이어·AMR·작업자를 모두 함께 움직입니다">▶ 시작</button>
-      <button type="button" data-t="restart" title="시뮬레이션을 멈추고 처음 상태로 되돌립니다 (편집하려면 이 상태여야 합니다)">⟲ 처음부터</button>
-      <label title="시뮬레이션 시간 배속 (1× = 실제 시간)">배속 <select data-t="speed"><option value="1">1×</option><option value="4" selected>4×</option><option value="16">16×</option><option value="32">32×</option></select></label>
-      <b id="fbClock" title="시뮬레이션 경과 시간">00:00</b>`;
-    $('.view').appendChild(simBox);
+    // simulation controls: the shared cycle panel at the bottom centre of the 3D view (js/sim-panel.js)
+    simBox = window.SimPanel.mount($('.view'), {
+      eyebrow: '시뮬레이션', speeds: [1, 4, 16, 32], speed,
+      onToggle: () => playing ? simPause() : simStart(), onRestart: simRestart, onSpeed: setSpeed,
+      onStep: i => { const c = cycle(); if (c && c.steps[i]) seekTo(c.loop * c.P + c.steps[i].t0); },
+      onSeek: f => { const c = cycle(); if (c) seekTo(c.loop * c.P + f * c.P); }
+    });
+    simBox.el.id = 'fbSim';
     const fitBar = () => document.querySelector('.view').style.setProperty('--fbbar', (bar.offsetHeight + 16) + 'px');
     if (window.ResizeObserver) new ResizeObserver(fitBar).observe(bar); setTimeout(fitBar, 0);
     // left: palette tabs + collapsible object list / safety
@@ -778,9 +773,6 @@
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
-    simBox.querySelector('[data-t=play]').onclick = () => playing ? simPause() : simStart();
-    simBox.querySelector('[data-t=restart]').onclick = simRestart;
-    simBox.querySelector('[data-t=speed]').onchange = e => setSpeed(+e.target.value);
     bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => view(b.dataset.v));
     $('#fbTarget').onchange = viewButtons;
     S().controls.addEventListener('start', () => { if (followId) stopFollow(); }); // dragging the camera ends 추적
@@ -1214,7 +1206,7 @@
         clock += dt * speed;
         const sim = S().sim; if (activeId && sim.phase === 'done') S().startCycle(); // cells keep producing while it runs
       }
-      if (now - lastClock > 200) { lastClock = now; const c = $('#fbClock'); if (c) c.textContent = fmtClock(clock); }
+      if (now - lastClock > 200) { lastClock = now; simPanelTick(); }
       ctxTick();
       if (playing || busy()) mirrorCells(false);
       const M = motion(), t = clock;
@@ -1243,7 +1235,6 @@
 
   /* ---------- range circles + safety ---------- */
   let playing = false, clock = 0, speed = 4, safetyLayer = null;
-  const fmtClock = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60); return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'); };
   // ▶ 시작: everything runs (cells' cycles, robots, conveyors, AMRs, workers) at the chosen speed
   function simStart() {
     if (clock === 0 || !mirror.src) mirrorStart();
@@ -1257,10 +1248,37 @@
   function simRestart() { playing = false; clock = 0; const s = S(); s.cfg.sim = speed; s.resetAll(); mirrorCells(true); simUi(); note('시뮬레이션을 처음 상태로 되돌렸습니다 — 이제 편집할 수 있습니다'); }
   function setSpeed(v) { speed = v; if (playing) S().cfg.sim = v; }
   function simUi() {
-    const b = simBox && simBox.querySelector('[data-t=play]'); if (!b) return;
-    b.textContent = playing ? '⏸ 일시정지' : (clock > 0 ? '▶ 계속' : '▶ 시작'); b.classList.toggle('on', playing);
+    simPanelTick();
     document.querySelector('.app').classList.toggle('fb-running', playing || busy());
   }
+  // the cycle the sim panel follows: the selected AMR / worker, else the one with the longest loop.
+  // Its steps are its states over one loop (sampled once per plan); the panel shows where in that loop the clock is.
+  const cycleSteps = new WeakMap();
+  function cycle() {
+    const M = motion(), all = [...Object.entries(M.amr), ...Object.entries(M.worker)].filter(([id, p]) => p && p.ok && !p.still && p.period > 0 && byId(id));
+    if (!all.length) return null;
+    const [id, pl] = all.find(([k]) => k === selectedId) || all.reduce((a, b) => b[1].period > a[1].period ? b : a);
+    let steps = cycleSteps.get(pl);
+    if (!steps) {
+      steps = [];
+      for (let t = 0; t < pl.period && steps.length < 40; t += 0.25) { const l = pl.state(t); if (l && (!steps.length || steps[steps.length - 1].label !== l)) steps.push({ label: l, t0: t }); }
+      cycleSteps.set(pl, steps);
+    }
+    const P = pl.period, loop = Math.floor(clock / P), u = clock - loop * P, label = pl.state(clock);
+    // labels repeat within a loop (e.g. waiting twice): the latest step with this label that has started, else the latest started
+    let k = -1, kt = -1;
+    steps.forEach((x, i) => { if (x.t0 <= u) { kt = i; if (x.label === label) k = i; } });
+    if (k < 0) k = kt;
+    return { o: byId(id), P, loop, u, label, steps, k };
+  }
+  function simPanelTick() {
+    if (!simBox) return;
+    const c = cycle(), idle = playing ? '가동 중' : clock > 0 ? '일시정지' : '대기';
+    if (!c) return simBox.update({ playing, title: idle, eyebrow: '시뮬레이션 · AMR·작업자 동선이 없으면 경과 시간만 표시', steps: [], step: -1, t: clock, total: 0 });
+    simBox.update({ playing, title: c.label || idle, eyebrow: `시뮬레이션 사이클 · ${c.o.name} 기준 · ${c.loop + 1}회차`, steps: c.steps.map(x => x.label), step: c.k, t: c.u, total: c.P });
+  }
+  // jump to a time in the run (step list / progress bar); AMRs, workers and belts are posed from the clock
+  function seekTo(t) { clock = Math.max(0, t); simPanelTick(); }
   // zone stock badges above tracked zones and the 물류 현황 panel (AMR state · trips, zone stock)
   function stockBadge(g, text) {
     let b = g.getObjectByName('Zone_Stock');

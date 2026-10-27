@@ -169,28 +169,66 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 @media (prefers-reduced-motion: reduce){ #progBar{transition:none} }
 </style>
 <style>
-/* Console 2: the 3D view is console 1's station replayed in realvirtual WEB (iframe); the HUD sits around
-   realvirtual's own toolbar (top-left), view cube (top-right) and AGPL watermark (bottom-right). */
-#rv{display:block;width:100%;height:100%;border:0;background:var(--bg)}
-.view .tl{top:46px;left:56px}
-.view .tr{right:92px}
-.view .bl{left:56px}
-.view .bc{left:56px;right:300px}
-.offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)}
+/* ONE MONITOR shell: the 3D view (realvirtual WEB in a same-origin iframe, its own chrome hidden) fills the
+   window; a sparse top bar, floating view / status cards, a data drawer and the shared sim panel sit on top. */
+:root{--bg:#070b11;--navy:#0b1220}
+body{background:var(--navy)}
+.app{display:block;position:relative}
+main{display:block;position:absolute;inset:0}
+.view{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 0%,#14202e 0%,var(--navy) 55%,#060a10 100%)}
+#rv{display:block;width:100%;height:100%;border:0;background:transparent;opacity:0;transition:opacity .5s}
+#rv.ready{opacity:1}
+.top{position:absolute;left:0;right:0;top:0;z-index:9;height:56px;border:0;gap:22px;
+  background:linear-gradient(180deg,rgba(5,8,12,.92) 0%,rgba(5,8,12,.55) 70%,rgba(5,8,12,0) 100%)}
+.brand{display:flex;align-items:baseline;gap:8px;color:#fff;text-decoration:none;font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.32em;white-space:nowrap}
+.brand b{color:var(--accent);font-weight:600}
+.brand span{color:var(--dim);font-weight:400;letter-spacing:.12em;font-size:11.5px}
+.brand:focus-visible{outline:1px solid var(--accent);outline-offset:4px}
+.crumbs{display:flex;align-items:center;gap:18px;min-width:0;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;color:var(--dim);text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.crumbs span{overflow:hidden;text-overflow:ellipsis}
+.crumbs .live{display:flex;align-items:center;gap:7px;flex:none}
+.crumbs .live i{width:6px;height:6px;border-radius:50%;background:var(--dim);display:block}
+.crumbs .live.on i{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.pills{margin-left:auto;display:flex;align-items:center;gap:8px}
+.pill{height:30px;display:inline-flex;align-items:center;padding:0 14px;border-radius:4px;border:1px solid rgba(255,255,255,.08);background:rgba(10,14,20,.8);color:var(--fg);font:inherit;font-size:12px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pill:hover{border-color:rgba(255,255,255,.2)}
+.pill.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.pill.primary:hover{filter:brightness(1.08)}
+.pill.on{border-color:var(--accent);color:var(--accent)}
+.pill.ghost{background:none;border-color:transparent;color:var(--mute)}
+.pill.ghost:hover{color:var(--fg)}
+.pill:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
+.hud.views{top:68px;left:16px;display:flex;align-items:center;gap:2px;padding:4px;background:rgba(7,9,13,.85);border:1px solid rgba(255,255,255,.06);border-radius:5px}
+.hud.views > span{font-size:11.5px;color:var(--mute);padding:0 10px 0 8px}
+.hud.views .chip{background:none;border:1px solid transparent;color:var(--mute);padding:5px 11px;border-radius:3px}
+.hud.views .chip:hover{color:var(--fg)}
+.hud.views .chip.on{border-color:rgba(255,255,255,.75);color:#fff;background:none}
+.view .tl{top:116px;left:16px;width:280px}
+.view .card{background:rgba(7,9,13,.85);border-color:rgba(255,255,255,.06);border-radius:5px}
+.view .status{padding:11px 13px;gap:8px}
+#clock{font-size:17px}
+.offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--navy);z-index:8}
 .offline .card{max-width:440px;padding:24px;line-height:1.7}
 .offline h2{margin:0 0 8px;font-size:16px}
 .offline a{color:var(--accent)}
 .offline button{margin-top:14px;font:inherit;background:var(--accent);color:var(--accent-ink);border:0;padding:8px 16px;font-weight:600;cursor:pointer}
+/* data drawer (was the right column) */
+.side{position:absolute;right:16px;top:64px;bottom:136px;width:372px;z-index:8;border:1px solid rgba(255,255,255,.07);border-radius:6px;background:rgba(9,12,17,.96);
+  box-shadow:0 18px 50px rgba(0,0,0,.5);transform:translateX(calc(100% + 24px));transition:transform .25s ease;visibility:hidden}
+.app.data-open .side{transform:none;visibility:visible}
+.side .dhead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 12px 18px;border-bottom:1px solid var(--line)}
+.side .dhead b{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.2em;color:var(--mute)}
+.side .dhead button{background:none;border:0;color:var(--mute);font-size:18px;line-height:1;cursor:pointer;padding:2px 6px}
+.side .dhead button:hover{color:var(--fg)}
 .side .ro{opacity:.55}
 .side .ro *{cursor:not-allowed}
-.ronote{font-size:11.5px;color:var(--mute);border:1px dashed var(--line);padding:8px 10px;margin:0 0 4px;line-height:1.6}
+.ronote{font-size:11.5px;color:var(--mute);border:1px dashed var(--line);padding:8px 10px;margin:0 0 4px;line-height:1.6;overflow-wrap:anywhere}
 .ronote code{font-family:var(--mono);color:var(--accent)}
-#syncNote{font-size:11.5px;color:var(--mute);line-height:1.6}
+#syncNote{font-size:11.5px;color:var(--mute);line-height:1.6;margin:0}
+#syncNote a{color:var(--mute)}
 .side .scroll > .sec{min-width:0}
 .savepick{display:flex;gap:6px;min-width:0}
-#savePick{width:100%;text-overflow:ellipsis}
-.ronote{overflow-wrap:anywhere}
-#savePick{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
+#savePick{flex:1;min-width:0;width:100%;text-overflow:ellipsis;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
 #savePick:focus{outline:none;border-color:var(--accent)}
 #saveDel{background:var(--panel2);border:1px solid var(--line);color:var(--mute);padding:0 12px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px}
 #saveDel:hover{color:var(--ng);border-color:var(--ng)}
@@ -201,6 +239,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 #saveList button.on{border-color:var(--accent)}
 #saveList b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #saveList span{font-size:11px;color:var(--mute);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#saveList .empty{font-size:11.5px;color:var(--dim);line-height:1.5}
 #motionList{display:grid;gap:6px;font-size:12px;line-height:1.5}
 #motionList .mrow{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
 #motionList b{font-weight:600}
@@ -210,22 +249,36 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 #motionList h4{margin:6px 0 0;font-size:10.5px;letter-spacing:.14em;font-family:var(--mono);color:var(--dim);font-weight:500}
 #safeWarn{color:var(--ng);font-size:12px;line-height:1.5}
 #cellPick{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
-#saveList .empty{font-size:11.5px;color:var(--dim);line-height:1.5}
+.foot{border-radius:0 0 6px 6px}
 @media (max-width: 900px){
-  .view .tl{left:14px;right:14px;top:auto;bottom:56px}
-  .view .tr{left:56px;right:92px}
+  body{overflow:hidden}
+  .app{height:100%}
+  .view{height:auto;min-height:0}
+  .top{height:52px;gap:10px}
+  .brand span,.crumbs{display:none}
+  .pills .ghost{display:none}
+  .pill{padding:0 10px}
+  .hud.views{top:60px;left:10px;right:10px;overflow-x:auto}
+  .hud.views > span{display:none}
+  .view .tl{display:none}
+  .side{left:10px;right:10px;width:auto;top:58px;bottom:150px}
+  .spnl{bottom:22px} /* keeps realvirtual's AGPL line (bottom-right corner) visible */
 }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
-    <a class="back" href="index.html">← 뒤로</a>
-    <div class="logo">ONE MONITOR</div>
-    <div class="lang"><b>KR</b> · EN</div>
+    <a class="brand" href="index.html" title="처음 화면으로"><b>ONE</b>MONITOR <span>/ 실시간 관제</span></a>
+    <div class="crumbs"><span class="live" id="live"><i></i>재생 대기</span><span id="crumbTarget">기본 스테이션</span></div>
+    <nav class="pills">
+      <button type="button" class="pill primary" id="openTarget">모니터링 대상</button>
+      <button type="button" class="pill" id="toggleData" aria-expanded="false" aria-controls="dataDrawer">공정 데이터</button>
+      <a class="pill ghost" href="console.html">ONE BUILDER ↗</a>
+    </nav>
   </header>
   <main>
-    <section class="view" aria-label="스테이션 3D 뷰 (realvirtual WEB)">
+    <section class="view" aria-label="공장 3D 뷰">
       <iframe id="rv" title="realvirtual WEB 스테이션 뷰어" allow="fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
       <div class="hud tl">
         <div class="card status">
@@ -237,14 +290,15 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
           <div id="safeWarn" hidden></div>
         </div>
       </div>
-      <div class="hud tr">
+      <div class="hud views" role="group" aria-label="시점">
+        <span>시점</span>
         <button class="chip on" data-view="all">전체</button>
         <button class="chip" data-view="front">정면</button>
         <button class="chip" data-view="top">상면</button>
         <button class="chip" data-view="scale">계량·도포부</button>
       </div>
-      <div class="hud bl"><div class="card" id="jread"></div></div>
-      <div class="hud bc">
+      <div class="hud bl" hidden><div class="card" id="jread"></div></div>
+      <div class="hud bc" hidden>
         <ol id="steps">
           <li><b>1</b>지그 로딩·센서</li><li><b>2</b>START·도어 닫힘</li><li><b>3</b>픽업</li><li><b>4</b>DMC 판독</li><li><b>5</b>계량 (전)</li><li><b>6</b>Ni 페이스트 도포</li><li><b>7</b>계량 (후)</li><li><b>8</b>지그 복귀</li><li><b>9</b>판정·도어 열림</li>
         </ol>
@@ -258,7 +312,8 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
       </div>
     </section>
 
-    <aside class="side" aria-label="파라미터">
+    <aside class="side" id="dataDrawer" aria-label="공정 데이터">
+      <div class="dhead"><b>공정 데이터</b><button type="button" id="closeData" aria-label="닫기">×</button></div>
       <div class="scroll">
         <div class="sec">
           <div class="field">
@@ -360,11 +415,12 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
         </div>
       </div>
       <div class="foot">
-        <p id="syncNote">재생·일시정지·리셋·속도는 3D 화면 왼쪽 위 realvirtual 툴바에서 조작합니다. 1x 재생 = ONE BUILDER의 SIM 4x 속도.</p>
+        <p id="syncNote">재생·단계·배속은 화면 아래 패널에서 조작합니다. 배속은 ONE BUILDER와 같은 기준입니다 (×4 = 녹화 속도). 3D 뷰: <a href="https://github.com/game4automation/realvirtual-WEB" target="_blank" rel="noopener">realvirtual WEB</a> · AGPL-3.0</p>
       </div>
     </aside>
   </main>
 </div>
+<script src="js/sim-panel.js"></script>
 <script>
 (() => {
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
@@ -383,11 +439,33 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     ROOT = null; TL = null; lastF = -1; lastRes = null; viewer = null;
   }
 
+  /* ---------- realvirtual skin ----------
+     realvirtual WEB has no embed switch for its full-app chrome (toolbars, panels, dialogs), so the
+     same-origin iframe gets a stylesheet: only the 3D canvas and its AGPL "Powered by realvirtual WEB"
+     line stay, restyled small in the corner (the AGPL notice must remain visible). */
+  const SKIN = `
+    html,body{background:#0b1220!important}
+    #react-root{display:none!important}
+    body>*:not(#app):not(#rv-watermark):not(#loading-overlay):not(script):not(style){display:none!important}
+    #app>*:not(#rv-viewport){display:none!important}
+    #rv-viewport{inset:0!important;left:0!important;right:0!important;top:0!important;bottom:0!important;width:auto!important;height:auto!important}
+    #loading-overlay{background:#0b1220!important}
+    #rv-watermark{bottom:10px!important;right:14px!important;padding:2px 6px!important;font-size:10.5px!important;background:transparent!important;color:rgba(255,255,255,.4)!important;letter-spacing:.02em!important}
+    #rv-watermark:hover{color:rgba(255,255,255,.85)!important}
+    @media (max-width:899px){#rv-watermark{bottom:2px!important;right:4px!important;font-size:8px!important}}`;
+  function skin() {
+    try {
+      const d = frame.contentDocument; if (!d || !d.head || d.getElementById('oneSkin')) return;
+      const st = d.createElement('style'); st.id = 'oneSkin'; st.textContent = SKIN; d.head.appendChild(st);
+    } catch (e) {}
+  }
+  frame.addEventListener('load', () => { skin(); setTimeout(() => frame.classList.add('ready'), 6000); });
+
   const load = () => {
     Promise.all([fetch(GLB, { method: 'HEAD', cache: 'no-store' }), fetch(TIMELINE).then(r => r.ok ? r.json() : null)])
       .then(([g, tl]) => {
         if (!g.ok) throw 0;
-        off.hidden = true; if (frame.src !== URL_RV) frame.src = URL_RV;
+        off.hidden = true; if (frame.src !== URL_RV) { frame.classList.remove('ready'); frame.src = URL_RV; }
         if (tl) { ROOT = tl; chooseCell(new URL(location.href).searchParams.get('cell')); }
       })
       .catch(() => { off.hidden = false; });
@@ -403,6 +481,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     setTarget(s ? { glb: s.glb, timeline: s.timeline } : DEFAULT);
     $('#savePick').value = s ? s.id : '';
     $('#saveDel').hidden = !s;
+    $('#crumbTarget').textContent = s ? s.name : '기본 스테이션';
     const m = s && s.summary;
     $('#saveInfo').textContent = m && m.cycleTotal ? `C/T ${(m.cycleTotal / m.parts).toFixed(1)} s · OK ${m.ok} / NOK ${m.ng}` : '';
     const u = new URL(location.href); if (s) u.searchParams.set('save', s.id); else u.searchParams.delete('save'); history.replaceState(null, '', u);
@@ -505,13 +584,16 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     } catch (e) {}
     return null;
   }
-  // closer to console 1's look: less flat ambient, a stronger key light with soft shadows
+  // closer to console 1's look: less flat ambient, a stronger key light with soft shadows; a dark navy
+  // backdrop and floor instead of realvirtual's light grey
   function tuneLights(v) {
     if (!v || v.__oneStationLights) return;
     try {
       if (v.ambientLight) v.ambientLight.intensity = 1.0;
       if (v.dirLight) { v.dirLight.intensity = 2.0; v.dirLight.castShadow = true; }
-      v.__oneStationLights = true;
+      if (v.scene && v.scene.background && v.scene.background.set) v.scene.background.set(0x0e1826);
+      const gm = v.groundMesh && v.groundMesh.material; if (gm && gm.color) { gm.color.set(0x2a3a4c); gm.needsUpdate = true; }
+      v.__oneStationLights = true; frame.classList.add('ready');
       if (v.markRenderDirty) v.markRenderDirty();
       if (v.markShadowsDirty) v.markShadowsDirty();
     } catch (e) {}
@@ -565,7 +647,58 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
       $('#ngNote').textContent = notes.length ? 'NOK 원인 (시뮬레이션): ' + notes.join(' · ') : '';
     }
   }
-  setInterval(() => { if (TL) render(currentFrame()); }, 100);
+  setInterval(() => { if (TL) render(currentFrame()); panelTick(); }, 100);
+
+  /* ---------- sim panel (js/sim-panel.js) on realvirtual's playback ----------
+     Speeds use ONE BUILDER's scale: the recording runs at SIM 4x, so x4 is playback 1x. Pause holds
+     realvirtual's whole fixed loop with our own pause reason; speed scales the playback's frame advance. */
+  const REC_SPEED = 4;
+  let rate = 1;
+  function playback() {
+    if (!viewer || !viewer.playback) { viewer = findViewer(); tuneLights(viewer); }
+    const p = viewer && viewer.playback;
+    if (p && !p.__oneRate) { const up = p.update.bind(p); p.update = dt => up(dt * rate); p.__oneRate = true; }
+    return p;
+  }
+  const isPlaying = p => !!(p && p.isPlaying && !viewer.isSimulationPaused);
+  function resume(p) {
+    viewer.setSimulationPaused('one-monitor', false); viewer.setSimulationPaused('user', false);
+    if (!p.isPlaying) p.play();
+  }
+  const dirty = () => { try { viewer.markRenderDirty(); } catch (e) {} };
+  // steps: the cell's process steps, else the first AMR's / worker's states over one loop
+  function cycleSteps() {
+    if (TL && TL.steps && TL.step) {
+      return { names: TL.steps, at: f => at(TL.step, f) - 1, first: i => { const g = TL.step.find(x => x[1] === i + 1); return g ? g[0] : null; }, label: f => { const k = at(TL.step, f); return k ? TL.steps[k - 1] : PHASE_KO[at(TL.phase, f)]; } };
+    }
+    const M = ROOT && ROOT.motion, mover = M && (Object.values(M.amr || {}).find(a => a.ok) || Object.values(M.worker || {})[0]);
+    if (!mover) return null;
+    const spf = ROOT.simPerFrame || 0.16, end = mover.period ? Math.ceil(mover.period / spf) : FRAMES(), segs = mover.state.filter(x => x[0] < end).slice(0, 40);
+    return { mover, names: segs.map(x => x[1]), at: f => { let k = -1; const v = at(mover.state, f); segs.forEach((x, i) => { if (x[1] === v) k = i; }); return k; }, first: i => segs[i] ? segs[i][0] : null, label: f => at(mover.state, f) };
+  }
+  const panel = window.SimPanel.mount($('.view'), {
+    eyebrow: 'ONE BUILDER 녹화 사이클', speeds: [1, 4, 16, 32], speed: REC_SPEED,
+    onToggle: () => { const p = playback(); if (!p) return; if (isPlaying(p)) viewer.setSimulationPaused('one-monitor', true); else resume(p); panelTick(); },
+    onRestart: () => { const p = playback(); if (!p) return; p.seekToPercent(0); resume(p); dirty(); panelTick(); },
+    onSpeed: v => { rate = v / REC_SPEED; },
+    onStep: i => { const p = playback(), c = cycleSteps(), f = c && c.first(i); if (p && f != null) { p.seekToPercent(f / Math.max(1, p.totalFrames - 1)); dirty(); panelTick(); } },
+    onSeek: x => { const p = playback(); if (p) { p.seekToPercent(x); dirty(); panelTick(); } }
+  });
+  function panelTick() {
+    const p = playback(), on = isPlaying(p);
+    $('#live').classList.toggle('on', on); $('#live').lastChild.textContent = on ? '재생 중' : p ? '일시정지' : '재생 대기';
+    if (!p || !ROOT) return panel.update({ playing: false, title: p ? '불러오는 중' : '3D 뷰를 불러오는 중', steps: [], step: -1, t: 0, total: 0 });
+    const f = p.frame, spf = ROOT.simPerFrame || (TL && TL.simPerFrame) || 0.16, c = cycleSteps();
+    const name = TL && ROOT.version === 2 && ROOT.cells.length ? (ROOT.cells.find(x => x.timeline === TL) || {}).name : c && c.mover ? c.mover.name + ' 기준' : '';
+    panel.update({ playing: on, title: c ? c.label(f) : (on ? '재생 중' : '일시정지'), eyebrow: 'ONE BUILDER 녹화 사이클' + (name ? ' · ' + name : ''), steps: c ? c.names : [], step: c ? c.at(f) : -1, t: f * spf, total: FRAMES() * spf });
+  }
+
+  /* ---------- top bar: data drawer ---------- */
+  const drawer = open => { $('.app').classList.toggle('data-open', open); $('#toggleData').classList.toggle('on', open); $('#toggleData').setAttribute('aria-expanded', open); };
+  $('#toggleData').addEventListener('click', () => drawer(!$('.app').classList.contains('data-open')));
+  $('#closeData').addEventListener('click', () => drawer(false));
+  $('#openTarget').addEventListener('click', () => { drawer(true); $('.side .scroll').scrollTop = 0; $('#savePick').focus(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
 
   /* ---------- camera views (console 1's presets, applied to realvirtual's camera) ---------- */
   // 전체 / 정면 / 상면 fit the saved factory to the viewport; 계량·도포부 frames the chosen cell's
