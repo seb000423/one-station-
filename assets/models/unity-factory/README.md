@@ -19,9 +19,18 @@ EULA상 에셋은 이 사이트에 통합된 형태로만 쓰고, 파일 자체�
 | Line_07.glb | 로봇 셀 본체 (콘솔·모니터·로봇 받침) | 3.37 × 2.21 × 2.86 |
 | Line_07A/B/C.glb | 로봇 셀 가드 프레임 (램프 포함), 본체와 같은 원점 | ≈ 3.0 × 3.2–3.9 × 2.4–3.6 |
 | Arm.glb | 6축 로봇팔, 관절 노드 `Rig_Arm_1`(베이스) `Rig_Arm_2`~`Rig_Arm_5` | 1.30 × 2.95 × 0.71 |
-| Product.glb | 가공품 트레이 | 0.40 × 0.21 × 0.63 |
+| Product.glb | 가공품 트레이 (*) | 0.32 × 0.17 × 0.50 |
 | Controller_1.glb | 제어반 (대형) | 1.70 × 2.27 × 0.47 |
 | Controller_2.glb / Controller_3.glb | 조작반 (램프 타워) | 0.40 × 1.25 × 1.5–1.6 |
+| Building.glb (*) | 공장 건물 (벽·창·배관·트러스·조명·바닥, 지붕 없음). 원본 250만 정점을 meshoptimizer로 단순화 (오차 2 mm) | 67.37 × 9.55 × 67.34 |
+| Cart.glb (*) | 운반 카트 | 0.56 × 1.01 × 0.94 |
+| Wagon.glb (*) | 부품 왜건 (커버) | 0.59 × 1.08 × 1.56 |
+| Worker.glb (*) | 작업자 (`Standing2` 첫 프레임 포즈) | 0.80 × 1.82 × 0.40 |
+| Tablet.glb (*) | 태블릿 (원점 = 중심) | 0.31 × 0.22 × 0.01 |
+
+(*) 표시는 Unity Warehouse와 같은 방식(Unity 에디터 `GlbExport.cs` → `prep.py` → `build.cjs`, ../unity-warehouse/README.md)으로 변환했다.
+Product.glb는 처음 변환본이 Unity 프리팹보다 1.25배 크고 피벗이 달라서 다시 뽑았다. 데모 씬 배치는 `scene-placements.json`
+(`FactorySceneSample.unity`, 893개, 형식은 ../unity-warehouse/README.md).
 
 로봇 셀 조합 (Unity `Line_07.prefab`): Line_07 + 07A + 07B + 07C 는 모두 원점에, Arm 은 (1.42, 0.149, 0) m
 (Unity 값 x = −1.42 의 X 미러 — GLB는 Blender FBX 임포트 좌표계).

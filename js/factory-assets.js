@@ -25,6 +25,40 @@
     ['uf_arm', 'Arm', '6축 로봇팔'], ['uf_product', 'Product', '가공품 트레이'],
     ['uf_ctrl1', 'Controller_1', '제어반 (대형)'], ['uf_ctrl2', 'Controller_2', '조작반 (램프)'], ['uf_ctrl3', 'Controller_3', '조작반 (램프) B']
   ]) MODELS[id] = { url: UF + file + '.glb', label };
+  for (const [id, file, label] of [
+    ['uf_building', 'Building', '공장 건물 (Unity Factory)'],
+    ['uf_cart', 'Cart', '운반 카트'],
+    ['uf_wagon', 'Wagon', '부품 왜건'],
+    ['uf_worker', 'Worker', '작업자 (공장)'],
+    ['uf_tablet', 'Tablet', '태블릿 (공장)']
+  ]) MODELS[id] = { url: UF + file + '.glb', label };
+  // Unity Warehouse (Unity Technologies Japan, Asset Store, converted the same way — assets/models/unity-warehouse/README.md):
+  // warehouse building, pallet racks, forklifts, pallet robot, pallets, boxes, workers. Metres, Draco compressed.
+  const UW = 'assets/models/unity-warehouse/';
+  for (const [id, file, label] of [
+    ['uw_building', 'Building', '창고 건물'],
+    ['uw_shelf', 'Shelf', '파렛트 랙 15.5 m'],
+    ['uw_forklift', 'Forklift', '지게차'],
+    ['uw_reachlift', 'Reachlift', '리치 지게차'],
+    ['uw_palletrobot', 'Palletrobot', '팔레트 운반 로봇'],
+    ['uw_trolley', 'Trolley', '롤 대차'],
+    ['uw_pallet', 'Pallet', '플라스틱 팔레트'],
+    ['uw_sunoko', 'Sunoko', '목재 팔레트'],
+    ['uw_pedestal', 'Pedestal', '팔레트 받침대'],
+    ['uw_plasticbox_a', 'PlasticBox_A', '플라스틱 박스 (대)'],
+    ['uw_plasticbox_b', 'PlasticBox_B', '플라스틱 박스 (소)'],
+    ['uw_cardboard_a1', 'Cardboard_A1', '골판지 상자 A1'],
+    ['uw_cardboard_a2', 'Cardboard_A2', '골판지 상자 A2'],
+    ['uw_cardboard_a3', 'Cardboard_A3', '골판지 상자 A3'],
+    ['uw_cardboard_b1', 'Cardboard_B1', '골판지 상자 B1'],
+    ['uw_cardboard_b2', 'Cardboard_B2', '골판지 상자 B2'],
+    ['uw_cardboard_b3', 'Cardboard_B3', '골판지 상자 B3'],
+    ['uw_cardboard_c1', 'Cardboard_C1', '골판지 상자 C1'],
+    ['uw_cardboard_c2', 'Cardboard_C2', '골판지 상자 C2'],
+    ['uw_cardboard_c3', 'Cardboard_C3', '골판지 상자 C3'],
+    ['uw_worker', 'Worker', '작업자 (창고)'],
+    ['uw_tablet', 'Tablet', '태블릿 (창고)']
+  ]) MODELS[id] = { url: UW + file + '.glb', label };
   // EGR cooler assembly line workstations (converted from the line's CAD, fasteners removed, meshopt compressed)
   const EGR = 'assets/models/egr-line/';
   for (const [id, file, label] of [

@@ -5,6 +5,8 @@
 // checks and the grey stand-in box (shown until the GLB arrives) match the model. 'cell07' composes the
 // robot cell the way the Unity prefab does: frame body + three guard frames + the arm on its base.
 // The arm (alone or in the cell) idles with a slow joint sway: animate() in console 1, drives() for console 2.
+// Unity's "Unity Warehouse" asset (building, pallet racks, forklifts, pallets, boxes, workers; assets/models/unity-warehouse/)
+// and the Unity Factory building, carts and workers come in the same way, one part each.
 // The same type also places the EGR cooler assembly line workstations (assets/models/egr-line/). Every catalog
 // entry is its own palette tile (모델 tab) with a thumbnail from assets/models/thumbs/.
 (function () {
@@ -14,7 +16,7 @@
 
   // id → { label, size: [x, y, z] m, parts: [[asset id, x, y, z]] }  (parts share the GLB origin; the Unity
   // prefab offsets are mirrored in X because the GLBs come out of Blender's FBX import, not Unity's)
-  const UF = 'Unity Factory', EGR = 'EGR 조립 라인';
+  const UF = 'Unity Factory', UW = 'Unity Warehouse', EGR = 'EGR 조립 라인';
   const CATALOG = {
     line01: { label: '캐비닛 벨트 유닛', group: UF, size: [0.93, 1.26, 0.90], parts: [['uf_line01', 0, 0, 0]] },
     line02: { label: '소형 벨트 유닛', group: UF, size: [0.69, 0.89, 0.69], parts: [['uf_line02', 0, 0, 0]] },
@@ -30,7 +32,34 @@
     ctrl1: { label: '제어반 (대형)', group: UF, size: [1.70, 2.27, 0.47], parts: [['uf_ctrl1', 0, 0, 0]] },
     ctrl2: { label: '조작반 (램프)', group: UF, size: [0.40, 1.25, 1.52], parts: [['uf_ctrl2', 0, 0, 0]] },
     ctrl3: { label: '조작반 (램프) B', group: UF, size: [0.40, 1.25, 1.59], parts: [['uf_ctrl3', 0, 0, 0]] },
-    product: { label: '가공품 트레이', group: UF, size: [0.40, 0.21, 0.63], parts: [['uf_product', 0, 0, 0]] },
+    product: { label: '가공품 트레이', group: UF, size: [0.32, 0.17, 0.50], parts: [['uf_product', 0, 0, 0]] },
+    uf_building: { label: '공장 건물 (Unity Factory)', group: UF, size: [67.37, 9.55, 67.34], parts: [['uf_building', 0, 0, 0]] },
+    uf_cart: { label: '운반 카트', group: UF, size: [0.56, 1.01, 0.94], parts: [['uf_cart', 0, 0, 0]] },
+    uf_wagon: { label: '부품 왜건', group: UF, size: [0.59, 1.08, 1.56], parts: [['uf_wagon', 0, 0, 0]] },
+    uf_worker: { label: '작업자 (공장)', group: UF, size: [0.80, 1.82, 0.40], parts: [['uf_worker', 0, 0, 0]] },
+    uf_tablet: { label: '태블릿 (공장)', group: UF, size: [0.31, 0.22, 0.01], parts: [['uf_tablet', 0, 0, 0]] },
+    uw_building: { label: '창고 건물', group: UW, size: [37.66, 9.80, 65.03], parts: [['uw_building', 0, 0, 0]] },
+    uw_shelf: { label: '파렛트 랙 15.5 m', group: UW, size: [1.14, 7.06, 15.52], parts: [['uw_shelf', 0, 0, 0]] },
+    uw_forklift: { label: '지게차', group: UW, size: [1.49, 2.79, 4.74], parts: [['uw_forklift', 0, 0, 0]] },
+    uw_reachlift: { label: '리치 지게차', group: UW, size: [1.20, 2.48, 2.57], parts: [['uw_reachlift', 0, 0, 0]] },
+    uw_palletrobot: { label: '팔레트 운반 로봇', group: UW, size: [0.76, 0.13, 0.99], parts: [['uw_palletrobot', 0, 0, 0]] },
+    uw_trolley: { label: '롤 대차', group: UW, size: [1.24, 1.83, 1.12], parts: [['uw_trolley', 0, 0, 0]] },
+    uw_pallet: { label: '플라스틱 팔레트', group: UW, size: [1.07, 0.13, 1.06], parts: [['uw_pallet', 0, 0, 0]] },
+    uw_sunoko: { label: '목재 팔레트', group: UW, size: [1.06, 0.13, 1.06], parts: [['uw_sunoko', 0, 0, 0]] },
+    uw_pedestal: { label: '팔레트 받침대', group: UW, size: [1.10, 0.18, 1.13], parts: [['uw_pedestal', 0, 0, 0]] },
+    uw_plasticbox_a: { label: '플라스틱 박스 (대)', group: UW, size: [1.04, 0.80, 1.05], parts: [['uw_plasticbox_a', 0, 0, 0]] },
+    uw_plasticbox_b: { label: '플라스틱 박스 (소)', group: UW, size: [1.03, 0.34, 1.04], parts: [['uw_plasticbox_b', 0, 0, 0]] },
+    uw_cardboard_a1: { label: '골판지 상자 A1', group: UW, size: [1.05, 0.82, 1.03], parts: [['uw_cardboard_a1', 0, 0, 0]] },
+    uw_cardboard_a2: { label: '골판지 상자 A2', group: UW, size: [1.05, 0.82, 1.03], parts: [['uw_cardboard_a2', 0, 0, 0]] },
+    uw_cardboard_a3: { label: '골판지 상자 A3', group: UW, size: [1.05, 0.82, 1.03], parts: [['uw_cardboard_a3', 0, 0, 0]] },
+    uw_cardboard_b1: { label: '골판지 상자 B1', group: UW, size: [0.93, 0.33, 1.04], parts: [['uw_cardboard_b1', 0, 0, 0]] },
+    uw_cardboard_b2: { label: '골판지 상자 B2', group: UW, size: [0.93, 0.33, 1.04], parts: [['uw_cardboard_b2', 0, 0, 0]] },
+    uw_cardboard_b3: { label: '골판지 상자 B3', group: UW, size: [0.93, 0.33, 1.04], parts: [['uw_cardboard_b3', 0, 0, 0]] },
+    uw_cardboard_c1: { label: '골판지 상자 C1', group: UW, size: [1.05, 0.37, 1.04], parts: [['uw_cardboard_c1', 0, 0, 0]] },
+    uw_cardboard_c2: { label: '골판지 상자 C2', group: UW, size: [1.05, 0.37, 1.04], parts: [['uw_cardboard_c2', 0, 0, 0]] },
+    uw_cardboard_c3: { label: '골판지 상자 C3', group: UW, size: [1.05, 0.37, 1.04], parts: [['uw_cardboard_c3', 0, 0, 0]] },
+    uw_worker: { label: '작업자 (창고)', group: UW, size: [0.79, 1.89, 0.40], parts: [['uw_worker', 0, 0, 0]] },
+    uw_tablet: { label: '태블릿 (창고)', group: UW, size: [0.31, 0.22, 0.01], parts: [['uw_tablet', 0, 0, 0]] },
     egr_st01: { label: '조립 작업대 1', group: EGR, size: [1.02, 2.15, 1.04], parts: [['egr_st01', 0, 0, 0]] },
     egr_st02: { label: '조립 작업대 2', group: EGR, size: [1.42, 2.15, 1.13], parts: [['egr_st02', 0, 0, 0]] },
     egr_st03: { label: '리크 테스트 작업대 1', group: EGR, size: [1.63, 2.15, 1.44], parts: [['egr_st03', 0, 0, 0]] },
@@ -87,5 +116,5 @@
   };
   FE.TYPES.ufmodel = ufmodel;
   if (FE.MACHINES && !FE.MACHINES.includes('ufmodel')) FE.MACHINES.push('ufmodel');
-  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS: [UF, EGR], thumb, assetIds };
+  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS: [UF, UW, EGR], thumb, assetIds };
 })();
