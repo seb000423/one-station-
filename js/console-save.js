@@ -47,7 +47,7 @@ function saveDialog() {
   const fb = window.FactoryBuilder, d = fb.doc(), cells = d.objects.filter(o => o.type === 'station').length;
   const { form, say } = overlay(`<form>
     <h3>팩토리 저장</h3>
-    <p class="hint">공장 크기, 건물 요소 ${d.objects.length - cells}개, 원스테이션 셀 ${cells}개를 저장합니다. 셀마다 지금 설정으로 사이클 1회를 녹화합니다 (셀당 몇 초). 콘솔 2에서 이 이름으로 불러와 모니터링하고, 콘솔 1에서 다시 불러와 이어서 편집할 수 있습니다.</p>
+    <p class="hint">공장 크기, 건물 요소 ${d.objects.length - cells}개, 원스테이션 셀 ${cells}개를 저장합니다. 셀마다 지금 설정으로 사이클 1회를 녹화합니다 (셀당 몇 초). ONE MONITOR에서 이 이름으로 불러와 모니터링하고, ONE BUILDER에서 다시 불러와 이어서 편집할 수 있습니다.</p>
     <label>이름<input name="name" maxlength="60" required autocomplete="off"></label>
     <label>저장 비밀번호<input name="password" type="password" required autocomplete="current-password"></label>
     <div class="msg"></div>
@@ -87,7 +87,7 @@ function saveDialog() {
       await put('factory.json', json(doc), 'application/json');
       await put('meta.json', json(meta), 'application/json'); // last: a save is listed once meta.json exists
       try { sessionStorage.setItem('one-station-save-pw', password); } catch (e) {}
-      say(`저장됨: <b>${esc(name)}</b> — <a href="console2.html?save=${id}">콘솔 2에서 보기 →</a>`);
+      say(`저장됨: <b>${esc(name)}</b> — <a href="console2.html?save=${id}">ONE MONITOR에서 보기 →</a>`);
       form.querySelector('[type=submit]').hidden = true;
     } catch (err) {
       const m = String(err && err.message || err);
@@ -134,7 +134,7 @@ async function loadDialog() {
 const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
 const btn = $('#saveStation');
 if (btn) {
-  btn.textContent = '팩토리 저장 · 콘솔 2로 보내기';
+  btn.textContent = '팩토리 저장 · ONE MONITOR로 보내기';
   const row = document.createElement('div'); row.className = 'saverow'; btn.replaceWith(row);
   const load = document.createElement('button'); load.type = 'button'; load.id = 'loadFactory'; load.textContent = '불러오기';
   row.append(btn, load);

@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/builder", "destination": "/console.html" },
+    { "source": "/monitor", "destination": "/console2.html" }
+  ]
+}

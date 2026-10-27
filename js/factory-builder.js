@@ -714,7 +714,7 @@
       <div class="sep"></div>
       <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
-      <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · 콘솔 2로 보내기</button></div>`;
+      <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
     $('.view').appendChild(bar);
     // simulation controls: their own box at the bottom centre of the 3D view
     simBox = document.createElement('div'); simBox.id = 'fbSim'; simBox.className = 'card';

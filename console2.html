@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
-<title>콘솔 2 (realvirtual)</title>
+<title>ONE MONITOR · 모니터링</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -221,7 +221,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
 <div class="app">
   <header class="top">
     <a class="back" href="index.html">← 뒤로</a>
-    <div class="logo">ONE STATION</div>
+    <div class="logo">ONE MONITOR</div>
     <div class="lang"><b>KR</b> · EN</div>
   </header>
   <main>
@@ -270,7 +270,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
             <div class="lbl">셀 선택 <small id="cellInfo"></small></div>
             <select id="cellPick" aria-label="패널에 표시할 셀"></select>
           </div>
-          <p class="ronote">콘솔 2는 콘솔 1에서 녹화한 사이클을 재생합니다. 설정을 바꾸려면 콘솔 1에서 바꾼 뒤 <b>저장</b>하고 여기서 불러오세요. 아래 설정은 불러온 스테이션의 값이며 표시만 됩니다.</p>
+          <p class="ronote">ONE MONITOR는 ONE BUILDER에서 녹화한 사이클을 재생합니다. 설정을 바꾸려면 ONE BUILDER에서 바꾼 뒤 <b>저장</b>하고 여기서 불러오세요. 아래 설정은 불러온 스테이션의 값이며 표시만 됩니다.</p>
         </div>
         <div class="sec ro">
           <h3>제품 (Product)</h3>
@@ -360,7 +360,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
         </div>
       </div>
       <div class="foot">
-        <p id="syncNote">재생·일시정지·리셋·속도는 3D 화면 왼쪽 위 realvirtual 툴바에서 조작합니다. 1x 재생 = 콘솔 1의 SIM 4x 속도.</p>
+        <p id="syncNote">재생·일시정지·리셋·속도는 3D 화면 왼쪽 위 realvirtual 툴바에서 조작합니다. 1x 재생 = ONE BUILDER의 SIM 4x 속도.</p>
       </div>
     </aside>
   </main>
@@ -424,7 +424,7 @@ tr.ngrow td{background:rgba(255,77,79,.07)}
     $('#saveList').innerHTML = card('', '기본 스테이션', '튜브형 · 지그 6개 · 기본 배치') + (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
       return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · 셀 ' + m.cells + ' · 객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '));
-    }).join('') : '<p class="empty">아직 저장본이 없습니다. 콘솔 1에서 "저장 · 콘솔 2로 보내기"로 저장하면 여기에 나타납니다.</p>');
+    }).join('') : '<p class="empty">아직 저장본이 없습니다. ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장하면 여기에 나타납니다.</p>');
     $('#saveList').querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => choose(b.dataset.id)));
   }
   $('#savePick').addEventListener('change', e => choose(e.target.value));
