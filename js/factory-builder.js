@@ -1064,8 +1064,9 @@
     const M = FM().plans(doc, { horizon: frames * SPF + SPF }); // AMRs simulated together over the whole recording
     const building = [], extra = [];
     for (const o of others) {
-      const g = FE.build(o, doc.factory); building.push(g); extra.push(...FE.drives(o, g, frames, SPF));
+      const g = FE.build(o, doc.factory); building.push(g);
       const pl = o.type === 'amr' ? M.amr[o.id] : o.type === 'worker' ? M.worker[o.id] : null;
+      extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : null))); // movers' plans, zones' stock
       if (pl && pl.ok && !pl.still) extra.push(...rigMotion(g, pl, frames, SPF));
     }
     // station cells' R1 / R2 range circles
@@ -1165,7 +1166,7 @@
     // AMRs and workers can wear Asset Store models too (forklift, pallet robot, worker: js/factory-unity-groups.js)
     const USES = { fanuc: ['robot'], agv: ['amr'], uw_forklift: ['amr'], uw_palletrobot: ['amr'], uw_worker: ['worker'] };
     addEventListener('factory-assets-ready', e => {
-      const id = e.detail.id, types = (USES[id] || []).concat(window.FactoryUnity && FactoryUnity.assetIds().includes(id) ? ['ufmodel'] : []); if (!types.length || !doc) return;
+      const id = e.detail.id, types = (USES[id] || []).concat(window.FactoryUnity && FactoryUnity.assetIds().includes(id) ? ['ufmodel', 'amr', 'worker', 'zone'] : []); if (!types.length || !doc) return; // movers and zones carry catalog models too (loads, pallets, carts)
       doc.objects.filter(o => types.includes(o.type)).forEach(o => { buildView(o); placeObjectGroup(o); });
       if (selectedId && byId(selectedId) && types.includes(byId(selectedId).type)) select(selectedId);
     });
@@ -1217,6 +1218,7 @@
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
           const load = o.type === 'amr' && g.getObjectByName('AMR_Load'); if (load) load.visible = pl && pl.ok && pl.carry ? pl.carry(t) : true;
+          window.FactoryElements.animate(o, g, t, pl); // forklift forks, worker props
         }
       }
       const F = flowAt(t); renderItems(F);
@@ -1297,6 +1299,7 @@
     for (const o of doc.objects) if (o.type === 'zone') {
       const g = views.get(o.id); if (!g) continue; const z = Z[o.id], old = g.getObjectByName('Zone_Stock');
       if (z) stockBadge(g, `재고 ${z.stock(t)}${z.cap ? ' / ' + z.cap : ''}`); else if (old) g.remove(old);
+      const n = z ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it
     }
     const box = $('#fbLogi'); if (!box) return;
     const amrs = doc.objects.filter(o => o.type === 'amr'), zs = doc.objects.filter(o => Z[o.id]);

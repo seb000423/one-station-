@@ -38,7 +38,7 @@
   };
   // realvirtual drive extras (console 2); harmless in console 1
   const jog = (node, dir, rev, degPerSec) => { node.userData.realvirtual = { Drive: { Direction: dir, ReverseDirection: rev, TargetSpeed: Math.abs(degPerSec), JogForward: degPerSec > 0, JogBackward: degPerSec < 0, UseLimits: false } }; };
-  const ZONE_KIND = { pickup: ['적재 구역', '#2f7dd1'], dropoff: ['하역 구역', '#d1782f'], storage: ['보관 구역', '#7a5fd1'], keepout: ['금지 구역', '#d13f3f'], none: ['구역', '#5f6b78'] };
+  const ZONE_KIND = { pickup: ['적재 구역', '#3a7bc8'], dropoff: ['하역 구역', '#d08a2e'], storage: ['보관 구역', '#5f7489'], keepout: ['금지 구역', '#d13f3f'], none: ['구역', '#5f6b78'] };
   // floor ring (range / safety circles); its material is its own so it can turn red
   function ring(g, n, r, color, opacity = 0.55) {
     const m = new THREE.Mesh(new THREE.RingGeometry(Math.max(0.01, r - 0.04), r, 64), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }));
@@ -427,8 +427,8 @@
     return g;
   }
 
-  const animate = (obj, g, t) => { const T = TYPES[obj.type]; if (T.animate) T.animate(g, Object.assign(T.defaults(), obj.params || {}), t); };
-  const drives = (obj, g, frames, simPerFrame) => { const T = TYPES[obj.type]; return T.drives ? T.drives(g, Object.assign(T.defaults(), obj.params || {}), frames, simPerFrame) : []; };
+  const animate = (obj, g, t, plan) => { const T = TYPES[obj.type]; if (T.animate) T.animate(g, Object.assign(T.defaults(), obj.params || {}), t, plan); }; // plan: the mover's / zone's motion plan, when the caller has one
+  const drives = (obj, g, frames, simPerFrame, plan) => { const T = TYPES[obj.type]; return T.drives ? T.drives(g, Object.assign(T.defaults(), obj.params || {}), frames, simPerFrame, plan) : []; };
   const cycleSeconds = obj => { const T = TYPES[obj.type]; return T && T.cycle ? T.cycle(Object.assign(T.defaults(), obj.params || {})) : 0; };
 
   // js/factory-machines.js adds more equipment types with these helpers

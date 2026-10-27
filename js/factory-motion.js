@@ -42,6 +42,7 @@
     for (const o of doc.objects) {
       const p = P(o);
       if (perm(o, 'amr')) continue;
+      if (o.type === 'ufmodel' && /building/.test(p.model || '')) continue; // a building shell is driven through, not around (its doorways are where the routes go)
       if (o.type === 'station') { const [cx, cz] = local2world(o, 0, -0.275); out.push(Object.assign(rect(o, CELL_FOOT[0], CELL_FOOT[1], CELL_MARGIN), { cx, cz })); } // enclosure centre sits 0.275 m behind the cell origin
       else if (o.type === 'robot') out.push({ kind: 'circle', id: o.id, name: o.name, cx: o.x, cz: o.z, r: p.reach });
       else if (o.type === 'conveyor') { const [w, d] = FE().conveyorPath(p).size; out.push(rect(o, w, d, 0.15)); }
