@@ -1,7 +1,8 @@
 // Console 1 factory 저장 / 불러오기. 저장 records every station cell of the factory built in
 // js/factory-builder.js and uploads station.glb + timeline.json + factory.json + meta.json to Vercel Blob
 // under saves/<id>/ through api/upload (the GLB goes straight to Blob). 불러오기 lists the saves
-// (api/saves) and reopens one in the builder; older one-station saves become a one-cell factory.
+// (api/saves) and reopens one in the builder; older one-station saves become a one-cell factory. It also
+// lists the bundled example layouts in assets/layouts/ (index.json).
 const BLOB_CLIENT = 'https://cdn.jsdelivr.net/npm/@vercel/blob@2.8.1/dist/client.js/+esm';
 const $ = q => document.querySelector(q);
 
@@ -98,16 +99,27 @@ function saveDialog() {
 async function loadDialog() {
   const { form, say, close } = overlay(`<form>
     <h3>팩토리 불러오기</h3>
-    <p class="hint">저장된 팩토리를 열어 이어서 편집합니다. 지금 화면의 배치는 바뀌며, 되돌리기(Ctrl+Z)로 돌아올 수 있습니다.</p>
-    <div class="list"></div>
+    <p class="hint">저장된 팩토리나 예제 배치를 열어 이어서 편집합니다. 지금 화면의 배치는 바뀌며, 되돌리기(Ctrl+Z)로 돌아올 수 있습니다.</p>
+    <div class="list examples"></div>
+    <div class="list saves"></div>
     <div class="msg">목록을 불러오는 중…</div>
     <div class="row"><button type="button" data-close>닫기</button></div>
   </form>`);
+  // bundled example layouts (assets/layouts/index.json → [{ file, name, note }]), shown above the saves
+  const ex = form.querySelector('.examples');
+  fetch('assets/layouts/index.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(items => {
+    if (!items.length) return;
+    ex.innerHTML = '<h4 style="margin:0;font-size:12px;color:var(--mute)">예제</h4>' + items.map(x => `<button type="button" data-file="${esc(x.file)}"><b>${esc(x.name)}</b><span>${esc(x.note || '')}</span></button>`).join('');
+    ex.querySelectorAll('[data-file]').forEach(b => b.onclick = async () => {
+      try { say('불러오는 중…'); const r = await fetch('assets/layouts/' + b.dataset.file, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); window.FactoryBuilder.loadDoc(await r.json()); close(); }
+      catch (e) { say('예제 불러오기 실패: ' + e.message, true); }
+    });
+  }).catch(() => {});
   let saves = [];
   try { const r = await fetch('api/saves', { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); saves = (await r.json()).saves || []; }
   catch (e) { return say('저장 목록을 불러올 수 없습니다 (' + e.message + ')', true); }
   say(saves.length ? '' : '아직 저장본이 없습니다.');
-  const list = form.querySelector('.list');
+  const list = form.querySelector('.saves');
   list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b><span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? `셀 ${m.cells} · 객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
   list.querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
     const s = saves.find(x => x.id === b.dataset.id);

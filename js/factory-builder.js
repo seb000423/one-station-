@@ -75,7 +75,7 @@
     palletloop: [['ends', '양 끝', 'select', [['square', '사각 (리프트 트랜스퍼)'], ['round', '타원 (곡선)']]], ['product', '제품', 'select', [['pedal', '브레이크 페달'], ['lego', '레고 + PCB'], ['box', '상자']]], ['length', '직선 길이 (m)', 0.5, 2, 60], ['width', '라인 간격 (m)', 0.1, 1, 6], ['pallets', '팔레트 수', 1, 1, 80], ['pitch', '정지 간격 (m)', 0.1, 0.4, 5], ['speed', '이동 속도 (m/s)', 0.05, 0.05, 2], ['dwell', '정지 시간 (s)', 0.5, 0, 300], ['height', '높이 (m)', 0.05, 0.5, 1.4]],
     asmstation: [['kind', '스테이션 종류', 'select', [['manual', '수동 투입 (작업자)'], ['press', '압입'], ['screw', '체결'], ['robot', '로봇 조립'], ['test', '기능 검사'], ['camera', '비전 검사']]], ['title', '표시 이름', 'text'], ['cycle', '사이클 (s, 팔레트 순환과 같게)', 0.5, 1, 600], ['dwell', '작업 시간 (s)', 0.5, 0, 600], ['reach', '컨베이어까지 (m)', 0.05, 0, 2], ['width', '폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.6, 4]],
     flowrack: [['levels', '단 수', 1, 1, 8], ['bins', '열 수', 1, 1, 12], ['width', '폭 (m)', 0.1, 0.6, 5], ['depth', '깊이 (m)', 0.1, 0.4, 3], ['height', '높이 (m)', 0.1, 1, 3]],
-    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : [])], ['scale', '배율', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
+    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : []), null, p => !p.items], ['scale', '배율', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
@@ -109,7 +109,7 @@
   // AMR / worker plans and the route graph; recomputed when the document changes
   let motionCache = null, motionKey = '';
   function motion() {
-    const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params]));
+    const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params && o.params.items ? o.params.items.length : o.params])); // model groups: their item list never changes in the builder
     if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
     return motionCache;
   }
@@ -224,7 +224,7 @@
     const f = doc.factory, hw = f.width / 2 - 0.3, hd = f.depth / 2 - 0.3;
     o.x = r2(Math.min(hw, Math.max(-hw, o.x))); o.z = r2(Math.min(hd, Math.max(-hd, o.z)));
   }
-  function placeObjectGroup(o) { const g = groupOf(o.id); if (!g) return; g.position.set(o.x, 0, o.z); g.rotation.set(0, o.rot || 0, 0); g.updateMatrixWorld(true); }
+  function placeObjectGroup(o) { const g = groupOf(o.id); if (!g) return; g.position.set(o.x, o.y || 0, o.z); g.rotation.set(0, o.rot || 0, 0); g.updateMatrixWorld(true); }
 
   /* ---------- selection + gizmo ---------- */
   function ensureGizmo() {
@@ -1143,7 +1143,7 @@
     // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive
     const USES = { fanuc: 'robot', agv: 'amr' };
     addEventListener('factory-assets-ready', e => {
-      const type = USES[e.detail.id] || (e.detail.id.startsWith('uf_') ? 'ufmodel' : null); if (!type || !doc) return;
+      const type = USES[e.detail.id] || (window.FactoryUnity && FactoryUnity.assetIds().includes(e.detail.id) ? 'ufmodel' : null); if (!type || !doc) return;
       doc.objects.filter(o => o.type === type).forEach(o => { buildView(o); placeObjectGroup(o); });
       if (selectedId && byId(selectedId) && byId(selectedId).type === type) select(selectedId);
     });

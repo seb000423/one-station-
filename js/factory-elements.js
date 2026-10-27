@@ -387,7 +387,7 @@
   function buildInner(obj, factory) {
     const T = TYPES[obj.type], g = new THREE.Group();
     g.name = (obj.name || T.label).replace(/[\/\s]+/g, '_');
-    g.position.set(obj.x || 0, 0, obj.z || 0); g.rotation.y = obj.rot || 0;
+    g.position.set(obj.x || 0, obj.y || 0, obj.z || 0); g.rotation.y = obj.rot || 0;
     T.build(g, Object.assign(T.defaults(factory), obj.params || {}), factory);
     if (obj.type === 'zone' || WORK_AREA.includes(obj.type)) permMarks(g, obj);
     return g;
@@ -433,5 +433,5 @@
 
   // js/factory-machines.js adds more equipment types with these helpers
   const helpers = { M, mat, box, cyl, jog, ring, labelPlane, ease };
-  window.FactoryElements = { TYPES, ZONE_KIND, WORK_AREA, helpers, conveyorPath, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
+  window.FactoryElements = { inView: () => BILLBOARD, TYPES, ZONE_KIND, WORK_AREA, helpers, conveyorPath, animate, drives, cycleSeconds, build, buildShell, defaults: (type, f) => TYPES[type].defaults(f), footprint: (obj, f) => TYPES[obj.type].footprint(Object.assign(TYPES[obj.type].defaults(f), obj.params || {})) };
 })();

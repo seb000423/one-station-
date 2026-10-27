@@ -100,7 +100,10 @@
   }
   // may o and q stand where their footprints overlap?
   const MOVER = { worker: 'walk', walkway: 'walk', amr: 'amr' }, WORK = ['zone', 'station', 'robot', 'conveyor', 'rack', 'charger'].concat(FE().MACHINES || []);
+  // Unity building shells and model groups (js/factory-unity-groups.js) hold other equipment inside their footprint
+  const backdrop = o => o.type === 'ufmodel' && !!o.params && (!!o.params.items || /building/.test(o.params.model || ''));
   function clash(o, q) {
+    if (backdrop(o) || backdrop(q)) return false;
     const mo = MOVER[o.type], mq = MOVER[q.type];
     if (mo && mq) return o.type === 'walkway' && q.type === 'walkway' ? false : false; // movers share space (workers on walkways, AMRs crossing)
     if (mo || mq) {
