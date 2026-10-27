@@ -13,6 +13,17 @@
     // AGV with lift pod, about 0.8 × 1.1 m, front towards local +Z
     agv: { url: 'realvirtual/library/MobileRobots/AGVStacker.glb', label: 'AGV Stacker' }
   };
+  // Unity Factory (Unity Technologies Japan, Asset Store, converted to GLB — see assets/models/unity-factory/README.md):
+  // production-line machines, a 6-axis arm, control cabinets. Metres, on the floor at y = 0, Draco compressed.
+  const UF = 'assets/models/unity-factory/';
+  for (const [id, file, label] of [
+    ['uf_line01', 'Line_01', '캐비닛 벨트 유닛'], ['uf_line02', 'Line_02', '소형 벨트 유닛'], ['uf_line03', 'Line_03', '곡선 벨트 유닛'],
+    ['uf_line04', 'Line_04', '벨트 컨베이어 4.6 m'], ['uf_line05', 'Line_05', '벨트 컨베이어 2.3 m'], ['uf_line06', 'Line_06', '프레임 가공 셀'],
+    ['uf_line07', 'Line_07', '로봇 셀 본체'], ['uf_line07a', 'Line_07A', '로봇 셀 프레임 A'], ['uf_line07b', 'Line_07B', '로봇 셀 프레임 B'], ['uf_line07c', 'Line_07C', '로봇 셀 프레임 C'],
+    ['uf_line08', 'Line_08', '설비 캐비닛 (문)'], ['uf_line09', 'Line_09', '설비 캐비닛 (소형)'],
+    ['uf_arm', 'Arm', '6축 로봇팔'], ['uf_product', 'Product', '가공품 트레이'],
+    ['uf_ctrl1', 'Controller_1', '제어반 (대형)'], ['uf_ctrl2', 'Controller_2', '조작반 (램프)'], ['uf_ctrl3', 'Controller_3', '조작반 (램프) B']
+  ]) MODELS[id] = { url: UF + file + '.glb', label };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>
 

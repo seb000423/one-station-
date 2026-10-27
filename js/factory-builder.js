@@ -25,11 +25,11 @@
     ['건물', [['column', '기둥'], ['wall', '벽'], ['door', '출입문'], ['stairs', '계단']]],
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['설비', [['station', '원스테이션 셀'], ['conveyor', '컨베이어'], ['robot', '로봇'], ['rack', '랙 · 버퍼'], ['charger', '충전소'],
-      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반']]],
+      ['conveyor2', '2층 컨베이어'], ['press', '프레스'], ['injection', '사출기'], ['machining', '가공기'], ['washer', '세척기'], ['transfer', '이재기'], ['furnace', '브레이징로'], ['welder', '용접 셀'], ['leaktest', '리크 테스터'], ['palletloop', '팔레트 순환'], ['asmstation', '조립 스테이션'], ['flowrack', '경사 선반'], ['ufmodel', '설비 모델 (Unity Factory)']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반' };
-  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest', 'palletloop', 'asmstation', 'flowrack']; // js/factory-machines.js
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
+  const MACHINES = ['conveyor2', 'press', 'injection', 'machining', 'washer', 'transfer', 'furnace', 'welder', 'leaktest', 'palletloop', 'asmstation', 'flowrack', 'ufmodel']; // js/factory-machines.js, js/factory-unity.js
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
@@ -74,6 +74,7 @@
     palletloop: [['ends', '양 끝', 'select', [['square', '사각 (리프트 트랜스퍼)'], ['round', '타원 (곡선)']]], ['product', '제품', 'select', [['pedal', '브레이크 페달'], ['lego', '레고 + PCB'], ['box', '상자']]], ['length', '직선 길이 (m)', 0.5, 2, 60], ['width', '라인 간격 (m)', 0.1, 1, 6], ['pallets', '팔레트 수', 1, 1, 80], ['pitch', '정지 간격 (m)', 0.1, 0.4, 5], ['speed', '이동 속도 (m/s)', 0.05, 0.05, 2], ['dwell', '정지 시간 (s)', 0.5, 0, 300], ['height', '높이 (m)', 0.05, 0.5, 1.4]],
     asmstation: [['kind', '스테이션 종류', 'select', [['manual', '수동 투입 (작업자)'], ['press', '압입'], ['screw', '체결'], ['robot', '로봇 조립'], ['test', '기능 검사'], ['camera', '비전 검사']]], ['title', '표시 이름', 'text'], ['cycle', '사이클 (s, 팔레트 순환과 같게)', 0.5, 1, 600], ['dwell', '작업 시간 (s)', 0.5, 0, 600], ['reach', '컨베이어까지 (m)', 0.05, 0, 2], ['width', '폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.6, 4]],
     flowrack: [['levels', '단 수', 1, 1, 8], ['bins', '열 수', 1, 1, 12], ['width', '폭 (m)', 0.1, 0.6, 5], ['depth', '깊이 (m)', 0.1, 0.4, 3], ['height', '높이 (m)', 0.1, 1, 3]],
+    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : [])], ['scale', '배율', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
@@ -538,7 +539,8 @@
     leaktest: '<path d="M5 20h14M7 20v-6h10v6M9 14V9h6v5M12 9V4"/><circle cx="18" cy="5" r="1.5"/>',
     palletloop: '<rect x="3" y="7" width="18" height="10" rx="5"/><rect x="6" y="9" width="3" height="2"/><rect x="15" y="13" width="3" height="2"/>',
     asmstation: '<path d="M4 21V5h16v16M4 13h16M12 5v4"/><rect x="10" y="9" width="4" height="2"/>',
-    flowrack: '<path d="M4 21V3M20 21V7M4 8l16 4M4 13l16 4M4 18l16 3"/>'
+    flowrack: '<path d="M4 21V3M20 21V7M4 8l16 4M4 13l16 4M4 18l16 3"/>',
+    ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   const TABS = [['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['equip', '설비', PALETTE[2][1]], ['mover', '이동체', PALETTE[3][1]]];
@@ -1127,7 +1129,7 @@
     // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive
     const USES = { fanuc: 'robot', agv: 'amr' };
     addEventListener('factory-assets-ready', e => {
-      const type = USES[e.detail.id]; if (!type || !doc) return;
+      const type = USES[e.detail.id] || (e.detail.id.startsWith('uf_') ? 'ufmodel' : null); if (!type || !doc) return;
       doc.objects.filter(o => o.type === type).forEach(o => { buildView(o); placeObjectGroup(o); });
       if (selectedId && byId(selectedId) && byId(selectedId).type === type) select(selectedId);
     });
