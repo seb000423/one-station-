@@ -3,39 +3,40 @@
 // The host owns the simulation; the panel only shows state (update) and reports clicks (callbacks).
 (() => {
   const css = `
-  .spnl{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:7;width:min(760px,calc(100% - 32px));
-    display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:6px 18px;padding:14px 20px 14px 16px;
-    background:rgba(0,0,0,.92);border:1px solid rgba(255,255,255,.08);border-radius:6px;box-shadow:0 12px 40px rgba(0,0,0,.45);
-    font-family:var(--sans,system-ui,sans-serif);color:var(--fg,#e6e8eb);backdrop-filter:blur(8px)}
+  .spnl{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:7;width:min(560px,calc(100% - 48px));
+    display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:4px 12px;padding:10px 12px 10px 10px;
+    background:rgba(16,16,18,.58);border:1px solid rgba(255,255,255,.12);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.3);
+    font-family:var(--sans,system-ui,sans-serif);color:var(--fg,#ececec);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2)}
   .spnl button{font:inherit;color:inherit;cursor:pointer}
-  .spnl .sp-play{width:46px;height:46px;border-radius:50%;border:0;background:var(--accent,#eec539);color:var(--accent-ink,#1d1600);display:grid;place-items:center;transition:transform .12s}
-  .spnl .sp-play:hover{transform:scale(1.05)}
-  .spnl .sp-play svg{width:16px;height:16px;fill:currentColor}
-  .spnl .sp-mid{display:grid;gap:6px;min-width:0}
-  .spnl .sp-top{display:flex;align-items:baseline;gap:12px;font-family:var(--mono,ui-monospace,monospace);font-size:10px;letter-spacing:.12em;color:var(--dim,#5a626c);text-transform:uppercase}
+  .spnl .sp-play{width:38px;height:38px;border-radius:50%;border:0;background:var(--accent,#eec539);color:var(--accent-ink,#1d1600);display:grid;place-items:center;transition:transform .12s;box-shadow:0 0 0 4px rgba(238,197,57,.16)}
+  .spnl .sp-play:hover{transform:scale(1.06)}
+  .spnl .sp-play svg{width:14px;height:14px;fill:currentColor}
+  .spnl .sp-mid{display:grid;gap:3px;min-width:0}
+  .spnl .sp-top{display:flex;align-items:baseline;gap:10px;font-family:var(--mono,ui-monospace,monospace);font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.62)}
   .spnl .sp-eye{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .spnl .sp-time{margin-left:auto;letter-spacing:.12em;font-variant-numeric:tabular-nums;white-space:nowrap}
-  .spnl .sp-title{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .spnl select{width:100%;min-width:0;height:30px;background:#000;color:var(--fg,#e6e8eb);border:1px solid rgba(255,255,255,.09);border-radius:3px;padding:0 10px;font:inherit;font-size:12px;cursor:pointer}
-  .spnl select:disabled{opacity:.45;cursor:default}
+  .spnl .sp-time{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap;color:#fff}
+  .spnl .sp-row{display:flex;align-items:center;gap:8px;min-width:0}
+  .spnl .sp-title{flex:none;max-width:45%;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spnl select{flex:1;width:100%;min-width:0;height:24px;background:rgba(255,255,255,.07);color:var(--fg,#ececec);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:0 8px;font:inherit;font-size:11.5px;cursor:pointer}
+  .spnl select option{background:#151517;color:#ececec}
+  .spnl select:hover{border-color:rgba(238,197,57,.6)}
+  .spnl select.none{display:none}
   .spnl select:focus-visible,.spnl button:focus-visible{outline:1px solid var(--accent,#eec539);outline-offset:2px}
-  .spnl .sp-bar{position:relative;height:14px;cursor:pointer;touch-action:none}
-  .spnl .sp-bar::before{content:"";position:absolute;left:0;right:0;top:6px;height:2px;background:rgba(255,255,255,.1);border-radius:1px}
-  .spnl .sp-bar i{position:absolute;left:0;top:6px;height:2px;background:var(--accent,#eec539);border-radius:1px}
-  .spnl .sp-bar b{position:absolute;top:3px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--accent,#eec539);box-shadow:0 0 0 3px rgba(238,197,57,.18)}
+  .spnl .sp-bar{position:relative;height:12px;cursor:pointer;touch-action:none}
+  .spnl .sp-bar::before{content:"";position:absolute;left:0;right:0;top:5px;height:3px;background:rgba(255,255,255,.16);border-radius:2px}
+  .spnl .sp-bar i{position:absolute;left:0;top:5px;height:3px;background:var(--accent,#eec539);border-radius:2px}
+  .spnl .sp-bar b{position:absolute;top:2px;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(238,197,57,.35)}
   .spnl .sp-bar.off{cursor:default}
   .spnl .sp-bar.off b{display:none}
-  .spnl .sp-speed{background:none;border:1px solid transparent;border-radius:3px;padding:6px 8px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;color:var(--mute,#8a929c);min-width:42px}
-  .spnl .sp-speed:hover{color:var(--fg,#e6e8eb);border-color:rgba(255,255,255,.12)}
-  .spnl .sp-restart{background:none;border:0;padding:6px;color:var(--mute,#8a929c);display:grid;place-items:center}
-  .spnl .sp-restart:hover{color:var(--fg,#e6e8eb)}
-  .spnl .sp-restart svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .spnl .sp-speed{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:3px 10px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;font-weight:600;color:var(--accent,#eec539);min-width:0}
+  .spnl .sp-speed:hover{border-color:var(--accent,#eec539)}
+  .spnl .sp-restart{width:30px;height:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:50%;padding:0;color:#fff;display:grid;place-items:center}
+  .spnl .sp-restart:hover{border-color:var(--accent,#eec539);color:var(--accent,#eec539)}
+  .spnl .sp-restart svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   @media (max-width:700px){
-    .spnl{bottom:10px;width:calc(100% - 20px);gap:5px 8px;padding:10px 10px 10px 12px}
-    .spnl .sp-play{width:40px;height:40px}
+    .spnl{bottom:14px;width:calc(100% - 20px);gap:4px 8px;padding:8px 10px 8px 8px}
     .spnl .sp-eye{display:none}
-    .spnl .sp-speed{min-width:0;padding:4px}
-    .spnl .sp-restart{padding:4px}
+    .spnl .sp-title{max-width:40%}
   }`;
   const ICON = {
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>',
@@ -55,8 +56,7 @@
       <button type="button" class="sp-play" aria-label="재생">${ICON.play}</button>
       <div class="sp-mid">
         <div class="sp-top"><span class="sp-eye"></span><span class="sp-time">--:-- / --:--</span></div>
-        <div class="sp-title">대기</div>
-        <select class="sp-step" aria-label="공정 단계 선택"></select>
+        <div class="sp-row"><div class="sp-title">대기</div><select class="sp-step" aria-label="공정 단계 선택"></select></div>
         <div class="sp-bar off" role="slider" aria-label="진행 위치" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><i style="width:0"></i><b style="left:0"></b></div>
       </div>
       <button type="button" class="sp-speed" title="배속">×${speed}</button>
@@ -91,6 +91,7 @@
         stepKey = key;
         sel.innerHTML = steps.length ? steps.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join('') : '<option value="">단계 정보 없음</option>';
         sel.disabled = !steps.length || !opts.onStep;
+        sel.classList.toggle('none', !steps.length);
       }
       const si = s.step >= 0 && s.step < steps.length ? String(s.step) : '';
       if (document.activeElement !== sel && sel.value !== si) { if (si === '') sel.selectedIndex = -1; else sel.value = si; }

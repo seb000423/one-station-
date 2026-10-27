@@ -585,7 +585,7 @@
   #fbBar .grp{display:flex;align-items:center;gap:4px}
   #fbBar .grp > span{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);margin-right:2px}
   #fbBar button,#fbBar select{box-sizing:border-box;height:28px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 9px;border-radius:3px;cursor:pointer;font:inherit;font-size:12px;line-height:26px}
-  .fb-on #fbSim{left:calc(50% + 126px);width:min(760px,calc(100% - 300px))} /* centred right of the palette column */
+  .fb-on #fbSim{left:calc(50% + 126px);width:min(560px,calc(100% - 300px))} /* centred right of the palette column */
   .fb-on .view .hud.bl{bottom:132px} /* the cell's joint read-out clears the sim panel */
   .fb-on .view .hud.bc{display:none} /* the cell's step bar: steps are in the sim panel's list */
   #fbBar button.following{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
@@ -1274,7 +1274,7 @@
   function simPanelTick() {
     if (!simBox) return;
     const c = cycle(), idle = playing ? '가동 중' : clock > 0 ? '일시정지' : '대기';
-    if (!c) return simBox.update({ playing, title: idle, eyebrow: '시뮬레이션 · AMR·작업자 동선이 없으면 경과 시간만 표시', steps: [], step: -1, t: clock, total: 0 });
+    if (!c) return simBox.update({ playing, title: idle, eyebrow: '시뮬레이션 · 경과 시간', steps: [], step: -1, t: clock, total: 0 });
     simBox.update({ playing, title: c.label || idle, eyebrow: `시뮬레이션 사이클 · ${c.o.name} 기준 · ${c.loop + 1}회차`, steps: c.steps.map(x => x.label), step: c.k, t: c.u, total: c.P });
   }
   // jump to a time in the run (step list / progress bar); AMRs, workers and belts are posed from the clock
