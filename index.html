@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
 <style>
-/* Layout: centered logo + menu floating over a live 3D dispensing scene; station plan diagram below. Brand: black, white, teal #006282, cyan #00E8D0. */
+/* Layout: centered logo + menu floating over a live 3D dispensing scene; station plan diagram below. Brand: black, white, gold #7a5f12, yellow #EEC539 (TwinForge palette). */
 :root{
   --ink:#050607; --ink2:#0d0f11; --line:#24282d; --fg:#f4f5f6; --mute:#9aa0a6;
-  --teal:#006282; --cyan:#00e8d0; --cyan-ink:#021a18;
+  --teal:#7a5f12; --cyan:#eec539; --cyan-ink:#1d1600;
   --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
   color-scheme:dark;
@@ -60,12 +60,12 @@ a{color:inherit}
 .menu a.on{color:#fff;border-bottom-color:var(--cyan)}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.2em;color:var(--mute);text-transform:uppercase}
 .station h2{font-size:clamp(26px,3.2vw,40px);letter-spacing:-.025em;margin:0 0 26px;font-weight:600}
-.open{display:inline-flex;align-items:center;gap:14px;background:var(--cyan);color:var(--cyan-ink);text-decoration:none;font-weight:700;font-size:16px;padding:16px 34px;letter-spacing:.16em;font-family:var(--mono);box-shadow:0 0 0 1px rgba(0,232,208,.4),0 14px 40px rgba(0,232,208,.18)}
+.open{display:inline-flex;align-items:center;gap:14px;background:var(--cyan);color:var(--cyan-ink);text-decoration:none;font-weight:700;font-size:16px;padding:16px 34px;letter-spacing:.16em;font-family:var(--mono);box-shadow:0 0 0 1px rgba(238,197,57,.4),0 14px 40px rgba(238,197,57,.18)}
 .open:hover{filter:brightness(1.06)}
 .open:focus-visible{outline:2px solid #fff;outline-offset:4px}
 .open span{font-family:var(--mono)}
 .entry{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:920px;margin:0 auto;text-align:left}
-.ecard{--a:var(--cyan);--a2:rgba(0,232,208,.16);position:relative;display:flex;align-items:center;gap:20px;padding:20px 22px;text-decoration:none;color:var(--fg);background:linear-gradient(135deg,var(--a2),transparent 60%),var(--ink2);border:1px solid var(--line);overflow:hidden;transition:transform .25s,border-color .25s,box-shadow .25s}
+.ecard{--a:var(--cyan);--a2:rgba(238,197,57,.16);position:relative;display:flex;align-items:center;gap:20px;padding:20px 22px;text-decoration:none;color:var(--fg);background:linear-gradient(135deg,var(--a2),transparent 60%),var(--ink2);border:1px solid var(--line);overflow:hidden;transition:transform .25s,border-color .25s,box-shadow .25s}
 .ecard.m{--a:#ffb23e;--a2:rgba(255,178,62,.14)}
 .ecard::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--a);box-shadow:0 0 18px var(--a)}
 .ecard:hover,.ecard:focus-visible{transform:translateY(-3px);border-color:var(--a);box-shadow:0 18px 44px -18px var(--a),inset 0 0 0 1px var(--a);outline:none}
@@ -78,9 +78,9 @@ a{color:inherit}
 .ecard:hover .go{transform:translateX(5px)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--a);margin-left:6px;animation:blink 1.4s infinite}
 @keyframes blink{50%{opacity:.25}}
-.b .grid path{fill:none;stroke:rgba(0,232,208,.35);stroke-width:.8}
-.b .grid path:first-child{fill:rgba(0,232,208,.06)}
-.b .t{fill:#5ff5e4}.b .l{fill:#00b9a6}.b .r{fill:#007d71}
+.b .grid path{fill:none;stroke:rgba(238,197,57,.35);stroke-width:.8}
+.b .grid path:first-child{fill:rgba(238,197,57,.06)}
+.b .t{fill:#ffe07a}.b .l{fill:#eec539}.b .r{fill:#a8861f}
 .b .blk{transition:transform .45s cubic-bezier(.3,1.6,.5,1)}
 .b .k3{transform:translateY(-14px);opacity:.0;transition:transform .45s cubic-bezier(.3,1.6,.5,1),opacity .2s}
 .b:hover .k1{transform:translateY(-3px)}.b:hover .k2{transform:translateY(-5px);transition-delay:.06s}
@@ -101,7 +101,7 @@ a{color:inherit}
 .vbox canvas:active{cursor:grabbing}
 .hot{position:absolute;inset:0;pointer-events:none}
 .hs{position:absolute;left:0;top:0;pointer-events:auto;display:flex;align-items:center;gap:8px;background:none;border:0;padding:0;color:#fff;cursor:default;transition:opacity .2s;margin:-12px 0 0 -12px}
-.hs b{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--teal);font-family:var(--mono);font-size:11.5px;box-shadow:0 0 0 3px rgba(0,232,208,.25),0 2px 8px rgba(0,0,0,.5)}
+.hs b{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--teal);font-family:var(--mono);font-size:11.5px;box-shadow:0 0 0 3px rgba(238,197,57,.25),0 2px 8px rgba(0,0,0,.5)}
 .hs span{font-size:12.5px;background:rgba(5,6,7,.82);padding:3px 8px;white-space:nowrap;opacity:0;transform:translateX(-4px);transition:.18s;border-left:2px solid var(--cyan)}
 .hs.on b{background:var(--cyan);color:var(--cyan-ink)}
 .hs.on span,.hs:hover span{opacity:1;transform:none}
@@ -119,7 +119,7 @@ footer{border-top:1px solid var(--line);padding-block:40px 48px;color:var(--mute
 footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center}
 footer img{height:20px;width:auto;opacity:.85}
 .sel{user-select:all;font-family:var(--mono);color:#d6dade}
-.about{border-top:1px solid var(--line);padding-block:88px 96px;background:radial-gradient(ellipse at 85% 10%,rgba(0,232,208,.07),transparent 55%),var(--ink)}
+.about{border-top:1px solid var(--line);padding-block:88px 96px;background:radial-gradient(ellipse at 85% 10%,rgba(238,197,57,.07),transparent 55%),var(--ink)}
 .about-head{max-width:720px;margin-bottom:56px}
 .about h2{font-size:clamp(32px,4.6vw,58px);line-height:1.15;letter-spacing:-.04em;font-weight:700;margin:14px 0 22px}
 .about h2 em{font-style:normal;color:var(--cyan)}
@@ -129,7 +129,7 @@ footer img{height:20px;width:auto;opacity:.85}
 .co-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;min-height:40px}
 .co-logo{height:28px;width:auto}
 .wordmark{font-family:var(--sans);font-weight:700;font-size:28px;letter-spacing:.08em;color:#fff;line-height:1}
-.role{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);border:1px solid rgba(0,232,208,.35);padding:4px 8px}
+.role{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);border:1px solid rgba(238,197,57,.35);padding:4px 8px}
 .co-name{margin:0;font-size:18px;font-weight:600}
 .co dl{display:grid;grid-template-columns:110px 1fr;gap:12px 16px;margin:0;font-size:14.5px}
 .co dt{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);padding-top:3px}
@@ -137,7 +137,7 @@ footer img{height:20px;width:auto;opacity:.85}
 .mono{font-family:var(--mono)}
 .copybtn{background:none;border:1px solid var(--line);color:var(--mute);font-size:11.5px;padding:2px 8px;margin-left:8px;cursor:pointer}
 .copybtn:hover{color:var(--cyan);border-color:var(--cyan)}
-.maplink{justify-self:start;color:var(--cyan);text-decoration:none;font-size:13px;border-bottom:1px solid rgba(0,232,208,.4);padding-bottom:2px}
+.maplink{justify-self:start;color:var(--cyan);text-decoration:none;font-size:13px;border-bottom:1px solid rgba(238,197,57,.4);padding-bottom:2px}
 .x{display:grid;place-items:center;padding:0 6px;color:var(--teal);font-size:28px;font-weight:300;border-left:1px solid var(--line);border-right:1px solid var(--line);background:var(--ink2)}
 footer{padding-block:28px 32px}
 footer span{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em}
@@ -464,7 +464,7 @@ const M = {
   alu: std(0xb9bfc6, 0.75, 0.42),
   cabinet: std(0x23272e, 0.3, 0.62),
   top: std(0x50565e, 0.7, 0.5),
-  brand: std(0x006282, 0.35, 0.45),
+  brand: std(0x7a5f12, 0.35, 0.45),
   pc: new THREE.MeshPhysicalMaterial({ color: 0xcfe0ee, metalness: 0, roughness: 0.08, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide }),
   white: std(0xeceef0, 0.05, 0.38),
   cap: std(0x2f343b, 0.3, 0.5),
@@ -476,7 +476,7 @@ const M = {
   rubber: std(0x0f1012, 0, 0.9),
   gold: std(0xc9a64a, 0.9, 0.35),
   yellow: std(0xe0b21c, 0.2, 0.55),
-  path: new THREE.LineDashedMaterial({ color: 0x00e8d0, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 })
+  path: new THREE.LineDashedMaterial({ color: 0xeec539, dashSize: 0.006, gapSize: 0.004, transparent: true, opacity: 0.9 })
 };
 [M.cabinet, M.pom, M.black, M.white, M.cap, M.brand, M.yellow, M.rubber].forEach(m => m.envMapIntensity = 0.45);
 M.top.envMapIntensity = 0.6;
@@ -578,12 +578,12 @@ function buildRobot(parent, x, z, kind) {
     mesh(new THREE.CylinderGeometry(0.0007, 0.0009, 0.031, 10).rotateX(-Math.PI / 2), M.steel, tool).position.z = 0.2215;  // 1" needle
     const hose = new THREE.CatmullRomCurve3([[0, 0.012, 0.062], [0, 0.05, 0.05], [0, 0.07, 0.0], [0, 0.06, -0.06], [0, 0.04, -0.1]].map(p => new THREE.Vector3(...p)));
     mesh(new THREE.TubeGeometry(hose, 24, 0.0035, 8), std(0xd8dde2, 0, 0.6), tool);
-    glow = new THREE.Mesh(new THREE.SphereGeometry(0.004, 16, 12), new THREE.MeshBasicMaterial({ color: 0x00e8d0, transparent: true, opacity: 0.0 }));
+    glow = new THREE.Mesh(new THREE.SphereGeometry(0.004, 16, 12), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.0 }));
     glow.position.z = 0.238; tool.add(glow);
   }
   // reach envelope (shown on demand): filled shell + wire + equator ring
   const reach = new THREE.Group(); reach.position.z = 0.152; root.add(reach); reach.visible = cfg.reach;
-  const rc = kind === 'handler' ? 0x2fa7d6 : 0x00e8d0;
+  const rc = kind === 'handler' ? 0x2fa7d6 : 0xeec539;
   reach.add(new THREE.Mesh(new THREE.SphereGeometry(0.922, 48, 24), new THREE.MeshBasicMaterial({ color: rc, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide })));
   reach.add(new THREE.Mesh(new THREE.SphereGeometry(0.924, 24, 12), new THREE.MeshBasicMaterial({ color: rc, wireframe: true, transparent: true, opacity: 0.32 })));
   reach.add(new THREE.Mesh(new THREE.TorusGeometry(0.922, 0.004, 6, 96), new THREE.MeshBasicMaterial({ color: rc })));
@@ -893,7 +893,7 @@ function buildStation() {
   const hmi = canvasTex(512, 320, (ctx, w, h, st) => {
     st = st || { ok: 0, ng: 0, phase: '대기', n: 0, N: 0 };
     ctx.fillStyle = '#0d1014'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#00e8d0'; ctx.fillRect(0, 0, w, 6);
+    ctx.fillStyle = '#eec539'; ctx.fillRect(0, 0, w, 6);
     ctx.fillStyle = '#e6e8eb'; ctx.font = '600 30px "IBM Plex Sans KR", sans-serif'; ctx.fillText('ONE AUTOMATION', 24, 52);
     ctx.fillStyle = '#8a929c'; ctx.font = '500 22px "IBM Plex Mono", monospace'; ctx.fillText('STATE  ' + st.phase, 24, 96);
     ctx.fillText('PART   ' + st.n + ' / ' + st.N, 24, 130);
@@ -917,7 +917,7 @@ function buildStation() {
     box(nestW, 0.04, 0.34, M.pom, sx, TABLE_Y + 0.04, JIG_Z, jig);
     box(nestW * 0.6, 0.004, 0.24, M.black, sx, NEST_TOP - 0.001, JIG_Z, jig);
     for (const dz of [-0.15, 0.15]) cyl(0.005, 0.02, M.steel, sx + nestW / 2 - 0.012, NEST_TOP + 0.008, JIG_Z + dz, jig);
-    const sm = lamp(0x00e8d0);
+    const sm = lamp(0xeec539);
     box(0.02, 0.02, 0.02, M.black, sx, TABLE_Y + 0.03, JIG_Z + 0.2, jig);
     cyl(0.006, 0.004, sm, sx, TABLE_Y + 0.03, JIG_Z + 0.211, jig, G.cylZ);
     sensors.push(sm);
@@ -1545,7 +1545,7 @@ function startCycle() {
             const t = Math.max(0, Math.min(1, a)); p.obj.visible = a > 0;
             const T = jigPose(i).slice(); T[7] += (1 - smooth(t)) * 0.3; p.setPose(T);
           }
-          if (a >= 1) ST.sensors[i].emissiveIntensity = 1.2, ST.sensors[i].emissive.set(0x00e8d0);
+          if (a >= 1) ST.sensors[i].emissiveIntensity = 1.2, ST.sensors[i].emissive.set(0xeec539);
         });
       }
     }),
@@ -1751,7 +1751,7 @@ function frame(now) {
 }
 /* ---------- secondary orbit viewer (index STATION panel): same live scene, fence on, numbered hotspots ---------- */
 let viewer = null;
-const fogs = { hero: scene.fog, view: new THREE.Fog(0x1d2126, 9, 26) };
+const fogs = { hero: scene.fog, view: new THREE.Fog(0x1f2a31, 9, 26) };
 function mountViewer(cv, hotEl, legendEl) {
   const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   r.setPixelRatio(Math.min(devicePixelRatio, 1.75)); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1776,7 +1776,7 @@ function renderViewer() {
   if (v.w !== w || v.h !== h) { v.r.setSize(w, h, false); v.cam.aspect = w / h; v.cam.updateProjectionMatrix(); v.w = w; v.h = h; }
   v.ctl.update();
   const bg = scene.background, fv = ST.enc.visible;
-  scene.background = new THREE.Color(0x1d2126); scene.fog = fogs.view; ST.enc.visible = ST.door.visible = true;
+  scene.background = new THREE.Color(0x1f2a31); scene.fog = fogs.view; ST.enc.visible = ST.door.visible = true;
   v.r.render(scene, v.cam);
   scene.background = bg; scene.fog = fogs.hero; ST.enc.visible = ST.door.visible = fv;
   const p = new THREE.Vector3();
