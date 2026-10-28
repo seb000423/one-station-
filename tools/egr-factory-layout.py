@@ -79,15 +79,16 @@ model('리치 지게차 (대기)', 'uw_reachlift', 29.0, -16.2, PI2)
 
 # ---------------------------------------------------------------- EGR assembly line (south): benches on a roller line, operators
 LZ = 13.0
-for name, kind, x in (('조립 작업대 1', 'assembly', -14.5), ('조립 작업대 2', 'assembly', -12.0), ('리크 테스트 1', 'leak', -9.5), ('리크 테스트 2', 'leak', -7.0), ('검사 · 포장', 'pack', -4.5)):
-    add('bench', name, x, LZ, math.pi, {'kind': kind, 'length': 1.6, 'depth': 0.8, 'height': 0.9})  # operators on the aisle side (−Z after the turn)
+benches = []
+for k, (name, kind, x) in enumerate((('조립 작업대 1', 'assembly', -14.5), ('조립 작업대 2', 'assembly', -12.0), ('리크 테스트 1', 'leak', -9.5), ('리크 테스트 2', 'leak', -7.0), ('검사 · 포장', 'pack', -4.5))):
+    # seated operators on the aisle side (−Z after the turn); each presses the done button every cycle
+    benches.append(add('bench', name, x, LZ, math.pi, {'kind': kind, 'length': 1.6, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': 38 + 4 * k}))
 add('conveyor', '조립 라인 컨베이어', -8.5, LZ + 1.6, 0, {'shape': 'straight', 'kind': 'roller', 'length': 13, 'width': 0.6, 'height': 0.85, 'speed': 0.12, 'dir': 1, 'source': True, 'interval': 14, 'item': 0.44, 'sink': True})
 for k, x in enumerate((-15.5, -13.0, -10.5)):
     add('rack', f'부품 랙 {k + 1}', x, LZ + 3.2, 0, {'bays': 1, 'levels': 3, 'bayWidth': 1.4, 'depth': 0.6, 'levelHeight': 0.45, 'perSlot': 2, 'fill': 80, 'load': 'tote'})
 model('완성품 팔레트', 'uw_sunoko', -0.6, LZ)
-ww = add('walkway', '조립 라인 작업 통로', -9.0, LZ - 1.6, 0, {'length': 12.0, 'width': 0.8, 'label': '조립 라인 작업 통로'})
-add('worker', '조립 담당', -13.0, LZ - 1.6, 0, {'walkway': ww['id'], 'speed': 0.8, 'dwell': 18})
-add('worker', '검사 담당', -5.0, LZ - 1.6, 0, {'walkway': ww['id'], 'speed': 0.8, 'dwell': 25})
+ww = add('walkway', '조립 라인 작업 통로', -9.0, LZ - 2.0, 0, {'length': 12.0, 'width': 0.8, 'label': '조립 라인 작업 통로'})
+add('worker', '라인 반장', -9.0, LZ - 2.0, 0, {'walkway': ww['id'], 'speed': 0.8, 'dwell': 25})
 wr = add('walkroute', '도포 셀 점검 동선', 0, 0, 0, {'points': [[-9.5, -12.4], [-3.0, -12.4]]})
 add('worker', '도포 셀 담당', -9.5, -12.4, 0, {'walkway': wr['id'], 'speed': 0.9, 'dwell': 20})
 
@@ -103,7 +104,9 @@ zone('자재 입고', 'pickup', DOORS[0], 17.65, track=True, stock=3, cap=6, sup
 zone('자동창고 입고', 'dropoff', -17.6, NL - 2.65, track=True, stock=0, cap=4, consume=36, load='uw_cardboard_a1')
 zone('적재 완료 (FR5)', 'pickup', 5.4, NL - 2.65, track=True, stock=0, cap=4, supply=70, load='e3_tote_600x400')  # a full tote (8 coolers) about every 70 s
 zone('완제품 입고', 'dropoff', 16.4, NL - 2.65, track=True, stock=0, cap=6, consume=24, load='e3_tote_600x400')
-zone('조립 완료', 'pickup', -0.6, SL + 2.65, track=True, stock=1, cap=3, supply=60, load='uw_cardboard_c1')
+zone('조립 완료', 'pickup', -0.6, SL + 2.65, track=True, stock=1, cap=4, load='uw_cardboard_c1')  # filled by the weighing AMR
+# weighing zone beside the benches: the operators put finished coolers (2.5 kg) on the AMR waiting here; at 20 kg it leaves
+zone('조립품 적재 (무게 감지)', 'pickup', -9.5, SL + 1.9, w=2.4, d=1.2, track=True, stock=0, cap=16, supply=9, unitKg=2.5, thresholdKg=20, load='e3_egr_cooler')
 zone('출하 대기', 'dropoff', DOORS[1], 17.65, track=True, stock=0, cap=4, consume=70, load='uw_cardboard_c1')
 # linked cells: the machining cell draws raw parts from its input zone and fills its output zone at its own cycle (24.9 s);
 # when the AMR does not clear the output in time the cell stops (blocked), when no raw parts come in it stops (starved)
@@ -114,13 +117,13 @@ zone('조립 부품 공급', 'dropoff', -17.5, SL + 2.65, track=True, stock=1, c
 
 # ---------------------------------------------------------------- AMR network and movers
 # the loop passes through every junction (dock spurs join the network only at route points)
-north = sorted({-21.5, -17.6, 0.0, 5.4, 11.64, 16.4}); south = sorted({-17.5, -0.6, 0.0, 3.9, 7.1, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers between the column lines
+north = sorted({-21.5, -17.6, 0.0, 5.4, 11.64, 16.4}); south = sorted({-17.5, -9.5, -0.6, 0.0, 3.9, 7.1, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers between the column lines
 route('순환 경로', [(-28, NL)] + [(x, NL) for x in north] + [(28, NL), (28, SL)] + [(x, SL) for x in south] + [(-28, SL), (-28, NL)], oneway=True)
 route('남행 연결로', [(11.64, NL), (11.64, SL)], oneway=True)   # crossovers between the lanes, midway between centre columns
 route('북행 연결로', [(0.0, SL), (0.0, NL)], oneway=True)
 for x in (-21.5, -17.6, 5.4, 16.4):
     route('도킹', [(x, NL), (x, NL - 1.25)])
-for x in (-17.5, -0.6, 3.9, 7.1):
+for x in (-17.5, -9.5, -0.6, 3.9, 7.1):
     route('도킹', [(x, SL), (x, SL + 1.25)])
 for x in DOORS:
     route('셔터 통로', [(x, SL), (x, 16.4)])
@@ -137,6 +140,9 @@ add('amr', '소재 공급 AMR', -24.0, NL, 0, {'model': 'e3_amr_deck_bot', 'leng
 add('amr', '부품 공급 AMR', 9.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
     'stops': [stop('가공품 반출', 'load'), stop('조립 부품 공급', 'unload')]})
 tend['params'].update({'from': ref['가공 소재 공급'], 'feeds': ref['가공품 반출']})
+for bnch in benches: bnch['params']['feeds'] = ref['조립품 적재 (무게 감지)']
+add('amr', '무게 감지 AMR', -12.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.2, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
+    'stops': [stop('조립품 적재 (무게 감지)', 'wait', 1), stop('조립품 적재 (무게 감지)', 'load', 8), stop('조립 완료', 'unload')]})
 stack['params'].update({'feeds': ref['적재 완료 (FR5)']})
 add('amr', '출하 지게차', 12.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.3, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
     'stops': [stop('조립 완료', 'load'), stop('출하 대기', 'unload', 12)]})

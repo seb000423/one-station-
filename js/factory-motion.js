@@ -374,9 +374,11 @@
     const zoneTracks = new Map([...zones.values()].map(z => [z.o.id, new Int16Array(Math.ceil(horizon / SAMPLE) + 1)]));
     const stopAt = a => a.stops[a.at];
     // can an AMR be promised an item (load) / a place (unload) at this stop? promise it
-    const canServe = st => { const z = zones.get(st.at); if (!z) return true; return st.act === 'load' ? z.stock - z.resOut >= 1 : st.act === 'unload' ? !z.cap || z.stock + z.resIn < z.cap : true; };
-    const promise = st => { const z = zones.get(st.at); if (z && st.act === 'load') z.resOut++; if (z && st.act === 'unload') z.resIn++; };
-    const short = st => `대기: ${st.name} ${st.act === 'load' ? '재고 없음' : '가득 참'}`;
+    // a weighing zone (thresholdKg / unitKg) hands over a batch: the AMR waits until the weight on it reaches the threshold
+    const batch = z => (z && z.p.thresholdKg > 0 && z.p.unitKg > 0 ? Math.max(1, Math.ceil(z.p.thresholdKg / z.p.unitKg)) : 1);
+    const canServe = st => { const z = zones.get(st.at); if (!z) return true; return st.act === 'load' ? z.stock - z.resOut >= batch(z) : st.act === 'unload' ? !z.cap || z.stock + z.resIn < z.cap : true; };
+    const promise = st => { const z = zones.get(st.at); if (z && st.act === 'load') z.resOut += batch(z); if (z && st.act === 'unload') z.resIn++; };
+    const short = st => { const z = zones.get(st.at); return `대기: ${st.name} ${st.act === 'load' ? (batch(z) > 1 ? '무게 미달' : '재고 없음') : '가득 참'}`; };
     const tryHold = (a, res) => { if (!res.every(r => free(r, a.o.id))) return false; res.forEach(r => held.set(r, a.o.id)); return true; };
     const release = (a, r) => { if (held.get(r) === a.o.id) held.delete(r); };
     const holderOf = (a, res) => { for (const r of res) if (!free(r, a.o.id)) return held.get(r); return null; };
@@ -419,7 +421,7 @@
           const st = stopAt(a), z = zones.get(st.at);
           if (!a.promised) { if (!canServe(st)) { a.label = short(st); continue; } promise(st); }
           a.promised = false;
-          if (z && st.act === 'load') { z.stock--; z.resOut--; }
+          if (z && st.act === 'load') { const n = batch(z); z.stock -= n; z.resOut -= n; }
           a.phase = 'dwell'; a.timer = st.dwell; a.label = `${ACT[st.act]} 중 (${st.name})`; continue;
         }
         if (a.phase === 'dwell') {

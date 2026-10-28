@@ -172,7 +172,7 @@
     },
     zone: {
       label: '구역', group: 'route',
-      defaults: () => ({ w: 3, d: 3, kind: 'pickup', label: '', color: '', track: false, stock: 0, cap: 0, supply: 0, consume: 0 }), // track: count stock (js/factory-motion.js)
+      defaults: () => ({ w: 3, d: 3, kind: 'pickup', label: '', color: '', track: false, stock: 0, cap: 0, supply: 0, consume: 0, unitKg: 0, thresholdKg: 0 }), // unitKg / thresholdKg: a weighing zone (AMR takes a batch when the weight reaches the threshold) // track: count stock (js/factory-motion.js)
       build: (g, p) => {
         const c = new THREE.Color(p.color || (ZONE_KIND[p.kind] || ZONE_KIND.none)[1]);
         box(g, 'Zone_Area', p.w, 0.004, p.d, mat(c, { transparent: true, opacity: 0.28, depthWrite: false }), 0, 0.002, 0).castShadow = false;

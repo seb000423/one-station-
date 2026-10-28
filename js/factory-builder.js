@@ -57,14 +57,15 @@
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
     fence: [['length', '길이 (m)', 0.5, 0.5, 100], ['height', '높이 (m)', 0.1, 0.5, 4], ['panel', '패널 폭 (m)', 0.1, 0.5, 3]],
     roof: [['length', '길이 (m, X)', 1, 6, 300], ['span', '폭 (m, Z)', 1, 6, 60], ['h', '처마 높이 (m, 0 = 천장)', 0.5, 0, 30], ['bay', '트러스 간격 (m)', 0.5, 3, 12], ['rise', '지붕 경사 높이 (m)', 0.1, 0, 4], ['sheet', '지붕판 보이기', 'check']],
-    bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2]],
+    bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2], ['worker', '앉은 작업자', 'check'], ['cycle', '작업 사이클 (s, 완료 버튼)', 1, 5, 600, p => p.worker], ['feeds', '완성품 구역 (안돈 호출)', 'place']],
     tote: [['kind', '종류', 'select', [['tote', '플라스틱 상자'], ['carton', '골판지 상자']]], ['length', '길이 (m)', 0.05, 0.1, 2], ['width', '폭 (m)', 0.05, 0.1, 2], ['height', '높이 (m)', 0.02, 0.05, 1.5], ['stack', '쌓은 수', 1, 1, 12]],
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
     walkway: [['length', '길이 (m)', 0.5, 0.5, 200], ['width', '폭 (m)', 0.1, 0.6, 6]],
     zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color'],
       ['track', '재고 관리 (수량 세기)', 'check'], ['stock', '초기 재고 (개)', 1, 0, 999, p => p.track], ['cap', '최대 적재 (개, 0 = 무제한)', 1, 0, 999, p => p.track],
-      ['supply', '자동 입고 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track], ['consume', '자동 소비 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track]],
+      ['supply', '자동 입고 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track], ['consume', '자동 소비 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track],
+      ['unitKg', '개당 무게 (kg, 무게 감지)', 0.1, 0, 500, p => p.track], ['thresholdKg', 'AMR 출발 무게 (kg, 0 = 1개마다)', 0.5, 0, 2000, p => p.track && p.unitKg > 0]],
     conveyor: [['shape', '모양', 'select', [['straight', '직선'], ['curve', '90° 곡선 (L자)'], ['uturn', '180° U턴']]], ['turn', '꺾는 방향', 'select', [['left', '왼쪽'], ['right', '오른쪽']], null, p => p.shape !== 'straight'],
       ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
       ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
@@ -130,6 +131,12 @@
     const f = t / g.dt - n; return g.acc[n] + (g.acc[n + 1] - g.acc[n]) * f;
   }
   window.__gateTime = gateTime;
+  // a workbench's andon: its output zone holds a full batch (weight reached) or at least one part — an AMR is called
+  function calling(o, M, t) {
+    const ref = (o.params || {}).feeds, Z = M && M.zones, z = ref && Z && Z[ref.replace(/^zone:/, '')]; if (!z) return false;
+    const zo = byId(ref.replace(/^zone:/, '')), zp = (zo && zo.params) || {}, n = zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1;
+    return z.stock(t) >= n;
+  }
   // AMR plans learn where each zone stands (load / unload hand-off animation, js/factory-unity-groups.js)
   function withZones(M) {
     if (M && M.amr && !M.__zones) { M.__zones = true; const at = name => { const o = doc.objects.find(o => o.type === 'zone' && o.name === name); return o ? { x: o.x, z: o.z } : null; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
@@ -747,6 +754,7 @@
   #fbLabels .card em{font-style:normal;font-size:10.5px;color:#ffb37c}
   #fbLabels .card em.k{color:rgba(255,255,255,.55)}
   #fbLabels .card.warn{border-left-color:#ff8a3c}
+  #fbLabels .card.weigh em{color:#7dffb2}
   #fbPanel .pal [hidden]{display:none}
   #fbPanel details{border-top:1px solid var(--line);padding-top:6px;min-height:0;display:flex;flex-direction:column}
   #fbPanel details[open].grow{flex:1}
@@ -1214,7 +1222,7 @@
     for (const o of others) {
       const g = FE.build(o, doc.factory); building.push(g);
       const pl = o.type === 'amr' ? M.amr[o.id] : o.type === 'worker' ? M.worker[o.id] : null;
-      extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : o.type === 'ufmodel' ? { warp: tt => gateTime(o, M, tt) } : null))); // movers' plans, zones' stock, gated cells
+      extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : o.type === 'ufmodel' ? { warp: tt => gateTime(o, M, tt) } : o.type === 'bench' ? { warp: tt => gateTime(o, M, tt), lampAt: tt => calling(o, M, tt) } : null))); // movers' plans, zones' stock, gated cells, benches
       if (pl && pl.ok && !pl.still) extra.push(...rigMotion(g, pl, frames, SPF));
     }
     // station cells' R1 / R2 range circles
@@ -1362,6 +1370,7 @@
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
         if (o.type === 'conveyor' || o.type === 'robot' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, o.type === 'ufmodel' ? gateTime(o, M, t) : t);
+        else if (o.type === 'bench') window.FactoryElements.animate(o, g, gateTime(o, M, t), { lamp: calling(o, M, t) });
         else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
@@ -1471,8 +1480,9 @@
       const x = (v.x + 1) / 2 * r.width + r.left - vr.left, y = (1 - v.y) / 2 * r.height + r.top - vr.top; if (x < -40 || y < -20 || x > vr.width + 40 || y > vr.height + 20) continue;
       const far = Math.max(60, Math.hypot(doc.factory.width, doc.factory.depth) * 1.5), d = cam.position.distanceTo(new THREE.Vector3(o.x, 0.6, o.z)), op = Math.max(0, Math.min(1, 1.3 - d / far)); if (op <= 0.05) continue; // fade with distance (scaled to the factory)
       const stock = z ? z.stock(t) : null, cap = z ? z.cap : 0, kind = (window.FactoryElements.ZONE_KIND[p.kind] || [''])[0];
-      const state = stock == null ? '' : cap && stock >= cap ? '가득 참' : stock === 0 ? '비어 있음' : '';
-      items.push({ id: o.id, x, y, d, op, name: o.name, kind, stock, cap, state, keep: p.kind === 'keepout' });
+      const kg = p.unitKg > 0 && stock != null ? stock * p.unitKg : null, th = p.thresholdKg > 0 ? p.thresholdKg : 0;
+      const state = kg != null && th ? (kg >= th ? '호출 · 출발 무게' : `${kg.toFixed(1)} / ${th} kg`) : stock == null ? '' : cap && stock >= cap ? '가득 참' : stock === 0 ? '비어 있음' : '';
+      items.push({ id: o.id, x, y, d, op, name: o.name, kind, stock, cap, state, keep: p.kind === 'keepout', weigh: kg != null && th > 0 && kg < th });
     }
     // stable layout: a fixed order (document order), each card keeps its previous slot while that slot is still free
     // (no re-solving every frame), whole pixels, and the DOM nodes persist (only changed text / positions are written)
@@ -1488,7 +1498,7 @@
       if (!c) { c = document.createElement('div'); c.dataset.id = it.id; cards.appendChild(c); labelCards.set(it.id, c); }
       const html = `<b>${esc(it.name)}</b>${st && it.stock != null ? `<span class="n">${it.stock}${it.cap ? '<i>/' + it.cap + '</i>' : ''}</span>` : ''}${it.state ? `<em>${it.state}</em>` : `<em class="k">${esc(it.kind)}</em>`}`;
       if (c.__html !== html) { c.innerHTML = html; c.__html = html; c.title = `${it.name} · ${it.kind}${it.stock != null ? ` · 재고 ${it.stock}${it.cap ? ' / ' + it.cap : ''}` : ''}${it.keep ? ' · 진입 금지' : ''} — 클릭하면 선택`; }
-      const cls = 'card' + (it.state ? ' warn' : ''), sty = `left:${ax - W / 2}px;top:${cy}px;opacity:${it.op.toFixed(1)}`;
+      const cls = 'card' + (it.state && !it.weigh ? ' warn' : it.weigh ? ' weigh' : ''), sty = `left:${ax - W / 2}px;top:${cy}px;opacity:${it.op.toFixed(1)}`;
       if (c.className !== cls) c.className = cls; if (c.__sty !== sty) { c.style.cssText = sty; c.__sty = sty; }
       lines.push(`<line x1="${ax}" y1="${ay - 2}" x2="${ax}" y2="${cy + H}" style="opacity:${it.op.toFixed(1)}"/><circle cx="${ax}" cy="${ay}" r="2.5" style="opacity:${it.op.toFixed(1)}"/>`);
     }
