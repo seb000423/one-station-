@@ -70,7 +70,7 @@
   const E3 = 'assets/models/egr-line-v3/';
   for (const file of ['asrs_crane', 'asrs_rail_4m', 'rack_bay_10m', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'conveyor_stopper',
     'roller_conveyor_1m', 'roller_conveyor_2m', 'roller_curve_90', 'belt_conveyor_2m', 'fence_panel_1m', 'fence_panel_2m', 'tote_600x400', 'egr_cooler', 'fr5',
-    'hall_wall_6m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
+    'fr5_stacking_cell', 'hall_wall_6m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
   ]) MODELS['e3_' + file] = { url: E3 + file + '.glb', label: file };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>
@@ -93,6 +93,7 @@
         delete o.userData.realvirtual; // the library's own drives; console 2 gets ours from drives()
         if (o.isMesh) { o.castShadow = o.receiveShadow = true; }
       });
+      root.animations = gltf.animations || []; // clips (e.g. the FR5 stacking cell), played from the sim clock by js/factory-unity.js
       e.scene = root; e.state = 'ready';
       dispatchEvent(new CustomEvent('factory-assets-ready', { detail: { id } }));
       return root;
@@ -103,7 +104,8 @@
   function get(id) {
     const e = entries[id];
     if (!e) { load(id).catch(() => {}); return null; }
-    return e.state === 'ready' ? e.scene.clone(true) : null;
+    if (e.state !== 'ready') return null;
+    const c = e.scene.clone(true); c.animations = e.scene.animations; return c;
   }
   const state = id => (entries[id] ? entries[id].state : 'idle');
   // box of an object's visible meshes in the frame of `frame` (default: its parent)

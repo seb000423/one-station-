@@ -85,6 +85,7 @@
     e3_fence_panel_2m: { label: '안전 펜스 2 m', group: E3, size: [2.07, 2.0, 0.14], parts: [['e3_fence_panel_2m', 0, 0, 0]] },
     e3_tote_600x400: { label: '부품 상자 600×400', group: E3, size: [0.61, 0.27, 0.42], parts: [['e3_tote_600x400', 0, 0, 0]] },
     e3_egr_cooler: { label: 'EGR 쿨러 (부품)', group: E3, size: [0.44, 0.16, 0.15], parts: [['e3_egr_cooler', 0, 0, 0]] },
+    e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle' },
     e3_fr5: { label: '적재 로봇 FR5', group: E3, size: [0.61, 0.68, 0.28], parts: [['e3_fr5', 0, 0, 0]] },
     e3_hall_wall_6m: { label: '공장 벽 6 m (창문)', group: E3, size: [6.06, 10.0, 0.22], parts: [['e3_hall_wall_6m', 0, 0, 0]] },
     e3_hall_column: { label: '공장 기둥 10 m', group: E3, size: [0.5, 10.03, 0.9], parts: [['e3_hall_column', 0, 0, 0]] },
@@ -114,6 +115,7 @@
   const ARM_AMP = { UF_J1: 0.7, UF_J2: 0.22, UF_J3: -0.35, UF_J4: 0.25 }; // rad, idle sway amplitude
   const armPose = (p, t, name) => ARM_AMP[name] * Math.sin(2 * Math.PI * t / Math.max(4, p.cycle) + (name === 'UF_J1' ? 0 : 0.6));
 
+  const clipTime = (g, t) => { const u = g.children.find(c => c.name === 'UF_Model'), m = u && u.userData.clipMixer; if (m) m.setTime(t); }; // looping clip at sim time t (the builder replaces g.userData)
   const ufmodel = {
     label: '설비 모델', group: 'equipment',
     defaults: () => ({ model: 'line01', scale: 1, cycle: 12 }),
@@ -130,6 +132,10 @@
       if (all.children.length) {
         const y0 = c.keepY ? A.bounds(all).min.y : 0;
         const placed = A.placed(all, 'UF_Model'); all.position.y += y0; placed.scale.setScalar(s); g.add(placed);
+        if (c.clip) { // a baked animation clip, driven by the sim clock (animate → clipTime): moves only while the simulation plays
+          const clip = all.children.flatMap(m => m.animations || []).find(k => k.name === c.clip);
+          if (clip) { const mixer = new THREE.AnimationMixer(placed); mixer.clipAction(clip).play(); placed.userData.clipMixer = mixer; }
+        }
         g.userData.ufLoaded = !missing;
       }
       if (missing) { // stand-in box until the GLB(s) arrive (or for a part that failed to load)
@@ -139,7 +145,7 @@
       }
       ufmodel.animate(g, p, 0);
     },
-    animate: (g, p, t) => { for (const [, w] of ARM_JOINTS) { const j = g.getObjectByName(w); if (j) j.rotation[j.userData.axis] = armPose(p, t, w); } },
+    animate: (g, p, t) => { for (const [, w] of ARM_JOINTS) { const j = g.getObjectByName(w); if (j) j.rotation[j.userData.axis] = armPose(p, t, w); } clipTime(g, t); },
     drives: (g, p, frames, spf) => ARM_JOINTS.map(([, w]) => {
       const j = g.getObjectByName(w); if (!j) return null;
       const series = new Array(frames), deg = 180 / Math.PI;
@@ -151,5 +157,5 @@
   };
   FE.TYPES.ufmodel = ufmodel;
   FE.MACHINES = ['ufmodel']; // the only equipment type left (footprints, collisions, animation)
-  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS, thumb, assetIds };
+  window.FactoryUnity = { CATALOG, OPTIONS, GROUPS, thumb, assetIds, clipTime };
 })();

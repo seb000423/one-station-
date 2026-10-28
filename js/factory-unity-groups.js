@@ -279,6 +279,7 @@
     if (p.items) return animateGroup(g, p, t);
     for (const j of armJoints(g)) j.rotation[j.userData.axis] = armPose(p, t, j.name);
     if (p.flow) { animateFlow(g, p, t); if (p.pack) animatePack(g, p, t); }
+    FU.clipTime(g, t);
   };
   T.drives = (g, p, frames, spf) => (p.items ? armDrives(g, p, frames, spf) : armDrives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : [], p.flow && p.pack ? packDrives(g, p, frames, spf) : []));
   T.footprint = p => (p.items && p.items.length ? extent(p) : footprint(p));
