@@ -642,7 +642,7 @@
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
     if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
-    if (k === 'e3_fr5' || k === 'arm') return ['equip', 'arm'];
+    if (/^e3_fr\d+$/.test(k) || k === 'arm') return ['equip', 'arm'];
     if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];
     if (k === 'line06' || k === 'e3_injection_cell') return ['equip', 'press'];
@@ -1090,7 +1090,7 @@
     }
     const deg = Math.round(THREE.MathUtils.radToDeg(o.rot || 0));
     const U = window.FactoryUnity, mc = o.type === 'ufmodel' && U && U.CATALOG[(U.ALIAS || {})[(o.params || {}).model] || (o.params || {}).model];
-    let html = `<div class="kind">${icon(o.type)}${mc ? esc(mc.cat || '공정 설비') + ' · ' + esc(mc.label) : TYPE_LABEL[o.type]}</div>${mc ? `<p class="hint" style="margin:2px 0 6px">실제 크기 ${mc.size[0]} × ${mc.size[2]} m · 높이 ${mc.size[1]} m${mc.clip ? ' · 재생하면 동작합니다 (시뮬레이션 시계)' : ''}</p>` : ''}
+    let html = `<div class="kind">${icon(o.type)}${mc ? esc(mc.cat || '공정 설비') + ' · ' + esc(mc.label) : TYPE_LABEL[o.type]}</div>${mc ? `<p class="hint" style="margin:2px 0 6px">실제 크기 ${mc.size[0]} × ${mc.size[2]} m · 높이 ${mc.size[1]} m${mc.clip ? ' · 재생하면 동작합니다 (시뮬레이션 시계)' : ''}</p>${mc.spec ? `<p class="hint" style="margin:0 0 6px"><b>가반하중 ${mc.spec.payload} kg · 작업 반경 ${mc.spec.reach} mm</b>${mc.spec.use ? ' · ' + esc(mc.spec.use) : ''}</p>` : ''}` : ''}
       <label>이름<input type="text" data-n value="${esc(o.name)}" maxlength="40"></label>
       <div class="row">${field('x', 'X (m)', r2(o.x), 0.1, -999, 999)}${field('z', 'Z (m)', r2(o.z), 0.1, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
     if (!isCell) {
