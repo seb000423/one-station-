@@ -23,4 +23,4 @@ venv (cadquery-ocp 8.0) and the realvirtual-WEB checkout (three 0.185, Playwrigh
 | cell_cf.glb | D C/F check, external paste, manual check, unloading | 324 k |
 | cell_leak.glb | E leak test (28 sub-stations merged) | 238 k |
 
-The GLBs are uncompressed (no gltfpack on this PC yet); `gltfpack -cc` would cut them to roughly a quarter.
+4. `gltfpack -i in.glb -o out.glb -cc -vp 14 -vn 8` (gltfpack 0.20, meshopt compression + 14-bit positions): 33 MB → 5.7 MB for the five cells; js/factory-assets.js already loads EXT_meshopt_compression.
