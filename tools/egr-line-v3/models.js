@@ -612,6 +612,7 @@ function cycleClip(root, name, T, keys, fps = 10) {
     const node = root.getObjectByName(nodeName); if (!node) throw new Error('no node ' + nodeName);
     const at = t => { let k = 0; while (k < pts.length - 2 && pts[k + 1][0] <= t) k++; const [t0, v0] = pts[k], [t1, v1] = pts[Math.min(k + 1, pts.length - 1)]; const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1; const e = u * u * (3 - 2 * u); return v0 + (v1 - v0) * e; };
     const n = Math.round(T * fps) + 1, times = Float32Array.from({ length: n }, (_, i) => i / fps);
+    if (ch === 'vis') { const ts = pts.map(q => q[0]), v = pts.flatMap(q => { const k = q[1] ? 1 : 1e-4; return [k, k, k]; }); tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.scale', ts, v, THREE.InterpolateDiscrete)); continue; }
     if (/^[xyz]$/.test(ch)) { const v = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const q = node.position.clone(); q[ch] += at(times[i]); q.toArray(v, i * 3); } tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.position', times, v)); }
     else { const ax = ch[1], v = new Float32Array(n * 4), e = new THREE.Euler(); for (let i = 0; i < n; i++) { e.copy(node.rotation); e[ax] += at(times[i]); new THREE.Quaternion().setFromEuler(e).toArray(v, i * 4); } tracks.push(new THREE.QuaternionKeyframeTrack(nodeName + '.quaternion', times, v)); }
   }
@@ -647,8 +648,61 @@ function amrDeckBot() { // low AMR (Omron LD class, 0.96 × 0.72 m) in the VEXPL
   return finalize(root);
 }
 
+// ---------------------------------------------------------------- 9. two-level pallet conveyor with an integrated servo press (8 m, along X)
+// upper level (1.1 m) carries blanks on pallets through the press; lift B lowers the pallet, the lower level (0.45 m) returns it
+// empty, lift A raises it again. Three pallets, 12 s apart, one 36 s loop; the press strokes on every pallet.
+function pressLine() {
+  const m = materials(), root = G('Press_Line_2Level'), L = 8, X1 = L / 2 - 0.4, YU = 1.1, YL = 0.45, W = 0.55, PX = 1.0, T = 36;
+  const level = (y, x0, x1, name) => {
+    for (const sz of [-1, 1]) { box(root, m.alu, x1 - x0, 0.1, 0.035, (x0 + x1) / 2, y - 0.04, sz * (W / 2 + 0.02)); }
+    for (let x = x0 + 0.05; x < x1; x += 0.1) cyl(root, m.steel, 0.025, W - 0.01, x, y - 0.025, 0, 'z', 12);
+    void name;
+  };
+  level(YU, -X1 + 0.4, X1 - 0.4, 'upper'); level(YL, -X1 + 0.4, X1 - 0.4, 'lower');
+  for (let x = -X1 + 0.45; x <= X1 - 0.4; x += 1.4) for (const sz of [-1, 1]) { prof(root, [x, 0.06, sz * (W / 2 + 0.05)], [x, YU - 0.1, sz * (W / 2 + 0.05)], 0.045); foot(root, x, sz * (W / 2 + 0.05)); }
+  // lifts at both ends: a profile tower and an orange carriage with a short roller deck
+  const lift = (name, x) => {
+    for (const sz of [-1, 1]) for (const dx of [-0.38, 0.38]) prof(root, [x + dx, 0.06, sz * (W / 2 + 0.12)], [x + dx, YU + 0.55, sz * (W / 2 + 0.12)], 0.045);
+    for (const sz of [-1, 1]) prof(root, [x - 0.4, YU + 0.55, sz * (W / 2 + 0.12)], [x + 0.4, YU + 0.55, sz * (W / 2 + 0.12)], 0.045);
+    box(root, m.black, 0.25, 0.25, 0.2, x, YU + 0.7, W / 2 + 0.12); // lift drive
+    const c = G(name, root, x, YL, 0);
+    box(c, m.orange, 0.8, 0.06, W + 0.12, 0, -0.08, 0); for (let k = -3; k <= 3; k++) cyl(c, m.steel, 0.025, W - 0.01, k * 0.1, -0.025, 0, 'z', 12);
+    for (const sz of [-1, 1]) box(c, m.aluDark, 0.8, 0.08, 0.03, 0, -0.03, sz * (W / 2 + 0.03));
+  };
+  lift('Lift_A_Carriage', -X1); lift('Lift_B_Carriage', X1);
+  // servo press over the upper level at PX: two columns, orange crown, ram with die, bolster under the rollers, light curtains
+  for (const sz of [-1, 1]) box(root, m.black, 0.3, 2.6, 0.22, PX, 1.3, sz * (W / 2 + 0.28));
+  box(root, m.orange, 0.5, 0.45, W + 0.9, PX, 2.75, 0); box(root, m.black, 0.36, 0.3, 0.36, PX, 3.12, 0); // crown + servo motor
+  box(root, m.aluDark, 0.46, 0.2, W + 0.5, PX, YU - 0.22, 0);                                                   // bolster
+  const ram = G('Press_Ram', root, PX, 2.25, 0); box(ram, m.aluDark, 0.42, 0.5, W + 0.3, 0, 0, 0); box(ram, m.steel, 0.3, 0.1, 0.32, 0, -0.3, 0);
+  box(root, m.steel, 0.3, 0.05, 0.32, PX, YU + 0.05, 0);                                                         // lower die
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { box(root, m.yellow, 0.04, 1.4, 0.04, PX + sx * 0.42, YU + 0.7, sz * (W / 2 + 0.2)); box(root, m.black, 0.02, 1.3, 0.02, PX + sx * 0.42, YU + 0.7, sz * (W / 2 + 0.17)); }
+  box(root, m.screen, 0.02, 0.3, 0.4, PX - 0.1, 2.2, W / 2 + 0.42); box(root, m.black, 0.06, 0.36, 0.46, PX - 0.07, 2.2, W / 2 + 0.42);
+  // pallets: X wrapper > Y wrapper > pallet + blank + formed part
+  const phases = [[0, -X1, YU], [2, -X1, YU], [10, PX, YU], [14, PX, YU], [18, X1, YU], [21, X1, YL], [33, -X1, YL], [36, -X1, YU]];
+  const at = (t, i) => { t = ((t % T) + T) % T; let k = 0; while (k < phases.length - 2 && phases[k + 1][0] <= t) k++; const a = phases[k], b = phases[k + 1], u = (t - a[0]) / (b[0] - a[0]); const e = u * u * (3 - 2 * u); return a[i] + (b[i] - a[i]) * e; };
+  const keys = [];
+  for (let p = 0; p < 3; p++) {
+    const off = -12 * p, px = G(`Pallet_${p + 1}_X`, root, 0, 0, 0), py = G(`Pallet_${p + 1}_Y`, px, 0, 0, 0);
+    box(py, m.aluDark, 0.5, 0.03, 0.42, 0, 0.015, 0); box(py, m.black, 0.06, 0.03, 0.06, -0.15, 0.045, 0); box(py, m.black, 0.06, 0.03, 0.06, 0.15, 0.045, 0);
+    const blank = G(`Blank_${p + 1}`, py, 0, 0.06, 0); box(blank, m.stainless, 0.36, 0.012, 0.3, 0, 0.006, 0);
+    const formed = G(`Formed_${p + 1}`, py, 0, 0.06, 0); box(formed, m.stainless, 0.36, 0.012, 0.3, 0, 0.006, 0); box(formed, m.stainless, 0.24, 0.05, 0.18, 0, 0.035, 0);
+    const xs = [], ys = []; for (let t = 0; t <= T + 1e-6; t += 0.5) { xs.push([t, at(t + 12 * p, 1)]); ys.push([t, at(t + 12 * p, 2)]); }
+    keys.push([`Pallet_${p + 1}_X`, 'x', xs], [`Pallet_${p + 1}_Y`, 'y', ys]);
+    const g = t => ((t - 12 * p) % T + T) % T; // global time of this pallet's phase t
+    const evs = [[g(0), 'blank'], [g(12), 'formed'], [g(18), 'none']].sort((a, b) => a[0] - b[0]), state = t => { const ph = ((t + 12 * p) % T + T) % T; return ph < 12 ? 'blank' : ph < 18 ? 'formed' : 'none'; };
+    keys.push([`Blank_${p + 1}`, 'vis', [[0, state(0) === 'blank'], ...evs.map(([t]) => [t, state(t + 1e-3) === 'blank'])]], [`Formed_${p + 1}`, 'vis', [[0, state(0) === 'formed'], ...evs.map(([t]) => [t, state(t + 1e-3) === 'formed'])]]);
+    void off;
+  }
+  // lifts and ram (12 s pattern, three times): A up 9→12, top until 3, down 3→6; B down 6→9, up 10→12; ram strokes 11→11.6, up 12.4→13
+  const rep = f => { const out = []; for (let k = 0; k < 3; k++) for (const [t, v] of f) out.push([t + 12 * k, v]); return out.filter(([t]) => t >= 0 && t <= T).sort((a, b) => a[0] - b[0]); };
+  keys.push(['Lift_A_Carriage', 'y', [[0, YU - YL], ...rep([[3, YU - YL], [6, 0], [9, 0], [12, YU - YL]])]], ['Lift_B_Carriage', 'y', [[0, YU - YL], ...rep([[6, YU - YL], [9, 0], [10, 0], [12, YU - YL]])]]);
+  keys.push(['Press_Ram', 'y', [[0, -0.27], [0.4, -0.27], [1.0, 0], ...rep([[11, 0], [11.6, -0.27], [12.4, -0.27], [13, 0]]).filter(([t]) => t < T), [T, -0.27]]]);
+  return cycleClip(finalize(root), 'Press_Cycle', T, keys);
+}
+
 export const MODELS = {
-  asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot,
+  asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
   roller_conveyor_1m: () => rollerConveyor(1), roller_conveyor_2m: () => rollerConveyor(2), roller_curve_90: rollerCurve, belt_conveyor_2m: () => beltConveyor(2),

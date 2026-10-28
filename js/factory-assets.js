@@ -71,7 +71,7 @@
   const E3 = 'assets/models/egr-line-v3/';
   for (const file of ['asrs_crane', 'asrs_rail_4m', 'rack_bay', 'omron_agv', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'amr_deck_bot', 'conveyor_stopper',
     'roller_conveyor_1m', 'roller_conveyor_2m', 'roller_curve_90', 'belt_conveyor_2m', 'fence_panel_1m', 'fence_panel_2m', 'tote_600x400', 'egr_cooler', 'fr5',
-    'fr5_stacking_cell', 'hall_wall_6m', 'hall_door_6m', 'hall_gable_24m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
+    'fr5_stacking_cell', 'fr5_tending_cell', 'press_line_2level', 'hall_wall_6m', 'hall_door_6m', 'hall_gable_24m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
   ]) MODELS['e3_' + file] = { url: E3 + file + '.glb', label: file };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>

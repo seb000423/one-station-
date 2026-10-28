@@ -4,7 +4,8 @@ cooler line, every part at real scale, with material flowing through it continuo
   inbound dock  --AGV-->  AS/RS (two rack rows, stacker crane on its rail)  -->  outfeed conveyor (a tote every 12 s)
   -> vision bin picking (camera gate, robot arm)  ->  Ni paste dispensing cell (DMC / weighing, needle, positioner)
   -> NG chute  ->  belt transfer  ->  FR5 stacking cell (4 coolers per tote)  --AMR-->  finished-goods racks
-  south half: manual EGR assembly / leak test / inspection-packing benches on a roller line with operators  --forklift-->  shipping dock
+  south half: manual EGR assembly / leak test / inspection-packing benches on a roller line with operators  --forklift-->  shipping dock;
+  bracket line: 2-level pallet conveyor with an integrated servo press, a machining cell tended by an FR5 from an AMR tote
 
 Building: clad walls with a window band, two sectional doors (inbound south-west, shipping south-east), H columns on a
 6 m grid, two 20 m roof spans with trusses, purlins, skylights and LED high-bays (js/factory-kit.js).
@@ -89,6 +90,12 @@ add('worker', '검사 담당', -5.0, LZ - 1.6, 0, {'walkway': ww['id'], 'speed':
 wr = add('walkroute', '도포 셀 점검 동선', 0, 0, 0, {'points': [[-9.5, -12.4], [-3.0, -12.4]]})
 add('worker', '도포 셀 담당', -9.5, -12.4, 0, {'walkway': wr['id'], 'speed': 0.9, 'dwell': 20})
 
+# ---------------------------------------------------------------- bracket line (south-east): 2-level pallet conveyor through a servo press, and a machining cell
+# tended by an FR5 from an AMR tote (both cells carry their own cycle)
+model('2층 컨베이어 + 프레스 라인', 'e3_press_line_2level', 12.0, 15.6)
+model('가공 셀 (AMR → FR5 → 가공기)', 'e3_fr5_tending_cell', 5.4, 12.2)
+add('fence', '프레스 안전 펜스', 12.0, 13.9, 0, {'length': 8.4, 'height': 2.0, 'panel': 1.4})
+
 # ---------------------------------------------------------------- zones (stock kept: AMRs wait when a pickup is empty / a drop-off is full)
 NL, SL = -9.0, 8.0                   # lanes: eastbound north, westbound south
 zone('자재 입고', 'pickup', DOORS[0], 17.65, track=True, stock=3, cap=6, supply=30, load='uw_cardboard_a1')
@@ -121,6 +128,6 @@ out = os.path.join(ROOT, 'assets/layouts/egr-factory.json')
 with open(out, 'w', encoding='utf-8') as f: json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 idx = os.path.join(ROOT, 'assets/layouts/index.json')
 with open(idx, encoding='utf-8') as f: examples = [e for e in json.load(f) if e['file'] != 'egr-factory.json']
-examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · 자재 입고 → 자동창고 → 비전 픽킹 → Ni 페이스트 도포 → NG 판정 → 벨트 이송 → FR5 적재 → AMR 운반 → 완제품 랙 · 수작업 조립 라인 → 지게차 출하'})
+examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · 자재 입고 → 자동창고 → 비전 픽킹 → Ni 페이스트 도포 → NG 판정 → 벨트 이송 → FR5 적재 → AMR 운반 → 완제품 랙 · 수작업 조립 라인 → 지게차 출하 · 2층 컨베이어 + 프레스 · AMR → 로봇 → 가공기 셀'})
 with open(idx, 'w', encoding='utf-8') as f: json.dump(examples, f, ensure_ascii=False)
 print(out, len(objects), 'objects')

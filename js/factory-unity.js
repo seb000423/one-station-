@@ -69,6 +69,8 @@
     // EGR line v3 (assets/models/egr-line-v3/): cat = palette / object-list category; keepY = authored at its working height (roof, gable);
     // flowAxis 'x' = conveys along local X (js/factory-unity-groups.js flow); clip = a baked animation played from the sim clock
     e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, cat: 'EGR 라인', size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle', clipLen: 26.8 },
+    e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
+    e3_press_line_2level: { label: '2층 컨베이어 + 프레스 라인', group: E3, cat: 'EGR 라인', size: [8.0, 3.27, 1.65], parts: [['e3_press_line_2level', 0, 0, 0]], clip: 'Press_Cycle', clipLen: 36 },
     e3_dispense_cell: { label: 'Ni 페이스트 도포 셀', group: E3, cat: 'EGR 라인', size: [2.43, 2.52, 1.72], parts: [['e3_dispense_cell', 0, 0, 0]], clip: 'Dispense_Cycle', clipLen: 24 },
     e3_vision_gantry: { label: '비전 카메라 게이트', group: E3, cat: 'EGR 라인', size: [1.66, 2.0, 0.62], parts: [['e3_vision_gantry', 0, 0, 0]] },
     e3_ng_chute: { label: 'NG 배출 슈트', group: E3, cat: 'EGR 라인', size: [1.05, 0.97, 0.54], parts: [['e3_ng_chute', 0, 0, 0]] },
