@@ -28,6 +28,14 @@ function hazardTexture() { // yellow / black diagonal stripes
   for (let k = -64; k < 128; k += 32) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 16, 0); g.lineTo(k + 16 - 64, 64); g.lineTo(k - 64, 64); g.fill(); }
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.name = 'hazard'; return t;
 }
+function concreteTexture() { // light grey polished concrete, soft trowel blotches
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#c4c8cc'; g.fillRect(0, 0, 512, 512);
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 260; i++) { const x = rnd() * 512, y = rnd() * 512, r = 20 + rnd() * 90, v = 186 + rnd() * 26 | 0;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${v},${v + 3},${v + 6},0.12)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.name = 'concrete'; return t;
+}
 let M = null;
 function materials() {
   if (M) return M;
@@ -55,6 +63,18 @@ function materials() {
     tote: std('tote_sage', 0x8fa39c, 0.0, 0.55),
     mesh: std('wire_mesh_black', 0x1a1c1f, 0.4, 0.55, { map: meshTexture(), alphaTest: 0.5, side: THREE.DoubleSide }),
     hazard: std('hazard_stripes', 0xffffff, 0.2, 0.5, { map: hazardTexture() }),
+    belt: std('belt_pvc', 0x2b2e33, 0.0, 0.7),
+    rackWhite: std('rack_white', 0xe2e5e8, 0.3, 0.45),
+    concrete: std('concrete_plinth', 0xa9adb1, 0.0, 0.85),
+    wall: std('wall_panel', 0xd5d9dd, 0.35, 0.5),
+    frameDark: std('frame_dark', 0x3b4148, 0.5, 0.45),
+    window: std('window_glass', 0xcfe2f0, 0.1, 0.05, { emissive: 0xdde9f4, emissiveIntensity: 0.6 }),
+    steelCol: std('steel_column', 0x8a949e, 0.6, 0.45),
+    steelLight: std('steel_purlin', 0xa8b0b8, 0.6, 0.45),
+    roof: std('roof_sheet', 0xb9bfc5, 0.4, 0.5, { side: THREE.DoubleSide }),
+    skylight: std('skylight', 0xe8f1f8, 0.0, 0.2, { emissive: 0xe8f1f8, emissiveIntensity: 0.8, side: THREE.DoubleSide }),
+    floor: std('floor_concrete', 0xffffff, 0.0, 0.32, { map: concreteTexture() }),
+    hazardBox: std('hazard_wrap', 0xffffff, 0.2, 0.5, { map: hazardTexture() }),
     ngLabel: std('label_ng', 0xffffff, 0.1, 0.5, { map: labelTexture('NG', '#c8242b', '#ffffff') })
   };
   return M;
@@ -372,8 +392,170 @@ function fencePanel(w = 1.0) { // black mesh guard panel with one post at its �
   return finalize(root);
 }
 
+// ---------------------------------------------------------------- 5. roller / belt conveyors (top of conveying surface 0.75 m, flow along +X)
+// userData.ports: [x, y, z, heading°] of the in/out ends (heading 0 = +X), for snapping modules together
+const TOP = 0.75, CW = 0.6, BF = 0.5;  // overall width, between-frame width (600 × 400 totes cross-wise)
+function convLegs(n, xs, w, top) {
+  const m = materials();
+  for (const x of xs) {
+    for (const sz of [-1, 1]) { prof(n, [x, 0.06, sz * (w / 2 - 0.02)], [x, top - 0.13, sz * (w / 2 - 0.02)], 0.04); foot(n, x, sz * (w / 2 - 0.02)); }
+    prof(n, [x, 0.25, -w / 2 + 0.04], [x, 0.25, w / 2 - 0.04], 0.04);
+    for (const sz of [-1, 1]) box(n, m.aluDark, 0.06, 0.05, 0.008, x, top - 0.16, sz * (w / 2 - 0.0)); // height adjusters
+  }
+}
+function rollerConveyor(L) {
+  const m = materials(), root = G('Roller_Conveyor_' + L + 'm'), fr = G('Conveyor_Frame', root), ry = TOP - 0.025;
+  for (const sz of [-1, 1]) {
+    box(fr, m.alu, L, 0.12, 0.035, 0, TOP - 0.05, sz * (CW / 2 - 0.0175));          // side channels
+    box(fr, m.aluDark, L, 0.008, 0.045, 0, TOP + 0.014, sz * (CW / 2 - 0.0175));   // top lip
+    for (let x = -L / 2 + 0.15; x < L / 2; x += 0.3) box(fr, m.black, 0.012, 0.03, 0.002, x, TOP - 0.06, sz * CW / 2); // slot covers
+  }
+  convLegs(fr, L > 1.5 ? [-L / 2 + 0.12, 0, L / 2 - 0.12] : [-L / 2 + 0.12, L / 2 - 0.12], CW, TOP);
+  const sm = G('Stopper_Mount', root, L / 2 - 0.15, TOP - 0.1, 0);                  // orange mount plates for conveyor_stopper
+  for (const sz of [-1, 1]) box(sm, m.orange, 0.08, 0.06, 0.006, 0, 0, sz * (CW / 2 + 0.004));
+  box(sm, m.aluDark, 0.08, 0.01, BF, 0, -0.035, 0);
+  const pitch = 0.075, n = Math.round(L / pitch);
+  for (let k = 0; k < n; k++) {
+    const r = anim(G('Roller_' + String(k + 1).padStart(2, '0'), root, -L / 2 + pitch / 2 + k * pitch, ry, 0), 'rotate', 'z', -Infinity, Infinity);
+    cyl(r, m.steel, 0.025, BF - 0.01, 0, 0, 0, 'z', 16); cyl(r, m.aluDark, 0.006, BF + 0.02, 0, 0, 0, 'z', 6);
+  }
+  if (L > 1.5) { box(fr, m.black, 0.3, 0.12, 0.16, 0.3, TOP - 0.2, 0); cyl(fr, m.black, 0.05, 0.22, 0.3, TOP - 0.2, CW / 2 - 0.02, 'z', 16); } // drive
+  root.userData.ports = { in: [-L / 2, TOP, 0, 0], out: [L / 2, TOP, 0, 0] };
+  return finalize(root);
+}
+function rollerCurve() { // 90° curve, inner radius 0.8 m, tapered rollers; enters heading +X, leaves heading +Z
+  const m = materials(), root = G('Roller_Curve_90'), fr = G('Conveyor_Frame', root);
+  const Ri = 0.8, Ro = Ri + CW, N = 18;
+  // arc centre at (ox, oz) so the footprint centre is the origin: arc spans x ∈ [ox, ox+Ro], z ∈ [oz−Ro, oz]
+  const ox = -Ro / 2, oz = Ro / 2, P = (r, a) => [ox + r * Math.sin(a), oz - r * Math.cos(a)];
+  for (const r of [Ri + 0.0175, Ro - 0.0175]) for (let i = 0; i < N; i++) {
+    const a0 = i / N * Math.PI / 2, a1 = (i + 1) / N * Math.PI / 2, am = (a0 + a1) / 2, [x, z] = P(r, am), len = r * (a1 - a0) + 0.002;
+    box(fr, m.alu, len, 0.12, 0.035, x, TOP - 0.05, z, [0, -am, 0]); box(fr, m.aluDark, len, 0.008, 0.045, x, TOP + 0.014, z, [0, -am, 0]);
+  }
+  for (const a of [0.12, Math.PI / 4, Math.PI / 2 - 0.12]) {
+    for (const r of [Ri + 0.02, Ro - 0.02]) { const [x, z] = P(r, a); prof(fr, [x, 0.06, z], [x, TOP - 0.13, z], 0.04); foot(fr, x, z); }
+    const [x0, z0] = P(Ri + 0.04, a), [x1, z1] = P(Ro - 0.04, a); prof(fr, [x0, 0.25, z0], [x1, 0.25, z1], 0.04);
+  }
+  const n = 16;
+  for (let k = 0; k < n; k++) {
+    const a = (k + 0.5) / n * Math.PI / 2, [x, z] = P((Ri + Ro) / 2, a);
+    const r = anim(G('Roller_' + String(k + 1).padStart(2, '0'), root, x, TOP - 0.025, z), 'rotate', 'z', -Infinity, Infinity);
+    r.rotation.y = Math.PI - a; // local Z (roller axis) points radially outward
+    const g = new THREE.CylinderGeometry(0.025 * Ro / ((Ri + Ro) / 2), 0.025 * Ri / ((Ri + Ro) / 2), BF - 0.01, 16); g.rotateX(Math.PI / 2); bin(r, m.steel, g);
+  }
+  root.userData.ports = { in: [ox, TOP, oz - (Ri + CW / 2), 0], out: [ox + Ri + CW / 2, TOP, oz, 90] };
+  return finalize(root);
+}
+function beltConveyor(L = 2) {
+  const m = materials(), root = G('Belt_Conveyor_' + L + 'm'), fr = G('Conveyor_Frame', root), R = 0.045;
+  for (const sz of [-1, 1]) { box(fr, m.alu, L, 0.12, 0.03, 0, TOP - 0.06, sz * (CW / 2 - 0.015)); box(fr, m.aluDark, L - 0.1, 0.03, 0.006, 0, TOP + 0.01, sz * (BF / 2 + 0.012)); }
+  for (const sx of [-1, 1]) cyl(fr, m.steel, R, BF, sx * (L / 2 - R), TOP - R, 0, 'z', 24);   // end drums
+  box(fr, m.aluDark, L - 2 * R, 0.01, BF - 0.02, 0, TOP - 0.012, 0);                         // slider bed
+  const belt = anim(G('Belt', root), 'uvscroll', 'x', 0, 1);
+  box(belt, m.belt, L - 2 * R, 0.004, BF - 0.01, 0, TOP + 0.002, 0); box(belt, m.belt, L - 2 * R, 0.004, BF - 0.01, 0, TOP - 2 * R - 0.002, 0);
+  for (const sx of [-1, 1]) { const g = new THREE.CylinderGeometry(R + 0.004, R + 0.004, BF - 0.01, 24, 1, true, sx > 0 ? 0 : Math.PI, Math.PI); g.rotateX(Math.PI / 2); g.rotateZ(sx > 0 ? -Math.PI / 2 : -Math.PI / 2); bin(belt, m.belt, xf(g, sx * (L / 2 - R), TOP - R, 0)); }
+  convLegs(fr, [-L / 2 + 0.15, L / 2 - 0.15], CW, TOP);
+  const dv = G('Drive_Motor', root, L / 2 - R, TOP - R, -CW / 2);                        // gear motor on the head drum
+  box(dv, m.black, 0.14, 0.14, 0.1, 0, 0, -0.06); cyl(dv, m.black, 0.06, 0.2, 0, -0.02, -0.21, 'z', 20); cyl(dv, m.aluDark, 0.065, 0.02, 0, -0.02, -0.11, 'z', 20);
+  box(dv, m.yellow, 0.06, 0.02, 0.002, 0, 0.04, -0.111);
+  root.userData.ports = { in: [-L / 2, TOP, 0, 0], out: [L / 2, TOP, 0, 0] };
+  return finalize(root);
+}
+
+// ---------------------------------------------------------------- 6. selective pallet rack bay for the AS/RS (10 m, bay 2.7 m along X, 1.1 m deep)
+function rackBay(num = '01') {
+  const m = materials(), root = G('Rack_Bay'), fr = G('Rack_Frame', root), H = 10.0, W = 2.7, D = 1.1, u = 0.09;
+  for (const sx of [-1, 1]) {                                           // upright frames at both ends (front + back post, bracing)
+    const x = sx * W / 2;
+    for (const sz of [-1, 1]) {
+      box(fr, m.rackWhite, u, H, 0.07, x, H / 2, sz * (D / 2 - 0.035));
+      for (let y = 0.1; y < H; y += 0.05) box(fr, m.black, 0.012, 0.022, 0.002, x, y, sz * (D / 2 + 0.0005)); // punched slots (front face)
+      box(fr, m.aluDark, 0.16, 0.008, 0.12, x, 0.004, sz * (D / 2 - 0.035));
+    }
+    for (let y = 0.3, k = 0; y < H - 0.5; y += 0.9, k++) {
+      box(fr, m.rackWhite, 0.03, 0.03, D - 0.14, x, y, 0);
+      const z0 = (k % 2 ? -1 : 1) * (D / 2 - 0.07), z1 = -z0, len = Math.hypot(0.9, z1 - z0);
+      box(fr, m.rackWhite, 0.025, len, 0.025, x, y + 0.45, 0, [Math.atan2(z1 - z0, 0.9), 0, 0]);
+    }
+  }
+  const levels = [1.6, 3.2, 4.8, 6.4, 8.0, 9.6];
+  for (const y of levels) {
+    for (const sz of [-1, 1]) box(fr, m.orange, W - u, 0.12, 0.05, 0, y, sz * (D / 2 - 0.04));
+    plane(fr, m.mesh, W - u - 0.02, D - 0.1, 0, y + 0.061, 0, [-Math.PI / 2, 0, 0], 0.05); // wire deck
+    for (let x = -W / 2 + 0.3; x < W / 2; x += 0.45) box(fr, m.aluDark, 0.03, 0.03, D - 0.1, x, y + 0.045, 0);
+  }
+  const sign = G('Bay_Sign', root, 0, 2.6, D / 2 + 0.01);              // bay number plate on the aisle (+Z) side
+  box(sign, m.black, 0.5, 0.5, 0.01, 0, 0, -0.006); plane(sign, signMat(num), 0.46, 0.46, 0, 0, 0.0001);
+  root.userData.ports = { aisle: [0, 0, D / 2, 90] };
+  return finalize(root);
+}
+const SIGNS = new Map();
+function signMat(num) {
+  if (SIGNS.has(num)) return SIGNS.get(num);
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#16181b'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#ffffff'; g.font = 'bold 76px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(num, 64, 70);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.name = 'bay_' + num;
+  const mt = std('bay_sign_' + num, 0xffffff, 0.1, 0.6, { map: t }); SIGNS.set(num, mt); return mt;
+}
+function baySign(num) { const root = G('Bay_Sign_' + num); box(root, materials().black, 0.5, 0.5, 0.01, 0, 0.25, -0.006); plane(root, signMat(num), 0.46, 0.46, 0, 0.25, 0.0001); return finalize(root); }
+
+// ---------------------------------------------------------------- 7. factory hall kit (6 m bays, 10 m eaves)
+function wallPanel() { // 6 m (X) × 10 m wall module, inside face +Z: concrete plinth, ribbed light grey panels, window band 5.2–6.6 m
+  const m = materials(), root = G('Hall_Wall_6m'), W = 6, H = 10, t = 0.08;
+  box(root, m.concrete, W, 1.2, 0.2, 0, 0.6, -0.06);                                       // plinth
+  const bands = [[1.2, 5.2], [6.6, H]];
+  for (const [y0, y1] of bands) {
+    box(root, m.wall, W, y1 - y0, t, 0, (y0 + y1) / 2, 0);
+    for (let x = -W / 2 + 0.125; x < W / 2; x += 0.25) box(root, m.wall, 0.04, y1 - y0, 0.012, x, (y0 + y1) / 2, t / 2 + 0.006); // ribs
+  }
+  box(root, m.frameDark, W, 0.08, 0.12, 0, 5.2, 0.0); box(root, m.frameDark, W, 0.08, 0.12, 0, 6.6, 0.0);
+  for (let x = -W / 2; x <= W / 2 + 1e-6; x += 1.0) box(root, m.frameDark, 0.06, 1.4, 0.1, x, 5.9, 0);
+  box(root, m.window, W, 1.32, 0.012, 0, 5.9, 0);
+  box(root, m.yellow, W, 0.06, 0.01, 0, 1.25, t / 2 + 0.005);                             // brand stripe
+  return finalize(root);
+}
+function hallColumn() { // HEA 400-like steel column, 10 m, with base plate and haunch bracket
+  const m = materials(), root = G('Hall_Column'), H = 10, b = 0.3, d = 0.39, tf = 0.019, tw = 0.011;
+  for (const s of [-1, 1]) box(root, m.steelCol, b, H, tf, 0, H / 2 + 0.03, s * (d / 2 - tf / 2));
+  box(root, m.steelCol, tw, H, d - 2 * tf, 0, H / 2 + 0.03, 0);
+  box(root, m.steelCol, 0.5, 0.03, 0.6, 0, 0.015, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(root, m.steel, 0.015, 0.06, sx * 0.19, 0.06, sz * 0.24, 'y', 8);
+  box(root, m.steelCol, tw, 0.5, 0.6, 0, H - 0.25, 0.3, [0, 0, 0]);
+  box(root, m.yellow, b + 0.004, 1.2, d + 0.004, 0, 0.66, 0);                               // impact guard paint
+  box(root, m.hazardBox, b + 0.006, 0.2, d + 0.006, 0, 1.36, 0);
+  return finalize(root);
+}
+function roofTruss() { // one 6 m bay (X) of roof over a 24 m span (Z): pitched truss at x 0, purlins, roof sheet, skylight strip. Sits at y 10.
+  const m = materials(), root = G('Hall_Roof_6m'), S = 24, Y = 10, rise = 1.2, W = 6;
+  const top = z => Y + 0.9 + rise * (1 - Math.abs(z) / (S / 2)), bot = Y;
+  const member = (a, b, s, mt = m.steelCol) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A), len = dir.length();
+    const g = new THREE.BoxGeometry(s, s, len); g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize())); g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); bin(root, mt, g); };
+  member([0, bot, -S / 2], [0, bot, S / 2], 0.12);
+  member([0, top(-S / 2), -S / 2], [0, top(0), 0], 0.14); member([0, top(0), 0], [0, top(S / 2), S / 2], 0.14);
+  const n = 12;
+  for (let i = 0; i <= n; i++) { const z = -S / 2 + i * S / n; member([0, bot, z], [0, top(z), z], 0.07); if (i < n) { const z2 = z + S / n; member([0, i < n / 2 ? bot : top(z), z], [0, i < n / 2 ? top(z2) : bot, z2], 0.06); } }
+  for (let i = 0; i <= 8; i++) { const z = -S / 2 + i * S / 8; member([-W / 2, top(z) + 0.1, z], [W / 2, top(z) + 0.1, z], 0.1, m.steelLight); } // purlins
+  for (const s of [-1, 1]) {                                                                // roof sheets with a skylight strip each side
+    const a = Math.atan2(rise, S / 2), len = Math.hypot(rise, S / 2);
+    for (const [f0, f1, mt] of [[0, 0.45, m.roof], [0.45, 0.6, m.skylight], [0.6, 1, m.roof]]) {   // u: 0 at the ridge → 1 at the eave
+      const u = (f0 + f1) / 2; box(root, mt, W, 0.02, (f1 - f0) * len + 0.005, 0, top(0) - u * rise + 0.17, s * u * S / 2, [s * a, 0, 0]);
+    }
+  }
+  return finalize(root);
+}
+function floorTile(aisle) { // 6 × 6 m polished concrete tile; the aisle variant has a 0.1 m yellow line 1.5 m in from each Z edge
+  const m = materials(), root = G(aisle ? 'Floor_6m_Aisle' : 'Floor_6m');
+  plane(root, m.floor, 6, 6, 0, 0.001, 0, [-Math.PI / 2, 0, 0]);
+  box(root, m.frameDark, 6, 0.002, 0.006, 0, 0.0015, -3); box(root, m.frameDark, 0.006, 0.002, 6, -3, 0.0015, 0);  // saw-cut joints
+  if (aisle) for (const z of [-1.5, 1.5]) box(root, m.yellow, 6, 0.002, 0.1, 0, 0.002, z);
+  return finalize(root);
+}
+
 export const MODELS = {
   asrs_crane: asrsCrane, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCell, vision_gantry: visionGantry,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: conveyorStopper,
-  fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler
+  fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
+  roller_conveyor_1m: () => rollerConveyor(1), roller_conveyor_2m: () => rollerConveyor(2), roller_curve_90: rollerCurve, belt_conveyor_2m: () => beltConveyor(2),
+  rack_bay_10m: () => rackBay('01'), ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map(n => ['bay_sign_' + n, () => baySign(n)])),
+  hall_wall_6m: wallPanel, hall_column: hallColumn, hall_roof_6m: roofTruss, floor_6m: () => floorTile(false), floor_6m_aisle: () => floorTile(true)
 };
