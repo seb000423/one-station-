@@ -140,7 +140,7 @@
   // AMR plans learn where each zone stands (load / unload hand-off animation, js/factory-unity-groups.js)
   function withZones(M) {
     if (M && M.amr && !M.__zones) { M.__zones = true; const at = key => { const o = doc.objects.find(o => o.type === 'zone' && (o.name === key || 'zone:' + o.id === key)); if (!o) return null;
-      const zp = o.params || {}, z = M.zones && M.zones[o.id]; return { x: o.x, z: o.z, n: zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1, stock: t => (z ? z.stock(t) : 0) }; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
+      const zp = o.params || {}, z = M.zones && M.zones[o.id]; return { x: o.x, z: o.z, n: zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1, item: zp.load, stock: t => (z ? z.stock(t) : 0) }; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
     return M;
   }
   function motion() {
@@ -641,13 +641,13 @@
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
-    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
+    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
     if (k === 'e3_fr5' || k === 'arm') return ['equip', 'arm'];
     if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];
     if (k === 'line06' || k === 'e3_injection_cell') return ['equip', 'press'];
     if (/^ctrl\d$/.test(k) || k === 'line08' || k === 'line09') return ['equip', 'cabinet'];
-    if (/^(e3_egr_cooler|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
+    if (/^(e3_egr_cooler|e3_insert_part|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
     if (/^(uw_shelf|uw_pallet|uw_sunoko|uw_pedestal|uw_plasticbox_|uw_cardboard_|e3_tote)/.test(k)) return ['equip', 'rack'];
     if (/^e3_hall_wall/.test(k)) return ['building', 'wall']; if (k === 'e3_hall_column') return ['building', 'column']; if (k === 'e3_hall_door_6m') return ['building', 'door'];
     if (/^e3_hall_(roof|gable)/.test(k)) return ['building', 'roof']; if (/^e3_fence/.test(k)) return ['building', 'fence'];
@@ -1223,6 +1223,7 @@
     const building = [], extra = [];
     for (const o of others) {
       const g = FE.build(o, doc.factory); building.push(g);
+      if (o.type === 'roof') g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = false; }); // ONE MONITOR looks in from above: the roof's steel stays, its sheets do not
       const pl = o.type === 'amr' ? M.amr[o.id] : o.type === 'worker' ? M.worker[o.id] : null;
       extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : o.type === 'ufmodel' ? { warp: tt => gateTime(o, M, tt) } : o.type === 'bench' ? { warp: tt => gateTime(o, M, tt), lampAt: tt => calling(o, M, tt) } : null))); // movers' plans, zones' stock, gated cells, benches
       if (pl && pl.ok && !pl.still) extra.push(...rigMotion(g, pl, frames, SPF));

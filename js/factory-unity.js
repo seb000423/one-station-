@@ -70,6 +70,8 @@
     // flowAxis 'x' = conveys along local X (js/factory-unity-groups.js flow); clip = a baked animation played from the sim clock
     e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, cat: 'EGR 라인', size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle', clipLen: 26.8 },
     e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
+    e3_egr_auto_line: { label: 'EGR 자동 라인 (자동 도포 → 건조·소성 → 검사 → 인서트 사출)', group: E3, cat: 'EGR 라인', size: [16.25, 3.25, 3.69], parts: [['e3_egr_auto_line', 0, 0, 0]], clip: 'Line_Cycle', clipLen: 128 },
+    e3_insert_part: { label: '인서트 사출품 (Ni 패턴 기판)', group: E3, cat: '부품 · 소품', size: [0.24, 0.06, 0.18], parts: [['e3_insert_part', 0, 0, 0]] },
     e3_injection_cell: { label: '사출 셀 (인서트 사출기 · 취출 로봇)', group: E3, cat: 'EGR 라인', size: [4.67, 3.25, 3.6], parts: [['e3_injection_cell', 0, 0, 0]], clip: 'Inject_Cycle', clipLen: 24 },
     e3_press_line_2level: { label: '2층 컨베이어 + 프레스 라인', group: E3, cat: 'EGR 라인', size: [8.0, 3.27, 1.65], parts: [['e3_press_line_2level', 0, 0, 0]], clip: 'Press_Cycle', clipLen: 36 },
     e3_dispense_cell: { label: 'Ni 페이스트 도포 셀', group: E3, cat: 'EGR 라인', size: [2.43, 2.52, 1.72], parts: [['e3_dispense_cell', 0, 0, 0]], clip: 'Dispense_Cycle', clipLen: 24 },

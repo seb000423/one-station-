@@ -745,7 +745,9 @@ function asrsCell() {
   }
   const slots = SL.map(([side, b, p, l], j) => { const n = G('Slot_Tote_' + (j + 1), body, slotX(b, p), LV[l] + 0.065, side * (RZ - 0.05)); n.add(tote()); return { n, side, x: slotX(b, p), y: LV[l] + 0.065 }; });
   const carried = G('Carried_Tote', crane.getObjectByName('Crane_Fork2'), 0.82, 0.26, 0); carried.add(tote());
-  const loops = ['A', 'B'].map(k => { const x = G('Loop_' + k + '_X', body, 0, TIO, -RZ), z = G('Loop_' + k + '_Z', x); const v = G('Loop_' + k + '_Tote', z); v.add(tote()); return k; });
+  const ceramic = std('ceramic_substrate', 0xece8de, 0.0, 0.55);
+  const loops = ['A', 'B'].map(k => { const x = G('Loop_' + k + '_X', body, 0, TIO, -RZ), z = G('Loop_' + k + '_Z', x); const v = G('Loop_' + k + '_Tote', z); v.add(tote());
+    for (let i = 0; i < 4; i++) box(G('Loop_' + k + '_Sub_' + (i + 1), v), ceramic, 0.2, 0.012, 0.14, 0, 0.026 + i * 0.014, 0); return k; }); // a stack of 4 substrates; the line's picker takes the top one
   // keys
   const car = s => s + 0.03 - 0.26 - 1.0, dn = s => s - 0.03 - 0.26 - 1.0, cx = [], cy = [], fz = [], cv = [[0, true]], sv = slots.map(() => []);
   for (let k = 0; k < 4; k++) {
@@ -760,13 +762,15 @@ function asrsCell() {
   const keys = [['ASRS_Crane', 'x', close(cx)], ['Crane_Carriage', 'y', close(cy)], ['Crane_Fork', 'z', close(fz)], ['Crane_Fork2', 'z', close(fz)], ['Carried_Tote', 'vis', cv]];
   sv.forEach((v, j) => { v.sort((a, b) => a[0] - b[0]); keys.push(['Slot_Tote_' + (j + 1), 'vis', [[0, !v[0][1]], ...v]]); });
   // loop totes: tote A rides the loop after periods 0 and 2, tote B after 1 and 3; path relative to the outfeed drop point
-  const PATH = [[0, 0, 0], [2.6, 0, 0], [10, XC, 0], [13, XC, RZ], [20, XC, RZ], [23, XC, 2 * RZ], [30, 0, 2 * RZ], [2 * P - 0.2, 0, 2 * RZ], [2 * P, 0, 0]];
+  const PATH = [[0, 0, 0], [2.6, 0, 0], [8.5, XC, 0], [10.5, XC, RZ], [22.5, XC, RZ], [24.5, XC, 2 * RZ], [31, 0, 2 * RZ], [2 * P - 0.2, 0, 2 * RZ], [2 * P, 0, 0]]; // 12 s at the pick station (the EGR auto line picks at 32k + 16)
   loops.forEach((k, i) => {
     const xs = [], zs = [], vs = [];
     for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P + 1.4; for (const [u, x, z] of PATH) { xs.push([s + u, x]); zs.push([s + u, z]); } vs.push([s, true], [s + P + 2.6, false]); }
     const clip = a => { a = a.filter(([t]) => t >= 0 && t <= T); return a; };
     const v = clip(vs).sort((a, b) => a[0] - b[0]);
     keys.push(['Loop_' + k + '_X', 'x', clip(xs)], ['Loop_' + k + '_Z', 'z', clip(zs)], ['Loop_' + k + '_Tote', 'vis', [[0, i === 1], ...v]]);
+    const sub = []; for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P; sub.push([s + 16, false], [s + 1.4 + 2 * P - 0.1, true]); } // top substrate: picked at 16, the next tote out has its own
+    const sv4 = sub.filter(([t]) => t > 0 && t < T).sort((a, b) => a[0] - b[0]); keys.push(['Loop_' + k + '_Sub_4', 'vis', [[0, !sv4[0][1]], ...sv4]]);
   });
   return cycleClip(finalize(root), 'ASRS_Cycle', T, keys);
 }
@@ -777,8 +781,10 @@ function asrsCell() {
 // injection unit moves in, injects, holds and cools, pulls back, the clamp opens and the ejector pushes the part out. Resin comes from
 // the material box behind the machine (refilled by an AMR) through the vacuum loader on the hopper. INJECT_T s per shot.
 const INJECT_T = 24;
-function injectionCell() {
-  const m = materials(), root = G('Injection_Cell'), Y = 1.4, OPEN = 0.45, XG = 0.105, ZN = 1.25, ZC = 1.85;
+// machine geometry shared with the EGR auto line; o.part / o.insert draw the moulded part and the insert (default: bracket + bush),
+// o.inline drops the bowl feeder, the bin and the belt part (the line brings its own), o.wristed adds a wrist (rz) under the gripper
+function injectionGeo(root, o = {}) {
+  const m = materials(), Y = 1.4, OPEN = 0.45, XG = 0.105, ZN = 1.25, ZC = 1.85;
   // base (with a yellow stripe), control cabinet + HMI at the front of the injection end
   box(root, m.sheet, 4.05, 0.8, 1.15, -0.2, 0.45, 0); box(root, m.black, 4.1, 0.06, 1.2, -0.2, 0.03, 0); box(root, m.black, 4.07, 0.04, 1.17, -0.2, 0.87, 0);
   for (const sz of [-1, 1]) box(root, m.yellow, 4.06, 0.05, 0.004, -0.2, 0.75, sz * 0.577);
@@ -791,10 +797,10 @@ function injectionCell() {
   const mp = G('Moving_Platen', root, 0.11 + OPEN, Y, 0);
   box(mp, m.black, 0.16, 1.1, 1.1, 0, 0, 0); box(mp, m.steel, 0.15, 0.5, 0.5, -0.155, 0, 0); cyl(mp, m.steel, 0.1, 0.6, 0.38, 0, 0, 'x', 24);
   const ej = G('Ejector', mp, 0, 0, 0); for (const z of [-0.05, 0.05]) cyl(ej, m.stainless, 0.008, 0.06, -0.24, 0, z, 'x', 8);
-  const part = (n, x) => { box(n, m.black, 0.02, 0.09, 0.13, x, 0, 0); box(n, m.black, 0.03, 0.03, 0.03, x + 0.02, 0.025, 0); cyl(n, m.stainless, 0.012, 0.025, x, 0, 0.04, 'x', 12); };
-  const insert = (n, x) => cyl(n, m.stainless, 0.012, 0.025, x, 0, 0, 'x', 12);
-  const mpart = G('Mould_Part', mp, -0.24, 0, 0); part(mpart, 0);
-  const mins = G('Mould_Insert', root, -0.11, Y, 0.04); insert(mins, 0);
+  const part = o.part || ((n, x) => { box(n, m.black, 0.02, 0.09, 0.13, x, 0, 0); box(n, m.black, 0.03, 0.03, 0.03, x + 0.02, 0.025, 0); cyl(n, m.stainless, 0.012, 0.025, x, 0, 0.04, 'x', 12); });
+  const insert = o.insert || ((n, x) => cyl(n, m.stainless, 0.012, 0.025, x, 0, 0, 'x', 12));
+  const mpart = G('Mould_Part', mp, o.inline ? -0.226 : -0.24, 0, 0); part(mpart, 0); if (o.inline) mpart.rotation.z = Math.PI / 2;
+  const mins = G('Mould_Insert', root, o.inline ? -0.114 : -0.11, Y, o.inline ? 0 : 0.04); insert(mins, 0); if (o.inline) mins.rotation.z = -Math.PI / 2;
   // injection unit on its carriage: nozzle, barrel with heater bands, hopper + vacuum loader, screw drive
   const iu = G('Injection_Unit', root, 0, 0, 0);
   cyl(iu, m.steel, 0.03, 0.12, -0.49, Y, 0, 'x', 16); cyl(iu, m.stainless, 0.075, 1.15, -1.1, Y, 0, 'x', 24);
@@ -814,25 +820,34 @@ function injectionCell() {
   const arm = G('Robot_Arm', tr, 0, 0, 0); box(arm, m.alu, 0.08, 0.95, 0.1, 0, 2.3 + 0.475, 0); box(arm, m.yellow, 0.084, 0.04, 0.104, 0, 3.2, 0);
   const grip = G('Gripper', arm, 0, 2.3, 0); box(grip, m.aluDark, 0.16, 0.06, 0.2, 0, 0, 0);
   for (const sx of [-1, 1]) { box(grip, m.black, 0.012, 0.11, 0.16, sx * 0.07, -0.08, 0); cyl(grip, m.rubber, 0.02, 0.02, sx * 0.06, -0.14, 0.05, 'x', 10); }
-  const gp = G('Grip_Part', grip, 0.1, -0.1, 0); part(gp, 0);
-  const gi = G('Grip_Insert', grip, -0.09, -0.1, 0.04); insert(gi, 0);
+  const wr = o.wristed ? G('Gripper_Wrist', grip) : grip; if (o.wristed) { box(wr, m.black, 0.05, 0.05, 0.05, 0, -0.04, 0); cyl(wr, m.rubber, 0.03, 0.02, 0, -0.08, 0, 'y', 12); }
+  const gp = G('Grip_Part', wr, o.inline ? 0 : 0.1, -0.1, 0); part(gp, 0);
+  const gi = G('Grip_Insert', wr, o.inline ? 0 : -0.09, -0.1, o.inline ? 0 : 0.04); insert(gi, 0);
+  if (!o.inline) {
   // insert feeder: vibratory bowl, linear track, nest; outfeed belt into a parts bin
   const fd = G('Insert_Feeder', root);
   box(fd, m.sheet, 0.5, 0.75, 0.5, -0.8, 0.375, ZN); cyl(fd, m.stainless, 0.22, 0.12, -0.8, 0.86, ZN, 'y', 32); cyl(fd, m.black, 0.12, 0.06, -0.8, 0.79, ZN, 'y', 20);
   box(fd, m.alu, 0.75, 0.03, 0.06, -0.24, 0.96, ZN); box(fd, m.aluDark, 0.3, 0.9, 0.3, XG, 0.45, ZN); box(fd, m.yellow, 0.12, 0.04, 0.12, XG, 0.92, ZN);
   for (const x of [-0.08, 0.0, 0.05]) for (const z of [-0.06, 0.06]) cyl(fd, m.stainless, 0.012, 0.025, -0.8 + x * 2, 0.93, ZN + z * 1.5, 'y', 10);
   const nx = G('Nest_Insert_X', fd, XG - 0.09, 1.0, ZN), ni = G('Nest_Insert', nx); cyl(ni, m.stainless, 0.012, 0.025, 0, 0, 0, 'y', 12);
+  }
   const cv = G('Outfeed_Belt', root); box(cv, m.alu, 1.9, 0.1, 0.42, 0.7, 0.8, ZC); box(cv, m.belt, 1.9, 0.01, 0.36, 0.7, 0.855, ZC);
   for (const x of [-0.15, 1.55]) for (const sz of [-1, 1]) { prof(cv, [x, 0.06, ZC + sz * 0.18], [x, 0.75, ZC + sz * 0.18], 0.04); foot(cv, x, ZC + sz * 0.18); }
   box(cv, m.black, 0.14, 0.14, 0.12, 1.55, 0.78, ZC - 0.27);
+  if (!o.inline) {
   const pb = G('Parts_Bin', root, 1.95, 0, ZC); box(pb, m.tote, 0.6, 0.02, 0.4, 0, 0.32, 0);
   for (const s of [-1, 1]) { box(pb, m.tote, 0.6, 0.3, 0.012, 0, 0.47, s * 0.2); box(pb, m.tote, 0.012, 0.3, 0.4, s * 0.3, 0.47, 0); }
   for (const [x, z, r] of [[-0.15, -0.08, 0.3], [0.05, 0.06, 1.2], [0.18, -0.05, 2.1], [-0.05, 0.1, 2.8], [0.1, -0.1, 0.9]]) { const p = G('Bin_Pile', pb, x, 0.36, z); p.rotation.set(0, r, Math.PI / 2); part(p, 0); }
   for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(pb, [x, 0.0, z], [x, 0.31, z], 0.03, m.frameDark);
   const bx = G('Belt_Part_X', root, XG + 0.1, 0.86 + 0.065, ZC), by = G('Belt_Part_Y', bx), bp = G('Belt_Part', by); bp.rotation.z = Math.PI / 2; part(bp, 0);
+  }
   // material box behind the machine (the AMR swaps it) with the loader hose up to the hopper
   const mb = G('Material_Box', root, -1.55, 0, -1.0); box(mb, m.black, 0.8, 0.12, 0.8, 0, 0.06, 0); box(mb, m.yellow, 0.76, 0.7, 0.76, 0, 0.47, 0); box(mb, m.black, 0.6, 0.01, 0.6, 0, 0.825, 0);
   bin(root, m.black, new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-1.55, 0.6, -1.0], [-1.55, 1.2, -1.05], [-1.55, 2.3, -0.75], [-1.55, 2.5, -0.25], [-1.55, Y + 1.1, 0]].map(v => new THREE.Vector3(...v))), 32, 0.03, 8));
+  return root;
+}
+function injectionCell() {
+  const root = injectionGeo(G('Injection_Cell')), OPEN = 0.45, ZN = 1.25, ZC = 1.85;
 
   const D = 0.8, DN = 1.2, DC = 1.275;   // arm strokes into the mould gap / to the nest / to the belt
   return cycleClip(finalize(root), 'Inject_Cycle', INJECT_T, [
@@ -849,8 +864,146 @@ function injectionCell() {
     ['Belt_Part', 'vis', [[0, false], [7.8, true], [15.2, false]]], ['Belt_Part_X', 'x', [[0, 0], [8.2, 0], [14.2, 1.45], [15.0, 1.75], [24, 0]]], ['Belt_Part_Y', 'y', [[0, 0], [14.2, 0], [15.0, -0.5], [15.5, -0.5], [16, 0], [24, 0]]]]);
 }
 
+// ---------------------------------------------------------------- 12. EGR automatic line (14.9 × 3.6 × 3.3 m, along +X): picker at the AS/RS pick station → automatic
+// dispensing cell (vision alignment, XYZ needle gantry) → drying / sintering tunnel oven → vision gate + NG pusher → insert moulding
+// machine (top-entry robot) → outfeed belt into the tote on the AMR waiting at x 14.75. One substrate every 32 s, taken from the
+// tote the AS/RS cell presents at x −1.3 (same 128 s clock): every part is one object from the tote to the AMR, and its look follows
+// the process: ceramic substrate → Ni paste pattern (three passes) → sintered metal pattern → over-moulded body. Part 3 of 4 fails
+// the vision check and is pushed into the NG bin.
+const LINE_T = 128, LINE_P = 32, LINE_PICK = 16;
+function egrAutoLine() {
+  const m = materials(), root = G('EGR_Auto_Line'), BT = 0.855, BW = 0.5;
+  const ceramic = std('ceramic_substrate', 0xece8de, 0.0, 0.55), sinter = std('sintered_nickel', 0xc8ccd0, 1.0, 0.28), glow = std('oven_glow', 0xff7a1a, 0.0, 0.6, { emissive: 0xff5a00, emissiveIntensity: 2.2 });
+  // part looks: a 200 × 140 × 12 mm substrate centred on its node; three paste / sintered stripes; the moulded body around it
+  const plate = n => box(n, ceramic, 0.2, 0.012, 0.14, 0, 0, 0);
+  const stripes = (n, mt, y) => { for (const x of [-0.06, 0, 0.06]) box(n, mt, 0.012, 0.003, 0.1, x, y, 0); };
+  const body = n => { box(n, m.black, 0.24, 0.02, 0.18, 0, -0.012, 0); for (const s of [-1, 1]) box(n, m.black, 0.24, 0.026, 0.02, 0, 0.004, s * 0.08); box(n, m.black, 0.04, 0.04, 0.05, 0.1, 0.02, 0); };
+  const look = (n, pre, stage) => { plate(n); if (stage !== 'sub') stripes(n, sinter, 0.0075); if (stage === 'body') body(n); };
+  const belt = (x0, x1, z = 0, legs = true) => { const L = x1 - x0, c = (x0 + x1) / 2;
+    for (const sz of [-1, 1]) box(root, m.alu, L, 0.1, 0.035, c, BT - 0.055, z + sz * (BW / 2 + 0.03));
+    box(root, m.belt, L - 0.02, 0.01, BW, c, BT - 0.005, z);
+    if (legs) for (let k = 0, n = Math.max(1, Math.ceil(L / 1.4)); k <= n; k++) { const x = x0 + 0.08 + (L - 0.16) * k / n; for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * (BW / 2 + 0.03)], [x, BT - 0.11, z + sz * (BW / 2 + 0.03)], 0.04); foot(root, x, z + sz * (BW / 2 + 0.03)); } }
+  };
+  // 1. picker over the AS/RS pick station (x −1.3) and the line start (x 0)
+  for (const sz of [-1, 1]) prof(root, [0.55, 0.06, sz * 0.32], [0.55, 2.15, sz * 0.32], 0.06, m.frameDark);
+  box(root, m.yellow, 0.1, 0.1, 0.74, 0.55, 2.2, 0); box(root, m.yellow, 2.3, 0.12, 0.12, -0.55, 2.2, 0); box(root, m.black, 2.2, 0.03, 0.13, -0.55, 2.27, 0);
+  const px = G('Picker_X', root), py = G('Picker_Y', px); box(px, m.aluDark, 0.22, 0.2, 0.2, 0, 2.2, 0.0); box(px, m.black, 0.1, 0.1, 0.1, 0, 2.36, 0);
+  box(py, m.alu, 0.05, 0.6, 0.05, 0, 1.95 + 0.3 - 0.2, 0); box(py, m.aluDark, 0.16, 0.02, 0.12, 0, 1.76, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(py, m.rubber, 0.012, 0.02, sx * 0.06, 1.745, sz * 0.04, 'y', 10);
+  const pps = G('Picker_Sub', py, 0, 1.729, 0); look(pps, 'Picker_Sub', 'sub');
+  // 2. belt into the dispensing cell, the cell (x 2 … 4), belt to the oven
+  belt(-0.15, 2.0); belt(2.0, 4.0, 0, false); belt(4.0, 5.0);
+  const dc = G('Auto_Dispense', root);
+  box(dc, m.sheet, 2.0, 0.7, 1.3, 3.0, 0.4, 0); box(dc, m.black, 2.02, 0.05, 1.32, 3.0, 0.03, 0); box(dc, m.yellow, 2.01, 0.05, 0.004, 3.0, 0.68, 0.652);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(dc, [3.0 + sx * 0.98, 0.75, sz * 0.63], [3.0 + sx * 0.98, 2.1, sz * 0.63], 0.045, m.frameDark);
+  for (const sz of [-1, 1]) prof(dc, [2.02, 2.1, sz * 0.63], [3.98, 2.1, sz * 0.63], 0.045, m.frameDark); for (const sx of [-1, 1]) prof(dc, [3.0 + sx * 0.98, 2.1, -0.63], [3.0 + sx * 0.98, 2.1, 0.63], 0.045, m.frameDark);
+  for (const sz of [-1, 1]) box(dc, m.glass, 1.9, 1.3, 0.008, 3.0, 1.43, sz * 0.63); for (const sx of [-1, 1]) { box(dc, m.glass, 0.008, 1.0, 1.2, 3.0 + sx * 0.98, 1.6, 0); box(dc, m.black, 0.012, 0.25, 0.62, 3.0 + sx * 0.98, 0.98, 0); }
+  box(dc, m.sheet, 1.96, 0.02, 1.26, 3.0, 2.12, 0);
+  for (const sz of [-1, 1]) box(dc, m.aluDark, 1.8, 0.08, 0.08, 3.0, 1.85, sz * 0.5);                          // gantry X rails
+  const dx = G('Disp_X', dc, 0, 0, 0); box(dx, m.aluDark, 0.12, 0.1, 1.08, 3.0, 1.79, 0);
+  const dz = G('Disp_Z', dx, 0, 0, 0); box(dz, m.yellow, 0.16, 0.22, 0.12, 3.0, 1.7, 0);
+  const dn = G('Disp_Needle', dz, 0, 0, 0); box(dn, m.aluDark, 0.06, 0.4, 0.06, 3.0, 1.4, 0); cyl(dn, m.syringe, 0.022, 0.16, 3.06, 1.42, 0, 'y', 16); cyl(dn, m.paste, 0.016, 0.06, 3.06, 1.53, 0, 'y', 12);
+  cyl(dn, m.steel, 0.006, 0.12, 3.0, 1.14, 0, 'y', 8); cyl(dn, m.stainless, 0.0015, 0.03, 3.0, 1.065, 0, 'y', 6);
+  box(dc, m.black, 0.1, 0.12, 0.1, 3.0, 1.98, -0.35); cyl(dc, m.black, 0.03, 0.08, 3.0, 1.9, -0.35, 'y', 16); const ring = G('Align_Light', dc); cyl(ring, m.light, 0.06, 0.01, 3.0, 1.85, -0.35, 'y', 24); // alignment camera + ring light
+  box(dc, m.syringe, 0.18, 0.3, 0.18, 2.2, 2.28, 0.4); box(dc, m.paste, 0.14, 0.1, 0.14, 2.2, 2.2, 0.4);             // paste reservoir (pressure tank)
+  cyl(dc, m.black, 0.012, 0.25, 3.85, 2.25, 0.5, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(dc, mt, 0.03, 0.06, 3.85, 2.4 + k * 0.065, 0.5, 'y', 14);
+  box(dc, m.black, 0.06, 0.32, 0.42, 3.95, 1.5, 0.75); box(dc, m.screen, 0.004, 0.26, 0.36, 3.98, 1.5, 0.75);
+  // 3. drying / sintering tunnel oven (x 5 … 10): mesh belt, drying zone (2 m), sintering zone (3 m) with glow windows, two exhaust hoods
+  belt(4.8, 10.2, 0, false);
+  const ov = G('Oven', root);
+  box(ov, m.sheet, 5.0, 1.15, 1.2, 7.5, 1.2, 0); box(ov, m.black, 5.02, 0.06, 1.22, 7.5, 0.6, 0); box(ov, m.black, 5.02, 0.06, 1.22, 7.5, 1.78, 0);
+  box(ov, m.aluDark, 5.0, 0.6, 1.0, 7.5, 0.3, 0); for (const x of [5.2, 6.6, 8.2, 9.8]) for (const sz of [-1, 1]) box(ov, m.black, 0.08, 0.6, 0.08, x, 0.3, sz * 0.46);
+  for (const sx of [-1, 1]) { box(ov, m.black, 0.02, 0.16, 0.6, 7.5 + sx * 2.51, 0.93, 0); for (let k = -2; k <= 2; k++) box(ov, m.rubber, 0.01, 0.15, 0.1, 7.5 + sx * 2.52, 0.93, k * 0.11); } // entry / exit with curtains
+  box(ov, m.yellow, 2.0, 0.05, 0.004, 6.0, 1.66, 0.602); box(ov, m.red, 3.0, 0.05, 0.004, 8.5, 1.66, 0.602);    // zone stripes: drying (yellow), sintering (red)
+  for (const x of [7.6, 8.5, 9.4]) { box(ov, m.black, 0.5, 0.26, 0.02, x, 1.2, 0.605); box(ov, glow, 0.42, 0.18, 0.004, x, 1.2, 0.616); } // sinter zone windows
+  box(ov, m.black, 0.5, 0.26, 0.02, 6.0, 1.2, 0.605); box(ov, m.window, 0.42, 0.18, 0.004, 6.0, 1.2, 0.616);
+  for (const [x, w] of [[5.8, 1.2], [8.5, 1.8]]) { box(ov, m.steel, w, 0.3, 0.9, x, 1.95, 0); box(ov, m.steel, w * 0.6, 0.12, 0.5, x, 2.16, 0); cyl(ov, m.steel, 0.14, 0.9, x, 2.65, 0, 'y', 20); }
+  box(ov, m.sheet, 0.6, 1.6, 0.35, 10.0, 0.8, 0.85); box(ov, m.screen, 0.4, 0.26, 0.005, 10.0, 1.3, 1.026); for (const [k, mt] of [[0, m.lampR], [1, m.lampA], [2, m.lampG]]) cyl(ov, mt, 0.02, 0.01, 9.85 + k * 0.08, 1.05, 1.03, 'z', 12);
+  // 4. vision gate (x 10.9) + NG pusher (x 11.2) and bin, belt to the moulding robot pick point (x 12.8, end stop)
+  belt(10.2, 12.95);
+  for (const sz of [-1, 1]) prof(root, [10.9, 0.06, sz * 0.42], [10.9, 1.75, sz * 0.42], 0.05, m.frameDark);
+  box(root, m.frameDark, 0.08, 0.08, 0.92, 10.9, 1.75, 0); box(root, m.black, 0.1, 0.14, 0.1, 10.9, 1.62, 0); cyl(root, m.light, 0.07, 0.012, 10.9, 1.53, 0, 'y', 24);
+  const flash = G('Vision_Flash', root); cyl(flash, m.light, 0.12, 0.004, 10.9, 0.9, 0, 'y', 24);
+  const ngp = G('NG_Pusher', root, 0, 0, 0); box(ngp, m.aluDark, 0.16, 0.06, 0.02, 11.2, BT + 0.035, BW / 2 - 0.02); cyl(ngp, m.steel, 0.01, 0.35, 11.2, BT + 0.035, BW / 2 + 0.16, 'z', 8);
+  cyl(root, m.alu, 0.03, 0.3, 11.2, BT + 0.035, BW / 2 + 0.47, 'z', 16); box(root, m.black, 0.06, 0.06, 0.06, 11.2, BT + 0.035, BW / 2 + 0.64);
+  const ngb = G('NG_Bin', root, 11.2, 0, -0.62); box(ngb, m.red, 0.5, 0.02, 0.4, 0, 0.32, 0); for (const s of [-1, 1]) { box(ngb, m.red, 0.5, 0.3, 0.012, 0, 0.47, s * 0.2); box(ngb, m.red, 0.012, 0.3, 0.4, s * 0.25, 0.47, 0); }
+  for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(ngb, [x, 0, z], [x, 0.31, z], 0.03, m.frameDark);
+  box(ngb, m.ngLabel, 0.3, 0.12, 0.004, 0, 0.52, -0.207); box(root, m.steel, 0.3, 0.012, 0.36, 11.2, 0.75, -0.42, [-0.5, 0, 0]);   // chute lip
+  box(root, m.yellow, 0.03, 0.06, BW, 12.94, BT + 0.03, 0);                                                                          // end stop
+  // 5. insert moulding machine, robot pick point = line end (machine x 0.105 at line x 12.8, its nest z 1.25 on the line axis)
+  const mc = injectionGeo(G('Insert_Moulding', root, 12.8 - 0.105, 0, -1.25), { inline: true, wristed: true, part: (n) => look(n, 'MP', 'body'), insert: (n) => look(n, 'MI', 'sinter') });
+  void mc;
+  // ---- keys
+  const ease = u => u * u * (3 - 2 * u);
+  const ser = (evs, rest) => { // periodic position series from absolute events (already replicated around the clip): value at 0 and T added
+    evs = evs.slice().sort((a, b) => a[0] - b[0]);
+    const f = t => { let k = -1; while (k + 1 < evs.length && evs[k + 1][0] <= t) k++; if (k < 0) return rest; if (k === evs.length - 1) return evs[k][1]; const [t0, v0] = evs[k], [t1, v1] = evs[k + 1]; return v0 + (v1 - v0) * ease(t1 > t0 ? (t - t0) / (t1 - t0) : 1); };
+    return [[0, f(0)], ...evs.filter(e => e[0] > 0 && e[0] < LINE_T), [LINE_T, f(LINE_T)]];
+  };
+  const vis = (evs, v0) => { evs = evs.slice().sort((a, b) => a[0] - b[0]); let s = v0; for (const [t, v] of evs) if (t <= 0) s = v; return [[0, s], ...evs.filter(e => e[0] > 0 && e[0] < LINE_T)]; };
+  const occ = [], NG = 2; for (let j = -4; j < 8; j++) occ.push({ j, k: ((j % 4) + 4) % 4, b: LINE_P * j + LINE_PICK });
+  const ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
+  const XG = 0.105, ZN = 1.25, ZC = 1.85, OPEN = 0.45, D = 0.9, DN = 1.339, DC = 1.339, KI = -0.119, KP = 0.129;
+  for (const { k, b } of occ) {
+    const P = 'Part_' + (k + 1), r = b + 95, ng = k === NG;
+    // picker
+    add('Picker_X', 'x', [[b - 2, 0], [b - 1, -1.3], [b + 0.8, -1.3], [b + 2.8, 0]]);
+    add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.729 - 1.318)], [b, -(1.729 - 1.318)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.729 - (BT + 0.006))], [b + 3.8, -(1.729 - (BT + 0.006))], [b + 4.6, 0]]);
+    add('Picker_Sub', 'vis', [[b, true], [b + 3.8, false]]);
+    // the part: belt → dispensing stop → oven → vision → (NG) → robot pick point; later the outfeed belt → AMR tote
+    const xs = [[b + 3.8, 0], [b + 4, 0], [b + 14, 3.0], [b + 27, 3.0], [b + 33.7, 5.0], [b + 83.7, 10.0], [b + 87.7, 11.2]], ys = [[b + 3.8, 0]], zs = [[b + 3.8, 0]];
+    if (ng) { xs.push([b + 88.8, 11.2]); zs.push([b + 88, 0], [b + 88.8, -0.55]); ys.push([b + 88.8, 0], [b + 89.4, -0.47]); add(P, 'vis', [[b + 3.8, true], [b + 89.6, false]]);
+      add('NG_Pusher', 'z', [[b + 87.9, 0], [b + 88.8, -0.48], [b + 89.6, 0]]); }
+    else { xs.push([b + 91.7, 12.8], [r + 23.39, 12.8], [r + 24, 12.8], [r + 30, 14.35], [r + 30.6, 14.7]); zs.push([r + 23.39, 0], [r + 23.4, 0.6]); ys.push([r + 30, 0], [r + 30.6, -0.2]);
+      add(P, 'vis', [[b + 3.8, true], [r, false], [r + 23.4, true], [r + 30.8, false]]); }
+    add(P + '_X', 'x', xs); add(P + '_Y', 'y', ys); add(P + '_Z', 'z', zs);
+    add(P + '_Paste', 'vis', [[b + 3.8, false], [b + 19, true], [b + 63.7, false]]); [1, 2, 3].forEach(s => add(P + '_Paste_' + s, 'vis', [[b + 3.8, false], [b + 16 + 3 * s, true]]));
+    add(P + '_Sinter', 'vis', [[b + 3.8, false], [b + 63.7, true], [r + 23.4, false]]); add(P + '_Body', 'vis', [[b + 3.8, false], [r + 23.4, true]]);
+    add('Vision_Flash', 'vis', [[b + 86.4, true], [b + 86.7, false]]);
+    // dispensing gantry: alignment flash, three stripes (needle down, sweep z, step x), back home
+    add('Align_Light', 'vis', [[b + 15, true], [b + 15.4, false]]);
+    add('Disp_X', 'x', [[b + 15, 0], [b + 16, -0.06], [b + 19, -0.06], [b + 19.5, 0], [b + 22, 0], [b + 22.5, 0.06], [b + 25, 0.06], [b + 26.5, 0]]);
+    add('Disp_Z', 'z', [[b + 15, 0], [b + 16, -0.05], [b + 16.5, -0.05], [b + 19, 0.05], [b + 19.5, 0.05], [b + 22, -0.05], [b + 22.5, -0.05], [b + 25, 0.05], [b + 26.5, 0]]);
+    add('Disp_Needle', 'y', [[b + 16, 0], [b + 16.5, -0.185], [b + 25, -0.185], [b + 25.5, 0]]);
+    if (ng) continue;
+    // insert moulding: robot takes the sintered substrate at the line end, loads the mould, the machine moulds, the robot unloads to the outfeed
+    add('Robot_Arm', 'y', [[r - 1, 0], [r - 0.4, -DN], [r, -DN], [r + 0.6, 0], [r + 2, 0], [r + 3, -D], [r + 4, -D], [r + 5, 0], [r + 18.4, 0], [r + 19.4, -D], [r + 20.4, -D], [r + 21.4, 0], [r + 22.8, 0], [r + 23.3, -DC], [r + 23.5, -DC], [r + 24, 0]]);
+    add('Robot_Traverse', 'z', [[r + 0.6, ZN], [r + 2, 0], [r + 5, 0], [r + 6.4, ZN], [r + 17, ZN], [r + 18.4, 0], [r + 21.4, 0], [r + 22.8, ZC], [r + 24, ZC], [r + 25.2, ZN]]);
+    add('Gripper_Wrist', 'rz', [[r + 0.6, 0], [r + 2, -Math.PI / 2], [r + 5, -Math.PI / 2], [r + 6.4, 0], [r + 17, 0], [r + 18.4, Math.PI / 2], [r + 21.4, Math.PI / 2], [r + 22.8, 0]]);
+    add('Gripper', 'x', [[r + 3, 0], [r + 3.4, KI], [r + 3.6, KI], [r + 4, 0], [r + 19.4, 0], [r + 19.8, KP], [r + 20, KP], [r + 20.4, 0]]);
+    add('Grip_Insert', 'vis', [[r, true], [r + 3.5, false]]); add('Mould_Insert', 'vis', [[r + 3.5, true], [r + 9.4, false]]);
+    add('Mould_Part', 'vis', [[r + 9.4, true], [r + 19.9, false]]); add('Grip_Part', 'vis', [[r + 19.9, true], [r + 23.4, false]]);
+    add('Moving_Platen', 'x', [[r + 5, 0], [r + 6.4, -OPEN], [r + 17, -OPEN], [r + 18.4, 0]]);
+    add('Injection_Unit', 'x', [[r + 6.4, 0], [r + 7.4, 0.06], [r + 17, 0.06], [r + 18, 0]]);
+    add('Screw_Drive', 'rx', [[r + 9.4, 0], [r + 15, Math.PI * 8]].map(([t, v]) => [t, v]));
+    add('Ejector', 'x', [[r + 18.4, 0], [r + 18.9, -0.04], [r + 20, -0.04], [r + 20.5, 0]]);
+  }
+  // part nodes: X > Y > Z > look; paste stripes under P_Paste so the stage group can hide them after sintering
+  for (let k = 0; k < 4; k++) {
+    const P = 'Part_' + (k + 1), x = G(P + '_X', root, 0, BT + 0.006, 0), y = G(P + '_Y', x), z = G(P + '_Z', y), n = G(P, z);
+    plate(n); const pg = G(P + '_Paste', n); [-0.06, 0, 0.06].forEach((px, i) => box(G(P + '_Paste_' + (i + 1), pg), m.paste, 0.014, 0.004, 0.1, px, 0.008, 0));
+    stripes(G(P + '_Sinter', n), sinter, 0.0075); body(G(P + '_Body', n));
+  }
+  const keys = [];
+  for (const [key, evs] of Object.entries(ch)) {
+    const [node, c] = key.split('|');
+    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Grip_|Mould_|Picker_Sub|Vision_Flash|Align_Light)/.test(node) ? false : /^Part_\d$/.test(node) ? false : /_Paste_\d$/.test(node) ? false : true)]);
+    else keys.push([node, c, ser(evs.map(([t, v]) => [t, v]), c === 'z' && node === 'Robot_Traverse' ? ZN : 0)]);
+  }
+  // the screw keeps turning forward: unwrap its rotation per occurrence (ser interpolates back to 0 otherwise)
+  const sk = keys.find(k => k[0] === 'Screw_Drive'); if (sk) { let acc = 0; const pts = []; for (const { b, k } of occ) { if (k === NG) continue; const r = b + 95; pts.push([r + 9.4, acc], [r + 15, acc + Math.PI * 8]); acc += Math.PI * 8; } sk[2] = ser(pts, 0); }
+  return cycleClip(finalize(root), 'Line_Cycle', LINE_T, keys);
+}
+
+// ---------------------------------------------------------------- 13. the over-moulded insert part (the EGR auto line's product): ceramic substrate with a sintered Ni pattern in a black body
+function insertPart() {
+  const m = materials(), root = G('Insert_Part'), ceramic = std('ceramic_substrate', 0xece8de, 0.0, 0.55), sinter = std('sintered_nickel', 0xc8ccd0, 1.0, 0.28);
+  box(root, m.black, 0.24, 0.02, 0.18, 0, 0.01, 0); for (const s of [-1, 1]) box(root, m.black, 0.24, 0.026, 0.02, 0, 0.026, s * 0.08); box(root, m.black, 0.04, 0.04, 0.05, 0.1, 0.042, 0);
+  box(root, ceramic, 0.2, 0.012, 0.14, 0, 0.026, 0); for (const x of [-0.06, 0, 0.06]) box(root, sinter, 0.012, 0.003, 0.1, x, 0.0335, 0);
+  return finalize(root);
+}
+
 export const MODELS = {
-  asrs_cell: asrsCell, injection_cell: injectionCell,
+  insert_part: insertPart, asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,

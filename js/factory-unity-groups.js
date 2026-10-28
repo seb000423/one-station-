@@ -307,21 +307,30 @@
     const load = new THREE.Group(); load.name = 'AMR_Load'; const [lx, ly] = LOAD[p.model]; load.position.set(lx, ly, 0); load.userData.y = ly; g.add(load);
     if (OWN[p.model]) { if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
     else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); loadOn(load, p.load); }
-    if (p.model === 'e3_amr_deck_bot') { // tote on the deck that batch zones fill part by part (fillAt); hidden unless this AMR serves one
+    if (p.model === 'e3_amr_deck_bot') { // tote on the deck that batch zones fill part by part (fillAt, ensureFill); hidden unless this AMR serves one
       const fill = new THREE.Group(); fill.name = 'AMR_Fill'; fill.position.set(lx, ly, 0); fill.visible = false; g.add(fill);
-      const tm = A.get('e3_tote_600x400'), cm = A.get('e3_egr_cooler'); if (!tm || !cm) { A.load('e3_tote_600x400').catch(() => {}); A.load('e3_egr_cooler').catch(() => {}); }
-      if (tm) fill.add(A.placed(tm, 'Fill_Tote'));
-      for (let k = 0; k < FILL_MAX; k++) { const s = new THREE.Group(); s.name = 'Fill_Part_' + (k + 1); s.position.set(((k % 3) - 1) * 0.17, 0.025 + Math.floor(k / 3) * 0.135, 0); s.userData.y = s.position.y; s.visible = false;
-        if (cm) { const c = A.placed(A.get('e3_egr_cooler'), 'Fill_Part_Model'); c.rotation.y = Math.PI / 2; s.add(c); } fill.add(s); }
+      for (let k = 0; k < FILL_MAX; k++) { const s = new THREE.Group(); s.name = 'Fill_Part_' + (k + 1); s.visible = false; fill.add(s); }
     }
     const mast = g.getObjectByName('Rig_mast_2'); if (mast) mast.userData.y = mast.position.y;
   };
   // batch zones (weighing / stacking: the zone's AMR leaves at a weight): the AMR waits at the zone while the parts go into the tote on
   // its deck one by one, then leaves with the full tote. Parts in the tote at t; null when this AMR serves no batch zone.
-  const FILL_MAX = 9;
+  const FILL_MAX = 12;
+  const batchZone = (p, pl) => pl && pl.zoneAt && (p.stops || []).map(s => s.act === 'load' && pl.zoneAt(s.at)).find(z => z && z.n > 1);
+  // the tote and the zone's parts in it, laid out from the part's size (rows across the tote, layers upwards); false while models load
+  function ensureFill(fill, item) {
+    if (fill.userData.ok) return true;
+    const tm = A.get('e3_tote_600x400'), probe = A.get(idOf(item)); if (!tm || !probe) { A.load('e3_tote_600x400').catch(() => {}); A.load(idOf(item)).catch(() => {}); return false; }
+    fill.add(A.placed(tm, 'Fill_Tote'));
+    const b = new THREE.Box3().setFromObject(probe), w = Math.min(b.max.x - b.min.x, b.max.z - b.min.z), h = b.max.y - b.min.y, cols = Math.max(1, Math.floor(0.56 / (w + 0.01))), pitch = 0.56 / cols;
+    fill.children.forEach(c => { const m = /^Fill_Part_(\d+)$/.exec(c.name); if (!m) return; const k = +m[1] - 1;
+      c.position.set((k % cols - (cols - 1) / 2) * pitch, 0.025 + Math.floor(k / cols) * (h + 0.006), 0); c.userData.y = c.position.y;
+      const md = A.placed(A.get(idOf(item)), 'Fill_Part_Model'); if (b.max.x - b.min.x > b.max.z - b.min.z) md.rotation.y = Math.PI / 2; c.add(md); });
+    return (fill.userData.ok = true);
+  }
   function fillAt(p, pl, t) {
     if (!pl || !pl.ok || pl.still || !pl.state || !pl.zoneAt) return null;
-    const bz = (p.stops || []).map(s => s.act === 'load' && pl.zoneAt(s.at)).find(z => z && z.n > 1); if (!bz) return null;
+    const bz = batchZone(p, pl); if (!bz) return null;
     const s = pl.state(t) || '', m = /^대기: (.+) 무게 미달$/.exec(s) || /^(대기|적재) 중 \((.+)\)$/.exec(s), z = m && pl.zoneAt(m[2] || m[1]);
     if (z && z.n > 1) return Math.min(FILL_MAX, /^적재/.test(s) ? z.n : Math.max(0, Math.floor(z.stock(t))));
     return pl.carry && pl.carry(t) ? Math.min(FILL_MAX, bz.n) : 0;
@@ -364,11 +373,7 @@
       else { load.position.set(load.userData.x, load.userData.y + L, 0); }
     }
     const fill = g.getObjectByName('AMR_Fill'), n = fill && fillAt(p, pl, t);
-    if (fill && n != null && !fill.userData.ok) { // models that were still loading when the AMR was built
-      const tm = A.get('e3_tote_600x400'), cm = A.get('e3_egr_cooler');
-      if (tm && cm) { fill.userData.ok = true; if (!fill.getObjectByName('Fill_Tote')) fill.add(A.placed(tm, 'Fill_Tote'));
-        fill.children.forEach(c => { if (/^Fill_Part_\d+$/.test(c.name) && !c.children.length) { const m = A.placed(A.get('e3_egr_cooler'), 'Fill_Part_Model'); m.rotation.y = Math.PI / 2; c.add(m); } }); }
-    }
+    if (fill && n != null) { const bz = batchZone(p, pl); if (bz) ensureFill(fill, bz.item || 'e3_egr_cooler'); }
     if (fill) { fill.visible = n != null; if (n != null) { if (load) load.visible = false; fill.children.forEach(c => { if (/^Fill_Part_/.test(c.name)) c.visible = +c.name.slice(10) <= n; }); } }
   };
   TY.amr.drives = (g, p, frames, spf, pl) => {
@@ -386,7 +391,7 @@
       if (sx.some(v => v)) out.push({ node: tx, dir: 'LinearX', rev: true, series: sx }); if (sz.some(v => v)) out.push({ node: tz, dir: 'LinearZ', rev: false, series: sz });
     }
     const fill = g.getObjectByName('AMR_Fill');
-    if (fill && fillAt(p, pl, 0) != null) { // the batch tote replaces the carried load; each part parks below the floor until it is in the tote
+    if (fill && fillAt(p, pl, 0) != null && ensureFill(fill, batchZone(p, pl).item || 'e3_egr_cooler')) { // the batch tote replaces the carried load; each part parks below the floor until it is in the tote
       if (load) { for (let i = out.length - 1; i >= 0; i--) if (out[i].node === load || /_Load_T[XZ]$/.test(out[i].node.name)) out.splice(i, 1); rec(load, () => HIDE); }
       fill.visible = true; fill.children.forEach(c => { if (!/^Fill_Part_/.test(c.name)) return; const k = +c.name.slice(10); c.visible = true; rec(c, t => fillAt(p, pl, t) >= k ? c.userData.y : HIDE); });
     }
