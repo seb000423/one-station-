@@ -315,7 +315,9 @@
     if (!m) { if (LOAD[p.model]) A.load(p.model).catch(() => {}); return amrBuild(g, Object.assign({}, p, { model: LOAD[p.model] ? 'simple' : p.model })); }
     g.add(OWN[p.model] ? A.placed(m, 'AMR_Model') : front(m, 'AMR_Model'));
     const load = new THREE.Group(); load.name = 'AMR_Load'; const [lx, ly] = LOAD[p.model]; load.position.set(lx, ly, 0); load.userData.y = ly; g.add(load);
-    if (OWN[p.model]) { if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
+    if (OWN[p.model]) { // p.loads: an AMR carrying different things on different legs (full totes in, empty totes back) shows the one it loaded last
+      if (p.loads && p.loads.length > 1 && p.model === 'e3_amr_deck_bot') p.loads.forEach(k => { const v = new THREE.Group(); v.name = 'Load_Var_' + k; v.userData.kind = k; load.add(v); loadOn(v, k, 0); });
+      else if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
     else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); if (palletStack(load, p.load, p.layers || 3) === false) loadOn(load, p.load); }
     if (p.model === 'e3_amr_deck_bot') { // tote on the deck that batch zones fill part by part (fillAt, ensureFill); hidden unless this AMR serves one
       const fill = new THREE.Group(); fill.name = 'AMR_Fill'; fill.position.set(lx, ly, 0); fill.userData.y = ly; fill.userData.x = lx; fill.visible = false; g.add(fill);
@@ -325,6 +327,12 @@
   };
   // batch zones (weighing / stacking: the zone's AMR leaves at a weight): the AMR waits at the zone while the parts go into the tote on
   // its deck one by one, then leaves with the full tote. Parts in the tote at t; null when this AMR serves no batch zone.
+  // what an AMR with several load kinds (p.loads) carries at t: the item of the zone it last loaded at (sampled once from its plan)
+  function loadKindAt(p, pl, t) {
+    if (!pl || !pl.state || !pl.zoneAt) return p.load;
+    if (!pl.__loadsAt) { const ev = []; let prev = ''; for (let u = 0; u < 3600; u += 0.5) { const st = pl.state(u) || ''; if (st !== prev) { const m = /^적재 중 \((.+)\)$/.exec(st); if (m) { const z = pl.zoneAt(m[1]); if (z && z.item) ev.push([u, z.item]); } prev = st; } } pl.__loadsAt = ev; }
+    let k = p.load; for (const [u, item] of pl.__loadsAt) { if (u > t) break; k = item; } return k;
+  }
   const FILL_MAX = 12;
   const batchZone = (p, pl) => pl && pl.zoneAt && (p.stops || []).map(s => s.act === 'load' && pl.zoneAt(s.at)).find(z => z && z.n > 1);
   // the tote and the zone's parts in it, laid out from the part's size (rows across the tote, layers upwards); false while models load
@@ -384,6 +392,7 @@
       if (tr) { load.position.set(tr.x, load.userData.y + L + tr.dy, tr.z); load.visible = true; }
       else { load.position.set(load.userData.x, load.userData.y + L, 0); }
     }
+    if (load && p.loads && p.loads.length > 1) { const k = loadKindAt(p, pl, t); load.children.forEach(c => { if (c.userData.kind) c.visible = c.userData.kind === k; }); }
     const fill = g.getObjectByName('AMR_Fill'), n = fill && fillAt(p, pl, t);
     if (fill && n != null) { const bz = batchZone(p, pl); if (bz) ensureFill(fill, bz.item || 'e3_egr_cooler'); }
     if (fill) { fill.visible = n != null; if (n != null) { if (load) load.visible = false; fill.children.forEach(c => { if (/^Fill_Part_/.test(c.name)) c.visible = +c.name.slice(10) <= n; });
@@ -409,6 +418,7 @@
       for (let f = 0; f < frames; f++) { const tr = transfer(p, pl, f * spf); sx[f] = tr ? Math.round((tr.x - x0) * 1000) : 0; sz[f] = tr ? Math.round(tr.z * 1000) : 0; }
       if (sx.some(v => v)) out.push({ node: tx, dir: 'LinearX', rev: true, series: sx }); if (sz.some(v => v)) out.push({ node: tz, dir: 'LinearZ', rev: false, series: sz });
     }
+    if (load && p.loads && p.loads.length > 1) load.children.forEach(c => { if (!c.userData.kind) return; c.visible = true; const y0 = c.position.y; rec(c, t => (loadKindAt(p, pl, t) === c.userData.kind ? y0 : HIDE)); });
     if (fillOn) fill.children.forEach(c => { if (!/^Fill_Part_/.test(c.name)) return; const k = +c.name.slice(10); c.visible = true; rec(c, t => fillAt(p, pl, t) >= k ? c.userData.y : HIDE); });
     return out;
   };

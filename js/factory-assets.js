@@ -70,7 +70,7 @@
   // FAIRINO FR5 cobot converted from the maker's STEP (joints Joint_1…Joint_6), and the Omron AGV with trolley (Sketchfab,
   // CC-BY 4.0 'Cels', see assets/models/egr-line-v3/CREDITS.md; Draco compressed). Metres.
   const E3 = 'assets/models/egr-line-v3/';
-  for (const file of ['asrs_cell_a', 'egr_core_line', 'egr_core_line_manual', 'brazed_core', 'tote_brazed', 'tote_coolers', 'pack_box', 'fr3', 'fr10', 'fr16', 'fr20', 'fr30', 'insert_part', 'dispensed_sub', 'tote_dispensed', 'tote_moulded', 'egr_auto_line', 'asrs_cell', 'injection_cell', 'asrs_crane', 'asrs_rail_4m', 'rack_bay', 'omron_agv', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'amr_deck_bot', 'conveyor_stopper',
+  for (const file of ['tote_blanks', 'tote_blanks4', 'asrs_cell_a', 'egr_core_line', 'egr_core_line_manual', 'brazed_core', 'tote_brazed', 'tote_coolers', 'pack_box', 'fr3', 'fr10', 'fr16', 'fr20', 'fr30', 'insert_part', 'dispensed_sub', 'tote_dispensed', 'tote_moulded', 'egr_auto_line', 'asrs_cell', 'injection_cell', 'asrs_crane', 'asrs_rail_4m', 'rack_bay', 'omron_agv', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'amr_deck_bot', 'conveyor_stopper',
     'roller_conveyor_1m', 'roller_conveyor_2m', 'roller_curve_90', 'belt_conveyor_2m', 'fence_panel_1m', 'fence_panel_2m', 'tote_600x400', 'egr_cooler', 'fr5',
     'fr5_stacking_cell', 'fr5_tending_cell', 'press_line_2level', 'hall_wall_6m', 'hall_door_6m', 'hall_gable_24m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
   ]) MODELS['e3_' + file] = { url: E3 + file + '.glb', label: file };

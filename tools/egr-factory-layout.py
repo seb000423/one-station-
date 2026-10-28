@@ -36,7 +36,10 @@ def route(name, pts, oneway=False):
 # ---------------------------------------------------------------- building shell
 X0, Z0 = W / 2 - 0.1, D / 2 - 0.1
 DOORS = (-24.0, 24.0)               # sectional doors in the south wall: inbound (west), shipping (east)
-add('wall', '북쪽 벽', 0, -Z0, 0, {'length': W, 'thickness': 0.2, 'h': 0, 'windows': True})
+NDOOR = 7.0                         # north shutter: inbound totes of plate blanks for the AS/RS cells (empty totes go back out here)
+for n, (a, b) in enumerate(((-W / 2, NDOOR - 2.2), (NDOOR + 2.2, W / 2))):
+    add('wall', f'북쪽 벽 {n + 1}', (a + b) / 2, -Z0, 0, {'length': r3(b - a), 'thickness': 0.2, 'h': 0, 'windows': True})
+add('door', '부품 입고 셔터 (북)', NDOOR, -Z0, 0, {'width': 4, 'height': 4.5, 'thickness': 0.2})
 for n, (a, b) in enumerate(((-W / 2, DOORS[0] - 2.2), (DOORS[0] + 2.2, DOORS[1] - 2.2), (DOORS[1] + 2.2, W / 2))):
     add('wall', f'남쪽 벽 {n + 1}', (a + b) / 2, Z0, 0, {'length': r3(b - a), 'thickness': 0.2, 'h': 0, 'windows': True})
 for s, nm in ((-1, '서쪽 벽'), (1, '동쪽 벽')):
@@ -47,7 +50,7 @@ NB = 11                              # roof bays: the columns stand on the rafte
 BAY = [r3(-W / 2 + k * W / NB) for k in range(NB + 1)]
 for k, x in enumerate(BAY):
     for z in (-19.75, 19.75):
-        if z > 0 and any(abs(x - d) < 2.6 for d in DOORS): continue      # the shutter headers carry these frames
+        if (z > 0 and any(abs(x - d) < 2.6 for d in DOORS)) or (z < 0 and abs(x - NDOOR) < 2.6): continue      # the shutter headers carry these frames
         add('column', f'기둥 {"N" if z < 0 else "S"}{k + 1}', x, z, 0, {'w': 0.3, 'd': 0.4, 'h': 0})
     if 0 < k < NB: add('column', f'기둥 C{k}', x, 0, 0, {'w': 0.3, 'd': 0.4, 'h': 0})
 for z, nm in ((-10, '지붕 북쪽'), (10, '지붕 남쪽')):
@@ -72,7 +75,8 @@ def good_drops(P, DT):   # phases of the line clip (8 P s) at which a good braze
         out.add(round((F + 106 + 6 * slot + 14.6) % (8 * P), 1))   # the outfeed operator lays it into the tote
     return sorted(out)
 for k, L in LINES.items():
-    model(f'자동창고 일체형 셀 {k}', L['asrs'], -23.4, L['z'], r3(math.pi))
+    # the AS/RS model's box is 0.179 m off centre in Z (the tote lifts on its infeed side; cell A is mirrored), so the pick station stays on the line axis
+    model(f'자동창고 일체형 셀 {k}', L['asrs'], -23.4, r3(L['z'] + (0.179 if k == 'A' else -0.179)), r3(math.pi))
     model(L['name'], L['model'], LX0 + 7.45, L['z'] - 0.685)
     L['out'] = (r3(LX0 + 16.95), L['z']); L['good'] = good_drops(L['P'], L['DT'])   # out: just past the belt end (16.6), the outfeed operator turns to it
 
@@ -138,6 +142,16 @@ add('rack', '완제품 팔레트 랙', FGX, FGZ, 0, {'bays': 3, 'levels': 2, 'ba
 zone('완제품 랙 (가운데 칸)', 'storage', FGX, FGZ, w=1.3, d=1.1, track=True, stock=1, cap=1, unit='pallet', standH=0.21, layers=2, load='e3_pack_box')
 zone('출하 대기', 'dropoff', DOORS[1], r3(16.4 + 1.16), w=1.4, d=1.4, track=True, stock=0, cap=1, consume=70, unit='pallet', layers=2, load='e3_pack_box')
 OXA, OXB = LINES['A']['out'][0], LINES['B']['out'][0]
+# AS/RS tote exchange: the cells take a full tote (8 kits) off the inbound lift / put the empty one on the outbound lift at fixed phases of their 512 s clip
+EXA, EXB = [214.0, 470.0], [246.0, 502.0]   # every empty tote leaves, a full one replaces it (A: 4 kits / 256 s, B: 8 kits / 256 s; ASRS_Cycle 512 s)
+KITLOAD = {'A': 'e3_tote_blanks4', 'B': 'e3_tote_blanks'}
+LIFT_IN, LIFT_OUT = -17.065, -18.365
+for k, ex, zz in (('A', EXA, AZA + 1.6), ('B', EXB, AZB - 1.6)):
+    zone(f'자동창고 {k} 입고 리프트', 'dropoff', LIFT_IN, r3(zz), w=0.7, d=0.6, track=True, stock=1, cap=1, consumeAt=ex, consumePeriod=512, unit='tote', standH=0.62, stand=False, load=KITLOAD[k])
+    zone(f'자동창고 {k} 반출 리프트', 'pickup', LIFT_OUT, r3(zz), w=0.7, d=0.6, track=True, stock=0, cap=1, supplyAt=[round(t + 7, 1) for t in ex], supplyPeriod=512, unit='tote', standH=0.62, stand=False, load='e3_tote_600x400')
+zone('부품 상자 입고 B (북 셔터)', 'pickup', NDOOR - 1.2, -18.75, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=120, unit='tote', standH=0.62, load='e3_tote_blanks')    # trucks bring them
+zone('부품 상자 입고 A (북 셔터)', 'pickup', NDOOR - 0.4, -18.75, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=120, unit='tote', standH=0.62, load='e3_tote_blanks4')
+zone('빈 상자 반납 (북 셔터)', 'dropoff', NDOOR + 0.6, -18.75, w=0.7, d=0.6, track=True, stock=0, cap=3, consume=60, unit='tote', standH=0.62, load='e3_tote_600x400')
 PARK = {'코어 A': (5.6, -15.0), '코어 B': (0.6, -8.9), '조립품': (AX + 2.6, 10.2), '포장 지게차': (9.4, 11.6)}
 for nm, (x, z) in PARK.items():
     zone(nm + (' 대기' if '지게차' in nm else ' AMR 대기'), 'storage', x, z, w=1.4 if '지게차' in nm else 1.0, d=1.4 if '지게차' in nm else 1.0)
@@ -151,7 +165,12 @@ route('도킹', [(FGX, NL), (FGX, r3(FGZ + 1.16))])            # forks into the 
 route('도킹', [(OXB, NL), (OXB, AZB)])                     # under line B's outfeed belt end
 route('도킹', [(0.6, NL), (0.6, -8.9)])                     # line B's second core AMR waits here
 # line A's outfeed is reached by a one-way loop east of the lines: in between them, through the outfeed, out along the north wall
-route('A 라인 순환로', [(3.2, NL), (3.2, -13.9), (OXA, -13.9), (OXA, AZA), (OXA, -18.4), (4.4, -18.4), (4.4, -15.0), (4.4, NL)], oneway=True)
+route('A 라인 순환로', [(4.4, NL), (4.4, -13.9), (4.4, -15.0), (4.4, -18.4), (OXA, -18.4), (OXA, AZA), (OXA, -14.9), (3.2, -14.9), (3.2, -13.9), (3.2, NL)], oneway=True)
+# inbound corridor (two-way, only the AS/RS AGV drives it): north shutter → between the lines → the AS/RS tote lifts (spurs north to cell A,
+# south to cell B; at each cell the inbound lift at x −17.065 and the outbound lift at x −18.365)
+route('자동창고 입고 통로', [(NDOOR, -18.0), (NDOOR, -13.9), (4.4, -13.9), (3.2, -13.9), (-16.4, -13.9), (-16.9, -13.2), (LIFT_IN, -13.2), (LIFT_OUT, -13.2)])
+for x in (LIFT_IN, LIFT_OUT):
+    route('도킹', [(x, -13.2), (x, -13.85)]); route('도킹', [(x, -13.2), (x, -12.55)])
 route('도킹', [(4.4, -15.0), (5.6, -15.0)])                 # line A's second core AMR waits here
 route('도킹', [(AX, SL), (AX, OPZ)])                        # between the two operators of the assembly cell
 for x in (AX - 2.3, PX - 1.2):
@@ -171,6 +190,8 @@ for k, (x, z) in enumerate(((-12.0, SL), (6.0, SL))):
 for bnch in asm: bnch['params']['feeds'] = ref['조립 · 리크 완료 적재']
 pack['params']['feeds'] = ref['출하 팔레트 적재']
 fork = lambda name, x, z, stops: add('amr', name, x, z, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'e3_pack_box', 'layers': 2, 'stops': stops})
+ex = lambda k: [stop(f'부품 상자 입고 {k} (북 셔터)', 'load', 5), stop(f'자동창고 {k} 입고 리프트', 'unload', 5), stop(f'자동창고 {k} 반출 리프트', 'load', 5), stop('빈 상자 반납 (북 셔터)', 'unload', 5)]
+add('amr', '자동창고 입고 AGV', NDOOR, -16.0, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 5, 'load': 'e3_tote_blanks', 'loads': ['e3_tote_blanks', 'e3_tote_blanks4', 'e3_tote_600x400'], 'stops': ex('A') + ex('B')})
 fork('포장 지게차', 8.0, SL, [stop('포장 지게차 대기', 'wait', 1), stop('출하 팔레트 적재', 'load'), stop('완제품 랙 (가운데 칸)', 'unload')])
 fork('출하 지게차', 20.0, SL, [stop('완제품 랙 (가운데 칸)', 'load'), stop('출하 대기', 'unload', 12)])
 

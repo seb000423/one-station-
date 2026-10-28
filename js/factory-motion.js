@@ -412,7 +412,10 @@
           const P = z.p.supplyPeriod, a = (t - SIM_DT) % P, b = t % P;
           for (const s of z.p.supplyAt) if (t > 0 && (a < b ? a < s && s <= b : a < s || s <= b) && (!z.cap || z.stock < z.cap)) { z.stock++; z.made++; }
         } else if (z.p.supply > 0 && (!z.cap || z.stock < z.cap)) { z.sup += SIM_DT; if (z.sup >= z.p.supply) { z.sup = 0; z.stock++; z.made++; } }
-        if (z.p.consume > 0 && z.stock - z.resOut > 0) { z.con += SIM_DT; if (z.con >= z.p.consume) { z.con = 0; z.stock--; z.used++; } }
+        if (z.p.consumeAt && z.p.consumeAt.length && z.p.consumePeriod > 0) { // a machine on a fixed clock takes a unit at these phases of its cycle
+          const P = z.p.consumePeriod, a = (t - SIM_DT) % P, b = t % P;
+          for (const s of z.p.consumeAt) if (t > 0 && (a < b ? a < s && s <= b : a < s || s <= b) && z.stock - z.resOut > 0) { z.stock--; z.used++; }
+        } else if (z.p.consume > 0 && z.stock - z.resOut > 0) { z.con += SIM_DT; if (z.con >= z.p.consume) { z.con = 0; z.stock--; z.used++; } }
       }
       for (const a of agents) {
         const L = a.leg;
