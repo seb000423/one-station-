@@ -285,6 +285,15 @@
     root.add(window.FactoryElements ? window.FactoryElements.buildShell(factory, { walls: false }) : buildFactory(factory));
     const bg = new THREE.Group(); bg.name = 'Building'; building.forEach(o => bg.add(o)); root.add(bg);
     cells.forEach(c => { c.rec.group.name = 'Cell_' + c.id; root.add(c.rec.group); });
+    // quantized attributes (meshopt / KHR_mesh_quantization models: Int8 / Int16) are not exportable by GLTFExporter r147: back to floats
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const q = Object.entries(o.geometry.attributes).filter(([, a]) => a.array instanceof Int8Array || a.array instanceof Int16Array); if (!q.length) return;
+      o.geometry = o.geometry.clone();
+      for (const [k, a] of q) { const f = new Float32Array(a.count * a.itemSize), get = [a.getX, a.getY, a.getZ, a.getW]; // getX… undo the normalisation
+        for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = get[c].call(a, i);
+        o.geometry.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
+    });
     // unique, path-safe names everywhere: the glTF loader renames duplicates, which would break drive paths
     const seen = new Set();
     root.traverse(o => {

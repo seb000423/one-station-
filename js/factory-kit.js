@@ -32,6 +32,8 @@
     skylight: mat(0xe8f1f8, { metalness: 0, roughness: 0.2, emissive: 0xe8f1f8, emissiveIntensity: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
     lamp: mat(0xffffff, { metalness: 0, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 2 }),
     wallCore: mat(0xd5d9dd, { metalness: 0.35, roughness: 0.5 }), tape: mat(0xd9c39a, { roughness: 0.6 }),
+    esd: mat(0x5f7d74, { metalness: 0.05, roughness: 0.7 }), binBlue: mat(0x2f6fb5, { metalness: 0, roughness: 0.55 }), sheet: mat(0xb4bac1, { metalness: 0.15, roughness: 0.55 }),
+    screen: mat(0x0f1726, { metalness: 0.1, roughness: 0.25, emissive: 0x1a2a46, emissiveIntensity: 1 }),
     tote: mat(0x8fa39c, { metalness: 0, roughness: 0.55 }), carton: mat(0xc49a63, { metalness: 0, roughness: 0.9 }), wood: mat(0xb88a55, { metalness: 0, roughness: 0.85 })
   };
   K.clad = mat(0xd9dde1, { metalness: 0.35, roughness: 0.42, normalMap: ribNormal() }); K.roof = mat(0xc9ced3, { metalness: 0.3, roughness: 0.5, normalMap: ribNormal(), side: THREE.DoubleSide });
@@ -43,8 +45,12 @@
   for (const m of Object.values(K)) { m.color.convertSRGBToLinear(); if (m.emissive) m.emissive.convertSRGBToLinear(); }
 
   // ---------------------------------------------------------------- geometry helpers (meshes named for the export; uv in metres where tiled)
+  // shared geometries (same size → same BufferGeometry), so repeated rollers, legs, uprights, totes are stored once in the export
+  const GEO = new Map(), keyed = (k, make) => { if (!GEO.has(k)) GEO.set(k, make()); return GEO.get(k); };
+  const boxGeo = (w, h, d) => keyed(`b${w.toFixed(3)},${h.toFixed(3)},${d.toFixed(3)}`, () => new THREE.BoxGeometry(w, h, d));
+  const cylGeo = (r1, r2, h, s) => keyed(`c${r1.toFixed(3)},${r2.toFixed(3)},${h.toFixed(3)},${s}`, () => new THREE.CylinderGeometry(r1, r2, h, s));
   const add = (g, n, geo, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(geo, m); o.name = n; o.position.set(x, y, z); o.castShadow = o.receiveShadow = !m.transparent; g.add(o); return o; };
-  const box = (g, n, w, h, d, m, x, y, z) => add(g, n, new THREE.BoxGeometry(w, h, d), m, x, y, z);
+  const box = (g, n, w, h, d, m, x, y, z) => add(g, n, boxGeo(w, h, d), m, x, y, z);
   const tiled = (geo, su, sv) => { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); return geo; };
   const plane = (g, n, w, h, m, x, y, z, cell, ry = 0, rx = 0) => { const o = add(g, n, tiled(new THREE.PlaneGeometry(w, h), cell ? w / cell : 1, cell ? h / cell : 1), m, x, y, z); o.rotation.set(rx, ry, 0); return o; };
   const PROF = new Map();
@@ -61,13 +67,13 @@
     const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), L = A.distanceTo(B), o = new THREE.Mesh(profGeo(s), m);
     o.name = n; o.scale.z = L; o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), B.clone().sub(A).normalize()); o.castShadow = o.receiveShadow = true; g.add(o); return o;
   }
-  const foot = (g, x, y, z) => { add(g, 'Foot', new THREE.CylinderGeometry(0.04, 0.04, 0.012, 16), K.rubber, x, y + 0.006, z); add(g, 'Foot_Stem', new THREE.CylinderGeometry(0.009, 0.009, 0.05, 8), K.steel, x, y + 0.035, z); };
+  const foot = (g, x, y, z) => { add(g, 'Foot', cylGeo(0.04, 0.04, 0.012, 16), K.rubber, x, y + 0.006, z); add(g, 'Foot_Stem', cylGeo(0.009, 0.009, 0.05, 8), K.steel, x, y + 0.035, z); };
   // a roller / drum: the holder (named for animate + jog drive) spins about local Z; a dark stripe shows the turning
   function roller(parent, name, r, len, x, y, z, yaw, degPerSec) {
     const h = new THREE.Group(); h.name = name; h.position.set(x, y, z); h.rotation.y = yaw; parent.add(h);
-    const c = add(h, name + '_mesh', new THREE.CylinderGeometry(r, r, len, 18), K.steel); c.rotation.x = Math.PI / 2;
+    const c = add(h, name + '_mesh', cylGeo(r, r, len, 18), K.steel); c.rotation.x = Math.PI / 2;
     add(h, name + '_Mark', new THREE.BoxGeometry(0.012, 0.004, len * 0.9), K.black, 0, r, 0);
-    add(h, name + '_Axle', new THREE.CylinderGeometry(0.008, 0.008, len + 0.03, 6), K.aluDark).rotation.x = Math.PI / 2;
+    add(h, name + '_Axle', cylGeo(0.008, 0.008, len + 0.03, 6), K.aluDark).rotation.x = Math.PI / 2;
     jog(h, 'RotationZ', true, degPerSec); return h;
   }
 
@@ -102,7 +108,7 @@
       else { const belt = new THREE.Mesh(new THREE.RingGeometry(P.R - (W - 0.02) / 2, P.R + (W - 0.02) / 2, 48, 1, P.m > 0 ? -Math.PI / 2 : Math.PI / 2 - P.A, P.A), K.belt); belt.name = 'Conveyor_Belt'; belt.rotation.x = -Math.PI / 2; belt.position.set(P.cx, H + r, P.m * P.cz); belt.receiveShadow = true; g.add(belt); }
       for (const s of [r, P.len - r]) { const [x, z] = along(0, s); roller(g, 'Conveyor_Drum', r, W - 0.02, x, H, z, yawAt(s), -degPerSec); }
       const [hx, hz] = along(-(W / 2 + 0.06), P.len - r), dv = new THREE.Group(); dv.name = 'Conveyor_Drive'; dv.position.set(hx, H, hz); dv.rotation.y = yawAt(P.len - r); g.add(dv); // gear motor on the head drum
-      box(dv, 'Drive_Gear', 0.14, 0.14, 0.1, K.black, 0, 0, -0.03); add(dv, 'Drive_Motor', new THREE.CylinderGeometry(0.06, 0.06, 0.2, 20), K.black, 0, -0.02, -0.18).rotation.x = Math.PI / 2;
+      box(dv, 'Drive_Gear', 0.14, 0.14, 0.1, K.black, 0, 0, -0.03); add(dv, 'Drive_Motor', cylGeo(0.06, 0.06, 0.2, 20), K.black, 0, -0.02, -0.18).rotation.x = Math.PI / 2;
     } else {
       const n = Math.max(2, Math.min(240, Math.round(P.len / pitch)));
       for (let i = 0; i < n; i++) { const s = (i + 0.5) * P.len / n, [x, z] = along(0, s); roller(g, 'Conveyor_Roller', r, W - 0.01, x, H, z, yawAt(s), -degPerSec); }
@@ -124,7 +130,7 @@
     for (let i = 0; i <= p.bays; i++) {
       const x = -W / 2 + i * p.bayWidth;
       for (const s of [-1, 1]) {
-        const up = box(g, 'Rack_Upright', u, Hh, 0.07, K.upright, x, Hh / 2, s * (D / 2 - 0.035)); tiled(up.geometry, 1, Hh / 0.1);
+        add(g, 'Rack_Upright', keyed('up' + Hh.toFixed(3), () => tiled(new THREE.BoxGeometry(u, Hh, 0.07), 1, Hh / 0.1)), K.upright, x, Hh / 2, s * (D / 2 - 0.035)); // punched-slot texture tiles every 0.1 m
         box(g, 'Rack_Baseplate', 0.16, 0.008, 0.12, K.aluDark, x, 0.004, s * (D / 2 - 0.035));
       }
       for (let y = 0.3, k = 0; y < Hh - 0.6; y += 0.9, k++) { // frame bracing between the front and back upright
@@ -163,6 +169,28 @@
       }
     },
     footprint: p => [p.length, p.width]
+  };
+
+  // ---------------------------------------------------------------- manual workstation (assembly / leak test / inspection): profile table, ESD top,
+  // light bar, parts bins on a rail, a monitor; kind adds the leak tester box or the packing scale
+  TYPES.bench = {
+    label: '작업대', group: 'equipment',
+    defaults: () => ({ kind: 'assembly', length: 1.6, depth: 0.8, height: 0.9 }),
+    build: (g, p) => {
+      const L = p.length, D = p.depth, H = p.height, X = L / 2 - 0.0225, Z = D / 2 - 0.0225;
+      for (const [x, z] of [[-X, -Z], [X, -Z], [-X, Z], [X, Z]]) { prof(g, 'Bench_Leg', [x, 0.06, z], [x, H - 0.03, z]); foot(g, x, 0, z); }
+      for (const z of [-Z, Z]) prof(g, 'Bench_Rail', [-X, 0.2, z], [X, 0.2, z]);
+      box(g, 'Bench_Top', L, 0.03, D, K.esd, 0, H - 0.015, 0); box(g, 'Bench_Shelf', L - 0.05, 0.02, D - 0.05, K.aluDark, 0, 0.22, 0);
+      for (const x of [-X, X]) prof(g, 'Bench_Upright', [x, H, -Z], [x, H + 1.1, -Z]);
+      prof(g, 'Bench_Top_Rail', [-X, H + 1.1, -Z], [X, H + 1.1, -Z]); box(g, 'Bench_Light', L - 0.1, 0.03, 0.08, K.lamp, 0, H + 1.07, -Z + 0.04);
+      prof(g, 'Bench_Bin_Rail', [-X, H + 0.55, -Z], [X, H + 0.55, -Z], 0.03);
+      const nb = Math.max(2, Math.floor(L / 0.22)); for (let i = 0; i < nb; i++) box(g, 'Bench_Bin', 0.16, 0.1, 0.18, i % 2 ? K.binBlue : K.orange, -L / 2 + (i + 0.5) * L / nb, H + 0.5, -Z + 0.1);
+      box(g, 'Bench_Monitor', 0.4, 0.26, 0.03, K.black, L / 2 - 0.35, H + 0.38, -Z + 0.12); box(g, 'Bench_Screen', 0.36, 0.22, 0.002, K.screen, L / 2 - 0.35, H + 0.38, -Z + 0.136);
+      if (p.kind === 'leak') { box(g, 'Leak_Tester', 0.5, 0.35, 0.4, K.sheet, -L / 4, H + 0.175, 0); box(g, 'Leak_Display', 0.2, 0.08, 0.002, K.screen, -L / 4, H + 0.25, 0.201); add(g, 'Leak_Gauge', cylGeo(0.05, 0.05, 0.03, 20), K.steel, -L / 4 + 0.15, H + 0.25, 0.21).rotation.x = Math.PI / 2; }
+      if (p.kind === 'pack') { box(g, 'Pack_Scale', 0.35, 0.05, 0.35, K.sheet, -L / 4, H + 0.025, 0); box(g, 'Pack_Box', 0.45, 0.25, 0.3, K.carton, L / 6, H + 0.125, 0.1); }
+      if (p.kind === 'assembly') { box(g, 'Asm_Fixture', 0.45, 0.06, 0.25, K.aluDark, 0, H + 0.03, 0.05); box(g, 'Asm_Part', 0.4, 0.09, 0.11, K.steel, 0, H + 0.105, 0.05); }
+    },
+    footprint: p => [p.length, p.depth]
   };
 
   // ---------------------------------------------------------------- safety fence (black mesh panels, posts every panel)
@@ -240,7 +268,7 @@
         const u = (f0 + f1) / 2, l = (f1 - f0) * len, o = plane(g, sky ? 'Roof_Skylight' : 'Roof_Sheet', L, l, sky ? K.skylight : K.roof, 0, top(0) - u * rise + 0.21, s * u * S / 2, sky ? 0 : 0.3, 0, -Math.PI / 2);
         o.rotation.set(-Math.PI / 2 + s * a, 0, 0); if (!sky) tiled(o.geometry, 1, 1);
       }
-      for (let i = 0; i < nb; i++) for (const z of [-S / 4, S / 4]) { const x = -L / 2 + (i + 0.5) * bay; add(g, 'Roof_Lamp', new THREE.CylinderGeometry(0.18, 0.25, 0.12, 24), K.frameDark, x, Y - 0.4, z); add(g, 'Roof_Lamp_LED', new THREE.CylinderGeometry(0.22, 0.22, 0.01, 24), K.lamp, x, Y - 0.465, z); add(g, 'Roof_Lamp_Cable', new THREE.CylinderGeometry(0.006, 0.006, top(z) - Y - 0.3, 4), K.black, x, (top(z) + Y) / 2 - 0.15, z); }
+      for (let i = 0; i < nb; i++) for (const z of [-S / 4, S / 4]) { const x = -L / 2 + (i + 0.5) * bay; add(g, 'Roof_Lamp', cylGeo(0.18, 0.25, 0.12, 24), K.frameDark, x, Y - 0.4, z); add(g, 'Roof_Lamp_LED', cylGeo(0.22, 0.22, 0.01, 24), K.lamp, x, Y - 0.465, z); add(g, 'Roof_Lamp_Cable', cylGeo(0.006, 0.006, top(z) - Y - 0.3, 4), K.black, x, (top(z) + Y) / 2 - 0.15, z); }
     },
     footprint: p => [p.length, p.span]
   };

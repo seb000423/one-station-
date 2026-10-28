@@ -30,6 +30,7 @@ const srv = http.createServer((req, rsp) => {
   fs.mkdirSync(OUT, { recursive: true });
   const KITS = [['conveyor_roller', 'conveyor', { kind: 'roller', length: 3 }], ['conveyor_belt', 'conveyor', { kind: 'belt', length: 3 }], ['fence', 'fence', { length: 3 }],
     ['rack', 'rack', {}], ['tote_tote', 'tote', { stack: 2 }], ['tote_carton', 'tote', { kind: 'carton', length: 0.6, width: 0.4, height: 0.3, stack: 2 }],
+    ['bench_assembly', 'bench', { kind: 'assembly' }], ['bench_leak', 'bench', { kind: 'leak' }], ['bench_pack', 'bench', { kind: 'pack' }],
     ['wall', 'wall', { length: 6, h: 9 }], ['column', 'column', { h: 8 }], ['door', 'door', {}], ['roof', 'roof', { length: 12, span: 12, h: 6 }]];
   for (const [name, type, params] of KITS) {
     const r = await page.evaluate(async ([type, params]) => {

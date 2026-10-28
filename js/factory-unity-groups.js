@@ -292,7 +292,8 @@
      forklift's inner mast and the load rise while it loads (params.liftLow) and up to params.lift when it unloads
      at a zone whose name contains params.liftAt. A worker can push a prop (params.prop, e.g. 'uw_trolley').
      A tracked zone shows its stock as pallets (params.load: a carton key, or 'tray' for 8 product trays). */
-  const TY = FE.TYPES, LOAD = { uw_forklift: [1.55, 0.18], uw_palletrobot: [0, 0.14] }; // load x, y in the AMR frame
+  const TY = FE.TYPES, LOAD = { uw_forklift: [1.55, 0.18], uw_palletrobot: [0, 0.14], e3_amr_deck_bot: [0, 0.62], e3_omron_agv: [0, 1.15] }; // load x, y in the AMR frame
+  const OWN = { e3_amr_deck_bot: true, e3_omron_agv: true }; // EGR line v3 AMRs: modelled front +X, carry their load without a pallet
   const front = (m, name) => { const turn = new THREE.Group(); turn.add(m); m.rotation.y = Math.PI / 2; return A.placed(turn, name); };
   function loadOn(parent, kind, y0 = 0.13) { // a pallet's load
     if (kind === 'tray') { stackSlots('product', 8).forEach(([x, y, z], k) => { const m = A.get(idOf('product')); if (!m) { A.load(idOf('product')).catch(() => {}); return; } const h = A.placed(m, 'Load_Tray_' + (k + 1)); h.position.set(x, y0 - 0.13 + y, z); parent.add(h); }); return; }
@@ -302,10 +303,10 @@
   TY.amr.build = (g, p) => {
     const m = LOAD[p.model] && A.get(p.model);
     if (!m) { if (LOAD[p.model]) A.load(p.model).catch(() => {}); return amrBuild(g, Object.assign({}, p, { model: LOAD[p.model] ? 'simple' : p.model })); }
-    g.add(front(m, 'AMR_Model'));
+    g.add(OWN[p.model] ? A.placed(m, 'AMR_Model') : front(m, 'AMR_Model'));
     const load = new THREE.Group(); load.name = 'AMR_Load'; const [lx, ly] = LOAD[p.model]; load.position.set(lx, ly, 0); load.userData.y = ly; g.add(load);
-    const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {});
-    loadOn(load, p.load);
+    if (OWN[p.model]) { if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
+    else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); loadOn(load, p.load); }
     const mast = g.getObjectByName('Rig_mast_2'); if (mast) mast.userData.y = mast.position.y;
   };
   // where the mover is in its current dwell: the plan's state label and the 0..1 fraction of the dwell

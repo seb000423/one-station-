@@ -603,9 +603,53 @@ function floorTile(aisle) { // 6 × 6 m polished concrete tile; the aisle varian
   return finalize(root);
 }
 
+// ---------------------------------------------------------------- 8. machine cycles baked as animation clips (played from the sim clock in console 1,
+// sampled into drives for console 2 by js/factory-unity.js). keys: [node, 'x'|'y'|'z' translate offset or 'rx'|'ry'|'rz' rotation (rad),
+// [[t, value], …]] relative to the node's rest pose; linear in between; the clip loops.
+function cycleClip(root, name, T, keys, fps = 10) {
+  const tracks = [];
+  for (const [nodeName, ch, pts] of keys) {
+    const node = root.getObjectByName(nodeName); if (!node) throw new Error('no node ' + nodeName);
+    const at = t => { let k = 0; while (k < pts.length - 2 && pts[k + 1][0] <= t) k++; const [t0, v0] = pts[k], [t1, v1] = pts[Math.min(k + 1, pts.length - 1)]; const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1; const e = u * u * (3 - 2 * u); return v0 + (v1 - v0) * e; };
+    const n = Math.round(T * fps) + 1, times = Float32Array.from({ length: n }, (_, i) => i / fps);
+    if (/^[xyz]$/.test(ch)) { const v = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const q = node.position.clone(); q[ch] += at(times[i]); q.toArray(v, i * 3); } tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.position', times, v)); }
+    else { const ax = ch[1], v = new Float32Array(n * 4), e = new THREE.Euler(); for (let i = 0; i < n; i++) { e.copy(node.rotation); e[ax] += at(times[i]); new THREE.Quaternion().setFromEuler(e).toArray(v, i * 4); } tracks.push(new THREE.QuaternionKeyframeTrack(nodeName + '.quaternion', times, v)); }
+  }
+  (root.userData.clips || (root.userData.clips = [])).push(new THREE.AnimationClip(name, T, tracks));
+  return root;
+}
+const DISPENSE_T = 24, CRANE_T = 32;
+function dispenseCellAnimated() { // doors open → (part loaded) → doors close → tilt → needle down → table turns once while dispensing → needle up → tilt back → open
+  const r = dispenseCell();
+  return cycleClip(r, 'Dispense_Cycle', DISPENSE_T, [
+    ['Door_L', 'x', [[0, 0.9], [1.5, 0.9], [3, 0], [21, 0], [22.5, 0.9], [24, 0.9]]], ['Door_R', 'x', [[0, -0.9], [1.5, -0.9], [3, 0], [21, 0], [22.5, -0.9], [24, -0.9]]],
+    ['Positioner_Tilt', 'rx', [[0, 0], [3.5, 0], [4.5, -0.45], [19, -0.45], [20, 0], [24, 0]]], ['Positioner_Table', 'ry', [[0, 0], [6.5, 0], [17.5, Math.PI * 2], [24, Math.PI * 2]]],
+    ['Needle_Head', 'y', [[0, 0.08], [4.5, 0.08], [6, -0.06], [17.5, -0.06], [18.5, 0.08], [24, 0.08]]]]);
+}
+function asrsCraneAnimated() { // store a tote at x +4 m / level 4.6 m, retrieve one from x −4 m / 2.2 m and hand it to the I/O station at x 0 (forks to −Z)
+  const r = asrsCrane();
+  return cycleClip(r, 'Crane_Cycle', CRANE_T, [
+    ['ASRS_Crane', 'x', [[0, 0], [1.5, 0], [6, 4], [10, 4], [14.5, 0], [17, 0], [22, -4], [26, -4], [30.5, 0], [32, 0]]],
+    ['Crane_Carriage', 'y', [[0, 0], [1.5, 0], [6, 3.6], [8, 3.6], [8.5, 3.45], [10, 3.45], [14.5, 0], [17, 0], [22, 1.2], [23.3, 1.2], [23.8, 1.35], [26, 1.35], [30.5, 0], [32, 0]]],
+    ['Crane_Fork', 'z', [[0, 0], [6, 0], [7, 0.45], [9, 0.45], [10, 0], [22, 0], [22.6, 0.45], [24.5, 0.45], [25.2, 0], [30.6, 0], [31, -0.45], [31.6, -0.45], [32, 0]]],
+    ['Crane_Fork2', 'z', [[0, 0], [6, 0], [7, 0.4], [9, 0.4], [10, 0], [22, 0], [22.6, 0.4], [24.5, 0.4], [25.2, 0], [30.6, 0], [31, -0.4], [31.6, -0.4], [32, 0]]]]);
+}
+function stopperAnimated() { const r = conveyorStopper(); return cycleClip(r, 'Stopper_Cycle', 8, [['Stopper_Blade', 'y', [[0, 0], [5, 0], [5.4, -0.05], [6.6, -0.05], [7, 0], [8, 0]]]]); }
+function amrDeckBot() { // low AMR (Omron LD class, 0.96 × 0.72 m) in the VEXPLOR orange-red with a roller-deck top; front +X; deck top 0.62 m
+  const m = materials(), root = G('AMR_Deck_Bot'), L = 0.963, W = 0.718, Hb = 0.38;
+  box(root, m.orange, L - 0.04, Hb - 0.1, W - 0.04, 0, 0.05 + (Hb - 0.1) / 2, 0);
+  box(root, m.black, L, 0.06, W, 0, 0.07, 0); box(root, m.black, L - 0.02, 0.04, W - 0.02, 0, Hb - 0.02, 0);
+  for (const sx of [-1, 1]) { box(root, m.black, 0.03, 0.12, W - 0.1, sx * (L / 2 - 0.0), 0.16, 0); box(root, m.yellow, 0.004, 0.02, W - 0.16, sx * (L / 2 + 0.016), 0.24, 0); }
+  cyl(root, m.black, 0.04, 0.05, L / 2 - 0.08, Hb + 0.025, 0, 'y', 16); // lidar
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(root, m.rubber, 0.05, 0.04, sx * 0.3, 0.05, sz * (W / 2 - 0.08), 'z', 16);
+  plane(root, m.lampG, 0.06, 0.02, L / 2 + 0.001, 0.3, 0.2, [0, Math.PI / 2, 0]); plane(root, m.lampG, 0.06, 0.02, L / 2 + 0.001, 0.3, -0.2, [0, Math.PI / 2, 0]);
+  const deck = amrRollerDeck(); deck.position.y = Hb; deck.rotation.y = Math.PI / 2 * 0; root.add(deck);
+  return finalize(root);
+}
+
 export const MODELS = {
-  asrs_crane: asrsCrane, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCell, vision_gantry: visionGantry,
-  ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: conveyorStopper,
+  asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot,
+  ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
   roller_conveyor_1m: () => rollerConveyor(1), roller_conveyor_2m: () => rollerConveyor(2), roller_curve_90: rollerCurve, belt_conveyor_2m: () => beltConveyor(2),
   rack_bay: () => rackBay('01'), ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map(n => ['bay_sign_' + n, () => baySign(n)])),

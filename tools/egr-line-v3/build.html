@@ -25,7 +25,7 @@ window.buildOne = async (name) => {
     if (o.isMesh) { meshes++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; }
     else if (o.userData.anim) nodes.push(o.name + ' ' + o.userData.anim.type + ' ' + o.userData.anim.axis);
   });
-  const glb = await new GLTFExporter().parseAsync(model, { binary: true });
+  const glb = await new GLTFExporter().parseAsync(model, { binary: true, animations: model.userData.clips || [] }); delete model.userData.clips;
 
   // preview: dark navy backdrop, warm sun-like key light from the upper left, shadow catcher on the floor
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1322); scene.environment = env; scene.environmentIntensity = 0.55;

@@ -28,13 +28,13 @@
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
   const MACHINES = ['ufmodel']; // js/factory-unity.js: equipment comes only from the Asset Store models (모델 tab)
   // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
   // chargers, process machines) is dropped when a saved layout is opened
   // conveyor, rack, tote, fence and roof are back as real-scale parametric parts (js/factory-kit.js)
-  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof'];
-  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
+  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench'];
+  const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'bench', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
   // numbering continues after the highest existing name of that type, so a deleted number is not reused
@@ -56,6 +56,7 @@
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
     fence: [['length', '길이 (m)', 0.5, 0.5, 100], ['height', '높이 (m)', 0.1, 0.5, 4], ['panel', '패널 폭 (m)', 0.1, 0.5, 3]],
     roof: [['length', '길이 (m, X)', 1, 6, 300], ['span', '폭 (m, Z)', 1, 6, 60], ['h', '처마 높이 (m, 0 = 천장)', 0.5, 0, 30], ['bay', '트러스 간격 (m)', 0.5, 3, 12], ['rise', '지붕 경사 높이 (m)', 0.1, 0, 4], ['sheet', '지붕판 보이기', 'check']],
+    bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2]],
     tote: [['kind', '종류', 'select', [['tote', '플라스틱 상자'], ['carton', '골판지 상자']]], ['length', '길이 (m)', 0.05, 0.1, 2], ['width', '폭 (m)', 0.05, 0.1, 2], ['height', '높이 (m)', 0.02, 0.05, 1.5], ['stack', '쌓은 수', 1, 1, 12]],
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
@@ -69,7 +70,7 @@
       ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
     robot: [['model', '모델', 'select', [['fanuc', 'FANUC CRX-10iA/L (3D 모델)'], ['simple', '단순 형상']]], ['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100], ['load', '적재물', 'select', [['tote', '플라스틱 상자'], ['carton', '팔레트 · 박스'], ['none', '없음']]]],
-    amr: [['model', '모델', 'select', [['agv', 'AGV (3D 모델)'], ['uw_forklift', '지게차'], ['uw_palletrobot', '팔레트 운반 로봇'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
+    amr: [['model', '모델', 'select', [['e3_amr_deck_bot', 'AMR (롤러 상판)'], ['e3_omron_agv', 'AGV (Omron, 트롤리)'], ['agv', 'AGV 리프트'], ['uw_forklift', '지게차'], ['uw_palletrobot', '팔레트 운반 로봇'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
     charger: [['width', '폭 (m)', 0.05, 0.4, 2]],
     conveyor2: [['length', '길이 (m)', 0.5, 2, 40], ['width', '폭 (m)', 0.05, 0.4, 1.5], ['h1', '아래층 높이 (m)', 0.05, 0.3, 1.5], ['h2', '위층 높이 (m)', 0.05, 0.8, 3], ['speed', '속도 (m/s)', 0.05, 0.05, 2], ['lift', '리프터 이동 시간 (s)', 0.5, 1, 30], ['pallets', '팔레트 수', 1, 1, 20]],
     press: [['tonnage', '능력 (t)', 10, 10, 3000], ['spm', '분당 타수 (spm)', 1, 1, 120], ['stroke', '스트로크 (m)', 0.05, 0.05, 1], ['width', '폭 (m)', 0.1, 1, 6], ['depth', '깊이 (m)', 0.1, 1, 5], ['height', '높이 (m)', 0.1, 2.5, 8]],
@@ -396,7 +397,7 @@
   const candidate = (place, p) => {
     const { type, model } = splitPlace(place);
     const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
-    if (model && type === 'conveyor') c.params.kind = model; else if (model && type === 'tote') c.params.kind = model; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
+    if (model && ['conveyor', 'tote', 'bench'].includes(type)) c.params.kind = model; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
     if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
     return c;
   };
@@ -570,6 +571,7 @@
     robot: '<path d="M5 21h8M9 21v-5l4-6 5 2M13 10l-2-4"/><circle cx="18" cy="12" r="1.5"/>',
     rack: '<path d="M4 3v18M20 3v18M4 8h16M4 14h16M4 20h16"/>',
     tote: '<path d="M4 8h16l-1.5 11h-13z"/><path d="M8 8V6h8v2"/>',
+    bench: '<path d="M3 10h18M5 10v10M19 10v10M5 4v6M19 4v6M5 4h14"/>',
     fence: '<path d="M4 4v17M12 4v17M20 4v17M4 7h16M4 18h16M4 11l8 7M12 11l8 7"/>',
     roof: '<path d="M2 12 12 5l10 7M5 10v9M19 10v9M5 15h14"/>',
     amr: '<rect x="3" y="8" width="18" height="9" rx="2"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/><path d="M8 8V5h8v3"/>',
@@ -596,6 +598,7 @@
     const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group)); // sections by category (EGR 라인, 로봇, 물류, 건물, …), real-size models
     // parametric parts (js/factory-kit.js) lead their section: size, length, bays / levels are set in the property panel
     const KIT = { 'EGR 라인': [['conveyor:roller', '롤러 컨베이어 (길이 · 폭 · 높이 조절)'], ['conveyor:belt', '벨트 컨베이어 (길이 · 폭 · 높이 조절)'], ['fence', '안전 펜스 (길이 조절)']],
+      '공장 설비': [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']],
       '물류': [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']],
       '건물': [['wall', '벽 (창문 · 길이 조절)'], ['column', 'H형강 기둥'], ['door', '셔터 출입문'], ['roof', '지붕 트러스 (크기 조절)']] };
     const kitTile = ([place, label], g) => `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 크기는 놓은 뒤 오른쪽 설정에서 바꿉니다"><img src="assets/models/thumbs/kit_${place.replace(':', '_')}.webp" alt="" loading="lazy" draggable="false"><span>${esc(label)}</span></button>`;
@@ -925,7 +928,7 @@
     const t = $('#fbTree'); if (!t) return;
     // models (ufmodel) are listed under their catalog category; the other types under their kind
     const U = window.FactoryUnity, cat = o => (o.type === 'ufmodel' && U ? U.catOf((o.params || {}).model) : null);
-    const KIND = { conveyor: 'EGR 라인', rack: '물류', tote: '물류' };
+    const KIND = { conveyor: 'EGR 라인', rack: '물류', tote: '물류', bench: '공장 설비' };
     const groups = [['건물', o => ['column', 'wall', 'door', 'stairs', 'fence', 'roof'].includes(o.type) || cat(o) === '건물'], ['동선 · 구역', o => ['walkway', 'zone'].includes(o.type)]]
       .concat((U ? U.CATS : []).filter(c => c !== '건물').map(c => [c, o => cat(o) === c || KIND[o.type] === c]))
       .concat([['설비', o => EQUIPMENT.includes(o.type) && !cat(o) && !KIND[o.type]], ['이동체', o => MOVERS.includes(o.type)]]);
