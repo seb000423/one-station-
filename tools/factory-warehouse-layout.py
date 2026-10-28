@@ -5,7 +5,7 @@ pedestrian door per building, facing each other.
 
 Material flow, so that every mover has a job:
   parts pallets   warehouse 자재 출고 --(pallet robots)--> factory 자재 투입 A / B (consumed by the lines)
-  the lines       투입 → belt → 가공 → belt → 로봇 조립 (pick & place in time with the belt) → belt → 포장
+  the lines       투입 → belt (egr-line-v3 2 m belts) → 가공 → belt → 로봇 조립 (pick & place in time with the belt) → belt → 포장
                   (trays stack on a pallet, 적재 n / 8) → a full pallet appears in 출하 대기
   finished goods  출하 대기 A / B --(forklift, forks up at the rack)--> warehouse 랙 보관
   people          line operators tend 가공 ↔ 로봇 셀, packers stand at the pallet, a picker walks the rack
@@ -59,12 +59,12 @@ XIN, XPACK, XW, XE, XOUT, XRACK = -36.0, -20.0, -38.5, 44.0, 14.0, 30.0  # dock 
 for L, z0, s, zzone in (('A', 2.0, 1, W - 2.65), ('B', -7.0, -1, N + 3.0)):
     zw = z0 - s * 2.5  # the operators' side
     group(f'{L}라인 1 자재 투입', [('line01', XIN, 0, z0, 90), ('uf_wagon', XIN, 0, z0 - s * 1.45, 90), ('product', XIN, 1.26, z0, 0)])
-    model(f'{L}라인 컨베이어 1', 'line05', -34.0, z0, PI2, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'})
+    model(f'{L}라인 컨베이어 1', 'e3_belt_conveyor_2m', -34.0, z0, 0, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'})
     group(f'{L}라인 2 가공', [('line06', -31.7, 0, z0, 90), ('ctrl2', -31.7, 0, z0 + s * 1.35, 90), ('product', -31.7, 0.86, z0, 0)])
-    model(f'{L}라인 컨베이어 2', 'line04', -28.3, z0, PI2, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'})
+    for k, dx in enumerate((-1.02, 1.02)): model(f'{L}라인 컨베이어 2-{k + 1}', 'e3_belt_conveyor_2m', -28.3 + dx, z0, 0, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'})
     model(f'{L}라인 3 로봇 조립', 'cell07', -23.8, z0, 0, cycle=7.5)  # one pick & place per tray leaving belt 2 (4.65 m / 0.15 m/s / 4 trays)
     # belt 3 ends at the packing table; trays stack 8 to a pallet beside it (dx/dz in the belt's frame: local +z = world +x)
-    model(f'{L}라인 컨베이어 3', 'line05', -20.6, z0, PI2, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'}, pack={'n': 8, 'dx': r3(-s * 1.6), 'dz': 0.6, 'item': 'product'})
+    model(f'{L}라인 컨베이어 3', 'e3_belt_conveyor_2m', -20.6, z0, 0, flow={'speed': 0.15, 'pitch': 1.0, 'item': 'product'}, pack={'n': 8, 'dx': 0.6, 'dz': r3(s * 1.6), 'item': 'product'})  # dx/dz in the belt's frame (rot 0: = world x / z)
     group(f'{L}라인 4 검사 · 포장', [('line02', -18.8, 0, z0, 90), ('line08', -18.8, 0, z0 + s * 1.25, 90), ('ctrl3', -17.9, 0, z0 + s * 1.3, 0), ('product', -18.8, 0.89, z0, 0)])
     zone(f'자재 투입 {L}', 'dropoff', XIN, zzone, 2.2, 2.0, track=True, stock=1, cap=3, consume=120, load='uw_cardboard_a1')
     zone(f'출하 대기 {L}', 'pickup', XPACK, zzone, 2.2, 2.0, track=True, stock=0, cap=3, supply=60, load='tray')  # a pallet every 8 trays x 7.5 s

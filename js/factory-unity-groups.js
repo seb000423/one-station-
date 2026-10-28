@@ -17,7 +17,7 @@
   // lighter geometry for the models a demo repeats hundreds of times (assets/models/*/lod/, meshoptimizer-simplified
   // to ~25 % of the triangles, no textures): a group draws the LOD shape with the full model's materials
   const A = window.FactoryAssets, LOD = '@lod';
-  const LODS = ['unity-factory/Line_01', 'unity-factory/Line_02', 'unity-factory/Line_03', 'unity-factory/Line_04', 'unity-factory/Line_05', 'unity-factory/Line_06',
+  const LODS = ['unity-factory/Line_01', 'unity-factory/Line_02', 'unity-factory/Line_03', 'unity-factory/Line_06',
     'unity-factory/Line_07', 'unity-factory/Line_07A', 'unity-factory/Line_07B', 'unity-factory/Line_07C', 'unity-factory/Line_08', 'unity-factory/Line_09',
     'unity-factory/Product', 'unity-factory/Worker', 'unity-factory/Controller_1', 'unity-warehouse/PlasticBox_A', 'unity-warehouse/Worker'];
   for (const [id, m] of Object.entries(A.MODELS)) {
@@ -102,7 +102,8 @@
 
   // a belt model with params.flow = { speed m/s, pitch m, item: catalog key }: items ride its local Z axis on
   // the belt top, entering at -Z and leaving at +Z (dir -1 reverses), evenly spaced, forever
-  const flowLen = p => FU.CATALOG[p.model].size[2] * Math.max(0.1, p.scale || 1);
+  const flowAx = p => FU.CATALOG[p.model].flowAxis || 'z'; // Unity belts run along local Z, the EGR line v3 conveyors along X
+  const flowLen = p => FU.CATALOG[p.model].size[flowAx(p) === 'x' ? 0 : 2] * Math.max(0.1, p.scale || 1);
   const flowTop = p => FU.CATALOG[p.model].size[1] * Math.max(0.1, p.scale || 1);
   const flowCount = p => Math.max(1, Math.floor(flowLen(p) / Math.max(0.3, p.flow.pitch || 1.2)));
   const flowZ = (p, k, t) => { const L = flowLen(p), n = flowCount(p), u = ((t * (p.flow.speed || 0.3) / L + k / n) % 1 + 1) % 1; return (u - 0.5) * L * (p.flow.dir === -1 ? -1 : 1); };
@@ -115,11 +116,11 @@
     }
     animateFlow(g, p, 0);
   }
-  function animateFlow(g, p, t) { const lane = g.getObjectByName('UF_Flow'); if (lane) lane.children.forEach((h, k) => { h.position.z = flowZ(p, k, t); }); }
+  function animateFlow(g, p, t) { const lane = g.getObjectByName('UF_Flow'); if (lane) lane.children.forEach((h, k) => { h.position[flowAx(p)] = flowZ(p, k, t); }); }
   // console 2: each item's Z travel (mm) from its start, a LinearZ drive per item
   const flowDrives = (g, p, frames, spf) => { const lane = g.getObjectByName('UF_Flow'); return lane ? lane.children.map((h, k) => {
     const z0 = flowZ(p, k, 0), series = new Array(frames); for (let f = 0; f < frames; f++) series[f] = Math.round((flowZ(p, k, f * spf) - z0) * 10000) / 10;
-    return { node: h, dir: 'LinearZ', rev: false, series };
+    return flowAx(p) === 'x' ? { node: h, dir: 'LinearX', rev: true, series } : { node: h, dir: 'LinearZ', rev: false, series };
   }) : []; };
 
   /* ---------- robot arm: pick and place in time with the belt ---------- */
@@ -281,7 +282,7 @@
     if (p.flow) { animateFlow(g, p, t); if (p.pack) animatePack(g, p, t); }
     FU.clipTime(g, t);
   };
-  T.drives = (g, p, frames, spf) => (p.items ? armDrives(g, p, frames, spf) : armDrives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : [], p.flow && p.pack ? packDrives(g, p, frames, spf) : []));
+  T.drives = (g, p, frames, spf) => (p.items ? armDrives(g, p, frames, spf) : armDrives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : [], p.flow && p.pack ? packDrives(g, p, frames, spf) : [], FU.clipDrives(g, frames, spf)));
   T.footprint = p => (p.items && p.items.length ? extent(p) : footprint(p));
   const cycle = T.cycle; T.cycle = p => (p.items ? 0 : p.flow ? Math.max(cycle(p), flowLen(p) / (p.flow.speed || 0.3), p.pack ? packT(p) * Math.max(1, p.pack.n || 8) : 0) : cycle(p));
 

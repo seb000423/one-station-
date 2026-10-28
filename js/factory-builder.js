@@ -78,7 +78,7 @@
     palletloop: [['ends', '양 끝', 'select', [['square', '사각 (리프트 트랜스퍼)'], ['round', '타원 (곡선)']]], ['product', '제품', 'select', [['pedal', '브레이크 페달'], ['lego', '레고 + PCB'], ['box', '상자']]], ['length', '직선 길이 (m)', 0.5, 2, 60], ['width', '라인 간격 (m)', 0.1, 1, 6], ['pallets', '팔레트 수', 1, 1, 80], ['pitch', '정지 간격 (m)', 0.1, 0.4, 5], ['speed', '이동 속도 (m/s)', 0.05, 0.05, 2], ['dwell', '정지 시간 (s)', 0.5, 0, 300], ['height', '높이 (m)', 0.05, 0.5, 1.4]],
     asmstation: [['kind', '스테이션 종류', 'select', [['manual', '수동 투입 (작업자)'], ['press', '압입'], ['screw', '체결'], ['robot', '로봇 조립'], ['test', '기능 검사'], ['camera', '비전 검사']]], ['title', '표시 이름', 'text'], ['cycle', '사이클 (s, 팔레트 순환과 같게)', 0.5, 1, 600], ['dwell', '작업 시간 (s)', 0.5, 0, 600], ['reach', '컨베이어까지 (m)', 0.05, 0, 2], ['width', '폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.6, 4]],
     flowrack: [['levels', '단 수', 1, 1, 8], ['bins', '열 수', 1, 1, 12], ['width', '폭 (m)', 0.1, 0.6, 5], ['depth', '깊이 (m)', 0.1, 0.4, 3], ['height', '높이 (m)', 0.1, 1, 3]],
-    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : []), null, p => !p.items], ['scale', '배율', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
+    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : []), null, p => !p.items], ['scale', '배율 (1 = 실제 크기)', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
@@ -570,8 +570,9 @@
   function modelTiles() {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
     const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    return '<input class="find" type="search" placeholder="모델 검색">' + U.GROUPS.map(g => `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${Object.entries(U.CATALOG).filter(([, c]) => c.group === g).map(([k, c]) =>
-      `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} m: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`).join('')}</div></div>`).join('');
+    const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group)); // sections by category (EGR 라인, 로봇, 물류, 건물, …), real-size models
+    return '<input class="find" type="search" placeholder="모델 검색">' + U.CATS.map(g => [g, shown.filter(([, c]) => (c.cat || '공정 설비') === g)]).filter(([, l]) => l.length).map(([g, list]) => `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${list.map(([k, c]) =>
+      `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`).join('')}</div></div>`).join('');
   }
   const TABS = [['models', '모델', null], ['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
   const css = `
@@ -894,9 +895,13 @@
 
   function renderTree() {
     const t = $('#fbTree'); if (!t) return;
-    const groups = [['건물', ['column', 'wall', 'door', 'stairs']], ['동선 · 구역', ['walkway', 'zone']], ['설비', EQUIPMENT], ['이동체', MOVERS]];
-    t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><span>공장 · </span>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, types]) => {
-      const list = doc.objects.filter(o => types.includes(o.type));
+    // models (ufmodel) are listed under their catalog category; the other types under their kind
+    const U = window.FactoryUnity, cat = o => (o.type === 'ufmodel' && U ? U.catOf((o.params || {}).model) : null);
+    const groups = [['건물', o => ['column', 'wall', 'door', 'stairs'].includes(o.type) || cat(o) === '건물'], ['동선 · 구역', o => ['walkway', 'zone'].includes(o.type)]]
+      .concat((U ? U.CATS : []).filter(c => c !== '건물').map(c => [c, o => cat(o) === c]))
+      .concat([['설비', o => EQUIPMENT.includes(o.type) && !cat(o)], ['이동체', o => MOVERS.includes(o.type)]]);
+    t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><span>공장 · </span>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, has]) => {
+      const list = doc.objects.filter(has);
       return list.length ? `<div class="grp">${g}</div>` + list.map(o => `<button type="button" data-id="${o.id}" class="${o.id === selectedId ? 'on' : ''}" title="${TYPE_LABEL[o.type]} · 더블클릭: 이 객체 보기">${icon(o.type)}<span>${esc(o.name)}</span>${o.id === activeId ? '<em>시뮬레이션</em>' : ''}</button>`).join('') : '';
     }).join('');
     t.querySelectorAll('[data-id]').forEach(b => { b.addEventListener('click', () => select(b.dataset.id || null)); b.addEventListener('dblclick', () => { if (b.dataset.id) focusObject(b.dataset.id); }); });
@@ -934,12 +939,15 @@
       return;
     }
     const deg = Math.round(THREE.MathUtils.radToDeg(o.rot || 0));
-    let html = `<div class="kind">${icon(o.type)}${TYPE_LABEL[o.type]}</div>
+    const U = window.FactoryUnity, mc = o.type === 'ufmodel' && U && U.CATALOG[(U.ALIAS || {})[(o.params || {}).model] || (o.params || {}).model];
+    let html = `<div class="kind">${icon(o.type)}${mc ? esc(mc.cat || '공정 설비') + ' · ' + esc(mc.label) : TYPE_LABEL[o.type]}</div>${mc ? `<p class="hint" style="margin:2px 0 6px">실제 크기 ${mc.size[0]} × ${mc.size[2]} m · 높이 ${mc.size[1]} m${mc.clip ? ' · 재생하면 동작합니다 (시뮬레이션 시계)' : ''}</p>` : ''}
       <label>이름<input type="text" data-n value="${esc(o.name)}" maxlength="40"></label>
       <div class="row">${field('x', 'X (m)', r2(o.x), 0.1, -999, 999)}${field('z', 'Z (m)', r2(o.z), 0.1, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
     if (!isCell) {
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
-      html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, mn, mx)).join('')}</div>`;
+      // a model's 모델 choice lists the same category only (a column swaps for another building part, not a robot)
+      const sameCat = (k, mn) => (o.type === 'ufmodel' && k === 'model' && mc ? mn.filter(([key]) => (U.CATALOG[key] || {}).cat === mc.cat) : mn);
+      html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, sameCat(k, mn), mx)).join('')}</div>`;
       if (o.type === 'conveyor') html += conveyorInfo(o);
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
       if (o.type === 'amr') {

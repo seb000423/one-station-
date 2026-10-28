@@ -19,7 +19,7 @@
   const UF = 'assets/models/unity-factory/';
   for (const [id, file, label] of [
     ['uf_line01', 'Line_01', '캐비닛 벨트 유닛'], ['uf_line02', 'Line_02', '소형 벨트 유닛'], ['uf_line03', 'Line_03', '곡선 벨트 유닛'],
-    ['uf_line04', 'Line_04', '벨트 컨베이어 4.6 m'], ['uf_line05', 'Line_05', '벨트 컨베이어 2.3 m'], ['uf_line06', 'Line_06', '프레임 가공 셀'],
+    ['uf_line06', 'Line_06', '프레임 가공 셀'],
     ['uf_line07', 'Line_07', '로봇 셀 본체'], ['uf_line07a', 'Line_07A', '로봇 셀 프레임 A'], ['uf_line07b', 'Line_07B', '로봇 셀 프레임 B'], ['uf_line07c', 'Line_07C', '로봇 셀 프레임 C'],
     ['uf_line08', 'Line_08', '설비 캐비닛 (문)'], ['uf_line09', 'Line_09', '설비 캐비닛 (소형)'],
     ['uf_arm', 'Arm', '6축 로봇팔'], ['uf_product', 'Product', '가공품 트레이'],
@@ -66,11 +66,12 @@
     ['egr_st04', 'station-04', '리크 테스트 작업대 2'], ['egr_st05', 'station-05', '검사 · 포장 작업대'], ['egr_rack', 'rack-sliding', '슬라이딩 부품 랙'], ['egr_pallet', 'pallet', '팔레트']
   ]) MODELS[id] = { url: EGR + file + '.glb', label };
   // EGR line v3 (Ni paste dispensing → belt → stacking → AMR): procedural equipment from tools/egr-line-v3/ and the
-  // FAIRINO FR5 cobot converted from the maker's STEP (joints Joint_1…Joint_6). Metres, uncompressed.
+  // FAIRINO FR5 cobot converted from the maker's STEP (joints Joint_1…Joint_6), and the Omron AGV with trolley (Sketchfab,
+  // CC-BY 4.0 'Cels', see assets/models/egr-line-v3/CREDITS.md; meshopt compressed). Metres.
   const E3 = 'assets/models/egr-line-v3/';
-  for (const file of ['asrs_crane', 'asrs_rail_4m', 'rack_bay_10m', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'conveyor_stopper',
+  for (const file of ['asrs_crane', 'asrs_rail_4m', 'rack_bay', 'omron_agv', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'conveyor_stopper',
     'roller_conveyor_1m', 'roller_conveyor_2m', 'roller_curve_90', 'belt_conveyor_2m', 'fence_panel_1m', 'fence_panel_2m', 'tote_600x400', 'egr_cooler', 'fr5',
-    'fr5_stacking_cell', 'hall_wall_6m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
+    'fr5_stacking_cell', 'hall_wall_6m', 'hall_door_6m', 'hall_gable_24m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
   ]) MODELS['e3_' + file] = { url: E3 + file + '.glb', label: file };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>

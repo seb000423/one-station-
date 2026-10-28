@@ -30,7 +30,7 @@ function hazardTexture() { // yellow / black diagonal stripes
 }
 function concreteTexture() { // light grey polished concrete, soft trowel blotches
   const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
-  g.fillStyle = '#c4c8cc'; g.fillRect(0, 0, 512, 512);
+  g.fillStyle = '#c6cacd'; g.fillRect(0, 0, 512, 512);
   let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 260; i++) { const x = rnd() * 512, y = rnd() * 512, r = 20 + rnd() * 90, v = 186 + rnd() * 26 | 0;
     const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${v},${v + 3},${v + 6},0.12)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
@@ -157,18 +157,18 @@ function asrsCrane() {
   box(base, m.aluDark, 0.004, 1.6, 0.005, -1.05, 1.66, 0.2125); box(base, m.black, 0.03, 0.18, 0.03, -0.86, 1.7, 0.225);
   plane(base, m.yellow, 0.1, 0.1, -1.2, 2.2, 0.2115); cyl(base, m.lampG, 0.03, 0.06, -1.2, 2.54, 0, 'y', 14); cyl(base, m.black, 0.035, 0.04, -1.2, 2.49, 0, 'y', 14);
 
-  const H0 = 0.8, H1 = 9.75;                                     // mast
+  const H0 = 0.8, H1 = 7.25;                                     // mast (7.5 m crane: fits under an 8 m eave)
   box(base, m.orange, 0.5, H1 - H0, 0.36, 0, (H0 + H1) / 2, 0);
   for (const sz of [-1, 1]) box(base, m.steel, 0.03, H1 - H0, 0.05, 0.265, (H0 + H1) / 2, sz * 0.13); // carriage guide rails
   box(base, m.black, 0.08, H1 - H0, 0.04, 0.12, (H0 + H1) / 2, -0.2);                                  // cable duct
-  for (const sz of [-1, 1]) box(base, m.black, 0.03, 8.8, 0.03, -0.33, 5.3, sz * 0.17);                  // ladder
-  for (let y = 1.2; y < 9.7; y += 0.3) cyl(base, m.black, 0.012, 0.34, -0.33, y, 0, 'z', 8);
-  for (let y = 1.2; y < 9.7; y += 1.6) for (const sz of [-1, 1]) box(base, m.black, 0.1, 0.03, 0.03, -0.28, y, sz * 0.17);
-  box(base, m.orange, 1.0, 0.25, 0.36, 0, 9.875, 0);           // head beam + top guide rollers
-  for (const dx of [-0.35, 0.35]) for (const sz of [-1, 1]) cyl(base, m.black, 0.04, 0.06, dx, 10.03, sz * 0.07, 'y', 16);
-  box(base, m.aluDark, 0.06, 0.25, 0.2, 0.3, 9.62, 0); cyl(base, m.steel, 0.16, 0.05, 0.38, 9.55, 0, 'z', 28);    // top pulley
+  for (const sz of [-1, 1]) box(base, m.black, 0.03, H1 - H0 - 0.15, 0.03, -0.33, (H0 + H1) / 2 + 0.05, sz * 0.17);  // ladder
+  for (let y = 1.2; y < H1 - 0.05; y += 0.3) cyl(base, m.black, 0.012, 0.34, -0.33, y, 0, 'z', 8);
+  for (let y = 1.2; y < H1 - 0.05; y += 1.6) for (const sz of [-1, 1]) box(base, m.black, 0.1, 0.03, 0.03, -0.28, y, sz * 0.17);
+  box(base, m.orange, 1.0, 0.25, 0.36, 0, H1 + 0.125, 0);      // head beam + top guide rollers
+  for (const dx of [-0.35, 0.35]) for (const sz of [-1, 1]) cyl(base, m.black, 0.04, 0.06, dx, H1 + 0.28, sz * 0.07, 'y', 16);
+  box(base, m.aluDark, 0.06, 0.25, 0.2, 0.3, H1 - 0.13, 0); cyl(base, m.steel, 0.16, 0.05, 0.38, H1 - 0.2, 0, 'z', 28);    // top pulley
 
-  const car = anim(G('Crane_Carriage', root, 0, 1.0, 0), 'translate', 'y', 0.9, 8.8);
+  const car = anim(G('Crane_Carriage', root, 0, 1.0, 0), 'translate', 'y', 0.9, 6.3);
   box(car, m.aluDark, 0.06, 1.0, 0.42, 0.31, 0.5, 0);
   for (const y of [0.1, 0.9]) for (const sz of [-1, 1]) box(car, m.black, 0.08, 0.12, 0.08, 0.3, y, sz * 0.13);
   box(car, m.alu, 0.96, 0.03, 0.74, 0.82, 0.135, 0);           // platform
@@ -198,8 +198,8 @@ function asrsRail(len = 4) { // one floor-rail segment and the matching top guid
   const m = materials(), root = G('ASRS_Rail'), fl = G('Rail_Floor', root), top = G('Rail_Top', root);
   box(fl, m.black, len, 0.015, 0.24, 0, 0.0075, 0); box(fl, m.steel, len, 0.085, 0.06, 0, 0.0575, 0);
   for (let x = -len / 2 + 0.25; x < len / 2; x += 0.5) box(fl, m.aluDark, 0.06, 0.03, 0.22, x, 0.03, 0);
-  box(top, m.steel, len, 0.12, 0.06, 0, 10.06, 0); box(top, m.black, len, 0.02, 0.22, 0, 10.13, 0);
-  for (let x = -len / 2 + 0.5; x < len / 2; x += 1) box(top, m.aluDark, 0.06, 0.6, 0.06, x, 10.44, 0);
+  box(top, m.steel, len, 0.12, 0.06, 0, 7.56, 0); box(top, m.black, len, 0.02, 0.22, 0, 7.63, 0);
+  for (let x = -len / 2 + 0.5; x < len / 2; x += 1) box(top, m.aluDark, 0.06, 0.3, 0.06, x, 7.79, 0);
   return finalize(root);
 }
 
@@ -392,9 +392,9 @@ function fencePanel(w = 1.0) { // black mesh guard panel with one post at its �
   return finalize(root);
 }
 
-// ---------------------------------------------------------------- 5. roller / belt conveyors (top of conveying surface 0.75 m, flow along +X)
+// ---------------------------------------------------------------- 5. roller / belt conveyors (top of conveying surface 0.85 m, flow along +X)
 // userData.ports: [x, y, z, heading°] of the in/out ends (heading 0 = +X), for snapping modules together
-const TOP = 0.75, CW = 0.6, BF = 0.5;  // overall width, between-frame width (600 × 400 totes cross-wise)
+const TOP = 0.85, CW = 0.6, BF = 0.5;  // overall width, between-frame width (600 × 400 totes cross-wise)
 function convLegs(n, xs, w, top) {
   const m = materials();
   for (const x of xs) {
@@ -462,9 +462,9 @@ function beltConveyor(L = 2) {
   return finalize(root);
 }
 
-// ---------------------------------------------------------------- 6. selective pallet rack bay for the AS/RS (10 m, bay 2.7 m along X, 1.1 m deep)
+// ---------------------------------------------------------------- 6. selective pallet rack bay for the AS/RS (7.5 m, bay 2.7 m along X, 1.1 m deep)
 function rackBay(num = '01') {
-  const m = materials(), root = G('Rack_Bay'), fr = G('Rack_Frame', root), H = 10.0, W = 2.7, D = 1.1, u = 0.09;
+  const m = materials(), root = G('Rack_Bay'), fr = G('Rack_Frame', root), H = 7.5, W = 2.7, D = 1.1, u = 0.09;
   for (const sx of [-1, 1]) {                                           // upright frames at both ends (front + back post, bracing)
     const x = sx * W / 2;
     for (const sz of [-1, 1]) {
@@ -478,7 +478,7 @@ function rackBay(num = '01') {
       box(fr, m.rackWhite, 0.025, len, 0.025, x, y + 0.45, 0, [Math.atan2(z1 - z0, 0.9), 0, 0]);
     }
   }
-  const levels = [1.6, 3.2, 4.8, 6.4, 8.0, 9.6];
+  const levels = [1.5, 3.0, 4.5, 6.0, 7.35];
   for (const y of levels) {
     for (const sz of [-1, 1]) box(fr, m.orange, W - u, 0.12, 0.05, 0, y, sz * (D / 2 - 0.04));
     plane(fr, m.mesh, W - u - 0.02, D - 0.1, 0, y + 0.061, 0, [-Math.PI / 2, 0, 0], 0.05); // wire deck
@@ -499,48 +499,100 @@ function signMat(num) {
 }
 function baySign(num) { const root = G('Bay_Sign_' + num); box(root, materials().black, 0.5, 0.5, 0.01, 0, 0.25, -0.006); plane(root, signMat(num), 0.46, 0.46, 0, 0.25, 0.0001); return finalize(root); }
 
-// ---------------------------------------------------------------- 7. factory hall kit (6 m bays, 10 m eaves)
-function wallPanel() { // 6 m (X) × 10 m wall module, inside face +Z: concrete plinth, ribbed light grey panels, window band 5.2–6.6 m
-  const m = materials(), root = G('Hall_Wall_6m'), W = 6, H = 10, t = 0.08;
+// ---------------------------------------------------------------- 7. factory hall kit (6 m bays, 8 m eaves)
+function corrugation(name) { // normal map of trapezoid sheet-metal ribs: one rib period per UV unit along U
+  const W = 128, c = document.createElement('canvas'); c.width = W; c.height = 4; const g = c.getContext('2d'), img = g.createImageData(W, 4);
+  const h = u => { const x = u % 1; return x < 0.15 ? 0 : x < 0.25 ? (x - 0.15) / 0.1 : x < 0.45 ? 1 : x < 0.55 ? 1 - (x - 0.45) / 0.1 : 0; };
+  for (let i = 0; i < W; i++) { const d = (h((i + 1) / W) - h((i - 1 + W) / W)) * W / 2 * 0.06; const n = new THREE.Vector3(-d, 0, 1).normalize();
+    for (let r = 0; r < 4; r++) { const k = (r * W + i) * 4; img.data[k] = (n.x * 0.5 + 0.5) * 255; img.data[k + 1] = 128; img.data[k + 2] = (n.z * 0.5 + 0.5) * 255; img.data[k + 3] = 255; } }
+  g.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.NoColorSpace; t.name = name; return t;
+}
+let HM = null;
+function hallMats() { // corrugated cladding / roof sheet (normal mapped), sectional door panels
+  if (HM) return HM;
+  HM = {
+    clad: std('wall_cladding', 0xd9dde1, 0.35, 0.42, { normalMap: corrugation('cladding_ribs') }),
+    cladDark: std('wall_cladding_dark', 0x9aa1a8, 0.35, 0.45, { normalMap: corrugation('cladding_ribs_dark') }),
+    roofIn: std('roof_liner', 0xc9ced3, 0.3, 0.5, { normalMap: corrugation('roof_ribs'), side: THREE.DoubleSide }),
+    door: std('sectional_door', 0xc4c9ce, 0.4, 0.4, { normalMap: corrugation('door_ribs') }),
+    lamp: std('highbay_led', 0xffffff, 0.0, 0.3, { emissive: 0xffffff, emissiveIntensity: 2.0 })
+  };
+  return HM;
+}
+function cladding(root, mat, w, h, x, y, z, cell = 0.25) { // inner + outer ribbed faces of a wall band (inside face +Z)
+  plane(root, mat, w, h, x, y, z + 0.041, null, cell); plane(root, mat, w, h, x, y, z - 0.041, [0, Math.PI, 0], cell);
+  box(root, materials().wall, w, h, 0.08, x, y, z);
+}
+function wallPanel() { // 6 m (X) × 9.2 m wall module, inside face +Z: concrete plinth, corrugated light grey cladding, window band 4.4–5.8 m
+  const m = materials(), hm = hallMats(), root = G('Hall_Wall_6m'), W = 6, H = 9.2;   // up to the roof sheet at the eave (8 m eave + truss depth)
   box(root, m.concrete, W, 1.2, 0.2, 0, 0.6, -0.06);                                       // plinth
-  const bands = [[1.2, 5.2], [6.6, H]];
-  for (const [y0, y1] of bands) {
-    box(root, m.wall, W, y1 - y0, t, 0, (y0 + y1) / 2, 0);
-    for (let x = -W / 2 + 0.125; x < W / 2; x += 0.25) box(root, m.wall, 0.04, y1 - y0, 0.012, x, (y0 + y1) / 2, t / 2 + 0.006); // ribs
-  }
-  box(root, m.frameDark, W, 0.08, 0.12, 0, 5.2, 0.0); box(root, m.frameDark, W, 0.08, 0.12, 0, 6.6, 0.0);
-  for (let x = -W / 2; x <= W / 2 + 1e-6; x += 1.0) box(root, m.frameDark, 0.06, 1.4, 0.1, x, 5.9, 0);
-  box(root, m.window, W, 1.32, 0.012, 0, 5.9, 0);
-  box(root, m.yellow, W, 0.06, 0.01, 0, 1.25, t / 2 + 0.005);                             // brand stripe
+  cladding(root, hm.clad, W, 3.2, 0, 2.8, 0); cladding(root, hm.clad, W, H - 5.8, 0, (5.8 + H) / 2, 0);
+  box(root, m.frameDark, W, 0.08, 0.14, 0, 4.4, 0); box(root, m.frameDark, W, 0.08, 0.14, 0, 5.8, 0); box(root, m.frameDark, W, 0.1, 0.16, 0, H - 0.05, 0);
+  for (let x = -W / 2; x <= W / 2 + 1e-6; x += 1.0) box(root, m.frameDark, 0.06, 1.4, 0.1, x, 5.1, 0);
+  box(root, m.window, W, 1.32, 0.012, 0, 5.1, 0);
+  box(root, m.yellow, W, 0.06, 0.01, 0, 1.25, 0.05);                                       // brand stripe (inside)
+  for (const sx of [-1, 1]) box(root, m.frameDark, 0.05, H - 1.2, 0.1, sx * (W / 2 - 0.025), (H + 1.2) / 2, 0); // panel joints
   return finalize(root);
 }
-function hallColumn() { // HEA 400-like steel column, 10 m, with base plate and haunch bracket
-  const m = materials(), root = G('Hall_Column'), H = 10, b = 0.3, d = 0.39, tf = 0.019, tw = 0.011;
+function doorPanel() { // 6 m wall module with a 4 × 4.5 m sectional door (with window row) and a personnel door, hazard-striped jambs
+  const m = materials(), hm = hallMats(), root = G('Hall_Door_6m'), W = 6, H = 9.2, dw = 4, dh = 4.5, dx = -0.6;
+  box(root, m.concrete, W - dw - 0.2, 1.2, 0.2, (dx + dw / 2 + W / 2) / 2 + 0.05, 0.6, -0.06);
+  cladding(root, hm.clad, W, H - dh - 0.2, 0, (dh + 0.2 + H) / 2, 0);
+  const rx0 = dx + dw / 2 + 0.1, rw = W / 2 - rx0; cladding(root, hm.clad, rw, dh + 0.2 - 1.2, rx0 + rw / 2, (dh + 0.2 + 1.2) / 2, 0);
+  const lx1 = dx - dw / 2 - 0.1, lw = lx1 + W / 2; if (lw > 0.05) { cladding(root, hm.clad, lw, dh + 0.2, -W / 2 + lw / 2, (dh + 0.2) / 2, 0); }
+  const door = anim(G('Sectional_Door', root, dx, 0, 0), 'translate', 'y', 0, dh - 0.4);
+  for (let k = 0; k < 9; k++) { const y = 0.25 + k * 0.5; plane(door, k === 6 ? m.window : hm.door, dw, 0.48, 0, y, 0.035, null, 0.25); box(door, m.frameDark, dw, 0.02, 0.05, 0, y - 0.25, 0.02); }
+  box(door, m.wall, dw, dh, 0.04, 0, dh / 2, 0);
+  for (const sx of [-1, 1]) { box(root, m.hazardBox, 0.2, dh + 0.2, 0.22, dx + sx * (dw / 2 + 0.1), (dh + 0.2) / 2, 0.02); }
+  box(root, m.black, dw + 0.4, 0.4, 0.4, dx, dh + 0.4, 0.25);                              // door roll housing
+  const px = rx0 + 0.9; box(root, m.frameDark, 1.06, 2.16, 0.12, px, 1.08, 0.01); box(root, hm.cladDark, 0.96, 2.06, 0.13, px, 1.03, 0.01); // personnel door
+  box(root, m.black, 0.03, 0.18, 0.03, px + 0.35, 1.05, 0.09); box(root, m.lampG, 0.3, 0.12, 0.02, px, 2.4, 0.08); // handle, exit sign
+  return finalize(root);
+}
+function gableWall() { // triangular infill above the 9.2 m wall top on a 24 m end wall (span along X), up to the ridge sheet
+  const m = materials(), hm = hallMats(), root = G('Hall_Gable_24m'), S = 24, Y = 9.1, R = 1.3;
+  const sh = new THREE.Shape([new THREE.Vector2(-S / 2, 0), new THREE.Vector2(S / 2, 0), new THREE.Vector2(0, R)]);
+  for (const [z, ry] of [[0.041, 0], [-0.041, Math.PI]]) { const g = new THREE.ShapeGeometry(sh); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / 0.25, uv.getY(i) / 0.25); bin(root, hm.clad, xf(g, 0, Y, z, [0, ry, 0])); }
+  const e = new THREE.ExtrudeGeometry(sh, { depth: 0.08, bevelEnabled: false }); e.translate(0, 0, -0.04); bin(root, m.wall, xf(e, 0, Y, 0));
+  for (const s of [-1, 1]) { const a = Math.atan2(R, S / 2); box(root, m.frameDark, Math.hypot(S / 2, R), 0.12, 0.16, s * S / 4, Y + R / 2, 0, [0, 0, -s * a]); }
+  return finalize(root);
+}
+function hallColumn() { // HEA 400-like steel column, 8 m (eave height), with base plate, haunch and an impact-guard skirt
+  const m = materials(), root = G('Hall_Column'), H = 8, b = 0.3, d = 0.39, tf = 0.019, tw = 0.011;
   for (const s of [-1, 1]) box(root, m.steelCol, b, H, tf, 0, H / 2 + 0.03, s * (d / 2 - tf / 2));
   box(root, m.steelCol, tw, H, d - 2 * tf, 0, H / 2 + 0.03, 0);
+  for (let y = 1.5; y < H; y += 1.5) for (const s of [-1, 1]) box(root, m.steelCol, 0.012, 0.25, d - 2 * tf, s * 0.07, y, 0); // stiffeners
   box(root, m.steelCol, 0.5, 0.03, 0.6, 0, 0.015, 0);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(root, m.steel, 0.015, 0.06, sx * 0.19, 0.06, sz * 0.24, 'y', 8);
-  box(root, m.steelCol, tw, 0.5, 0.6, 0, H - 0.25, 0.3, [0, 0, 0]);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { cyl(root, m.steel, 0.015, 0.06, sx * 0.19, 0.06, sz * 0.24, 'y', 8); cyl(root, m.steel, 0.025, 0.012, sx * 0.19, 0.036, sz * 0.24, 'y', 6); }
+  box(root, m.steelCol, tw, 0.5, 0.6, 0, H - 0.25, 0.3);
   box(root, m.yellow, b + 0.004, 1.2, d + 0.004, 0, 0.66, 0);                               // impact guard paint
   box(root, m.hazardBox, b + 0.006, 0.2, d + 0.006, 0, 1.36, 0);
   return finalize(root);
 }
-function roofTruss() { // one 6 m bay (X) of roof over a 24 m span (Z): pitched truss at x 0, purlins, roof sheet, skylight strip. Sits at y 10.
-  const m = materials(), root = G('Hall_Roof_6m'), S = 24, Y = 10, rise = 1.2, W = 6;
+function roofTruss() { // one 6 m bay (X) of roof over a 24 m span (Z): pitched truss at x 0 with gussets, purlins, sag rods, liner sheet with a skylight strip, two high-bay LED lamps. Sits at y 8 (eave height).
+  const m = materials(), hm = hallMats(), root = G('Hall_Roof_6m'), S = 24, Y = 8, rise = 1.2, W = 6;
   const top = z => Y + 0.9 + rise * (1 - Math.abs(z) / (S / 2)), bot = Y;
-  const member = (a, b, s, mt = m.steelCol) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A), len = dir.length();
-    const g = new THREE.BoxGeometry(s, s, len); g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize())); g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); bin(root, mt, g); };
-  member([0, bot, -S / 2], [0, bot, S / 2], 0.12);
-  member([0, top(-S / 2), -S / 2], [0, top(0), 0], 0.14); member([0, top(0), 0], [0, top(S / 2), S / 2], 0.14);
+  const member = (a, b, s, mt = m.steelCol, h = s) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), dir = B.clone().sub(A), len = dir.length();
+    const g = new THREE.BoxGeometry(s, h, len); g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize())); g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2); bin(root, mt, g); };
+  member([0, bot, -S / 2], [0, bot, S / 2], 0.14, m.steelCol, 0.16);
+  member([0, top(-S / 2), -S / 2], [0, top(0), 0], 0.16, m.steelCol, 0.2); member([0, top(0), 0], [0, top(S / 2), S / 2], 0.16, m.steelCol, 0.2);
   const n = 12;
-  for (let i = 0; i <= n; i++) { const z = -S / 2 + i * S / n; member([0, bot, z], [0, top(z), z], 0.07); if (i < n) { const z2 = z + S / n; member([0, i < n / 2 ? bot : top(z), z], [0, i < n / 2 ? top(z2) : bot, z2], 0.06); } }
-  for (let i = 0; i <= 8; i++) { const z = -S / 2 + i * S / 8; member([-W / 2, top(z) + 0.1, z], [W / 2, top(z) + 0.1, z], 0.1, m.steelLight); } // purlins
-  for (const s of [-1, 1]) {                                                                // roof sheets with a skylight strip each side
+  for (let i = 0; i <= n; i++) {
+    const z = -S / 2 + i * S / n; member([0, bot, z], [0, top(z), z], 0.07);
+    box(root, m.steelCol, 0.02, 0.22, 0.3, 0, bot + 0.05, z); box(root, m.steelCol, 0.02, 0.22, 0.3, 0, top(z) - 0.05, z); // gusset plates
+    if (i < n) { const z2 = z + S / n; member([0, i < n / 2 ? bot : top(z), z], [0, i < n / 2 ? top(z2) : bot, z2], 0.06); }
+  }
+  for (let i = 0; i <= 8; i++) { const z = -S / 2 + i * S / 8; member([-W / 2, top(z) + 0.12, z], [W / 2, top(z) + 0.12, z], 0.08, m.steelLight, 0.16); } // Z purlins
+  for (let i = 0; i < 8; i += 2) { const z0 = -S / 2 + i * S / 8, z1 = z0 + S / 8; member([-W / 2, top(z0) + 0.12, z0], [W / 2, top(z1) + 0.12, z1], 0.02, m.steelLight); } // bracing rods
+  for (const s of [-1, 1]) {                                                                // liner sheets with a skylight strip each side
     const a = Math.atan2(rise, S / 2), len = Math.hypot(rise, S / 2);
-    for (const [f0, f1, mt] of [[0, 0.45, m.roof], [0.45, 0.6, m.skylight], [0.6, 1, m.roof]]) {   // u: 0 at the ridge → 1 at the eave
-      const u = (f0 + f1) / 2; box(root, mt, W, 0.02, (f1 - f0) * len + 0.005, 0, top(0) - u * rise + 0.17, s * u * S / 2, [s * a, 0, 0]);
+    for (const [f0, f1, mt] of [[0, 0.45, hm.roofIn], [0.45, 0.6, m.skylight], [0.6, 1, hm.roofIn]]) {   // u: 0 at the ridge → 1 at the eave
+      const u = (f0 + f1) / 2, l = (f1 - f0) * len + 0.005, y = top(0) - u * rise + 0.21, z = s * u * S / 2;
+      if (mt === m.skylight) box(root, mt, W, 0.02, l, 0, y, z, [s * a, 0, 0]);
+      else { const g = new THREE.PlaneGeometry(W, l); const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * W / 0.3, uv.getY(k)); g.rotateX(-Math.PI / 2); bin(root, mt, xf(g, 0, y, z, [s * a, 0, 0])); }
     }
   }
+  for (const z of [-6, 6]) { cyl(root, m.black, 0.006, top(z) - Y - 0.3, 1.5, (top(z) + Y) / 2 - 0.15, z, 'y', 4); cyl(root, m.frameDark, 0.25, 0.12, 1.5, Y - 0.4, z, 'y', 24, 0.18); cyl(root, hm.lamp, 0.22, 0.01, 1.5, Y - 0.465, z, 'y', 24); }
   return finalize(root);
 }
 function floorTile(aisle) { // 6 × 6 m polished concrete tile; the aisle variant has a 0.1 m yellow line 1.5 m in from each Z edge
@@ -556,6 +608,6 @@ export const MODELS = {
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: conveyorStopper,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
   roller_conveyor_1m: () => rollerConveyor(1), roller_conveyor_2m: () => rollerConveyor(2), roller_curve_90: rollerCurve, belt_conveyor_2m: () => beltConveyor(2),
-  rack_bay_10m: () => rackBay('01'), ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map(n => ['bay_sign_' + n, () => baySign(n)])),
-  hall_wall_6m: wallPanel, hall_column: hallColumn, hall_roof_6m: roofTruss, floor_6m: () => floorTile(false), floor_6m_aisle: () => floorTile(true)
+  rack_bay: () => rackBay('01'), ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map(n => ['bay_sign_' + n, () => baySign(n)])),
+  hall_wall_6m: wallPanel, hall_door_6m: doorPanel, hall_gable_24m: gableWall, hall_column: hallColumn, hall_roof_6m: roofTruss, floor_6m: () => floorTile(false), floor_6m_aisle: () => floorTile(true)
 };
