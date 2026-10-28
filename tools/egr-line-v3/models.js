@@ -204,7 +204,7 @@ function asrsRail(len = 4) { // one floor-rail segment and the matching top guid
 }
 
 // ---------------------------------------------------------------- the EGR cooler (workpiece) and a 600 × 400 tote
-function egrCoolerGeo(n) { // Gamma 1.6 T-GDI EGR cooler: stainless core 180 × 70 × 90 mm, gas flanges at both ends, coolant pipes, bracket; overall 280 × 130 × 150
+function egrCoolerGeo(n) { // EGR cooler: stainless core 180 × 70 × 90 mm, gas flanges at both ends, coolant pipes, bracket; overall 280 × 130 × 150
   const m = materials();
   box(n, m.stainless, 0.18, 0.07, 0.09, 0, 0.045, 0);                  // core case
   for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, m.steel, 0.004, 0.074, 0.094, x, 0.045, 0); // case beads
@@ -1233,7 +1233,7 @@ function egrCoreLine(o = {}) {
         const mm = e.length, A = Array.from({ length: mm }, (_, i) => Array.from({ length: mm }, (_, jj) => Jm.reduce((sm, c) => sm + c[i] * c[jj], 0) + (i === jj ? 1e-4 : 0))); const y = solve(A, e); v = v.map((q, k) => q + Jm[k].reduce((sm, c, i) => sm + c * y[i], 0) * 0.8); }
       setQ(v); return { v, e: Math.hypot(...err(tg).slice(0, 3)) }; };
     const RBp = R.robot.fr.position, NOZ = [4.6, 1.125, 0.32], CAM = [5.0, 1.62, 0.25], NGB = [4.1, 0.62, 0.55], V = (x, y, z) => new THREE.Vector3(x, y, z);
-    const run = ng => { let seed = [0, -90, 90, -90, -90, 0].map(d => d * Math.PI / 180), t = 0, last = null, worst = 0; const wp = [], ev = {};
+    const run = ng => { let seed = [0, -90, 90, -90, -90, 0].map(d => d * Math.PI / 180), t = 0, last = null, worst = 0, where = ''; const wp = [], ev = {};
       const go = (pos, dt, name) => { const steps = last ? Math.max(1, Math.ceil(last.distanceTo(pos) / 0.02)) : 1;
         for (let k = 1; k <= steps; k++) { const pp = last ? last.clone().lerp(pos, k / steps) : pos.clone(); const r = ik(pp, seed); seed = r.v; worst = Math.max(worst, r.e); t += dt / steps; wp.push([t, r.v.slice()]); }
         if (name) ev[name] = t; last = pos.clone(); };
@@ -1336,6 +1336,215 @@ function egrCoreLine(o = {}) {
   return cycleClip(finalize(root), 'Core_Cycle', TT, keys, 5 * 32 / P); // the slower line samples less often (same file size)
 }
 
+// ---------------------------------------------------------------- 12. welding line (south): brazed core → Body TIG (rotating jig, two fixed torches, lifting screen,
+// fume hood) → 1st pressure test (chamber with lid, OK / NG lamp) → robot MIG (6-axis robot + positioner, fence; welds both gas flanges)
+// → three manual MIG booths (pipes, bracket; curtains) → C/F final inspection → DMC marking → carton on the shipping pallet. One belt
+// at z 0 links the robot cell, the booths and the C/F station; everything else is handed on by the operators, who stand on the −Z side.
+// 21 coolers per 512 s (the good output of both core lines): part i starts at i · 512 / 21 s, taken out of the tote on the input stand.
+const WELD_T = 512;
+function opWorker(root, name, x, z, faceY) { // standing operator, 1.75 m: node name + '_Turn' (ry), + '_Arm_L/R' (rx, −0.15 at rest, negative = forward)
+  const m = materials(), op = G(name, root, x, 0, z); op.rotation.y = faceY; const turn = G(name + '_Turn', op);
+  for (const sx of [-0.1, 0.1]) { box(turn, m.frameDark, 0.13, 0.82, 0.15, sx, 0.41, 0); box(turn, m.black, 0.12, 0.07, 0.26, sx, 0.035, 0.05); }
+  box(turn, m.frameDark, 0.36, 0.56, 0.22, 0, 1.12, 0); box(turn, m.yellow, 0.372, 0.3, 0.232, 0, 1.2, 0);
+  cyl(turn, m.light, 0.095, 0.22, 0, 1.55, 0, 'y', 16); cyl(turn, m.sheet, 0.115, 0.08, 0, 1.67, 0, 'y', 16);
+  const arms = {}; for (const [n, sx] of [['_Arm_L', -0.22], ['_Arm_R', 0.22]]) { const a = G(name + n, turn, sx, 1.36, 0); a.rotation.x = -0.15; box(a, m.frameDark, 0.09, 0.36, 0.09, 0, -0.18, 0); box(a, m.light, 0.075, 0.36, 0.075, 0, -0.54, 0); arms[n] = a; }
+  return arms;
+}
+function ikRig(root, J, TIPL) { // numeric IK (damped least squares, six joints): tool +Z straight down, tool X along world X; trace() walks a Cartesian path
+  const AXS = J.map(j => j.userData.anim.axis), rest = J.map((j, i) => j.rotation[AXS[i]]), X = new THREE.Vector3(1, 0, 0);
+  const setQ = v => { v.forEach((q, i) => { J[i].rotation.set(0, 0, 0); J[i].rotation[AXS[i]] = q; }); root.updateMatrixWorld(true); };
+  const err = tg => { const mw = J[5].matrixWorld, tip = TIPL.clone().applyMatrix4(mw), z = new THREE.Vector3(0, 0, 1).transformDirection(mw), x = new THREE.Vector3(1, 0, 0).transformDirection(mw);
+    const dz = new THREE.Vector3(0, -1, 0).sub(z), cx = new THREE.Vector3().crossVectors(x, X); return [...tg.clone().sub(tip).toArray(), dz.x * 0.5, dz.y * 0.5, dz.z * 0.5, cx.y * 0.3]; };
+  const solve = (A, bb) => { const n = bb.length, M = A.map((r, i) => [...r, bb[i]]); for (let i = 0; i < n; i++) { let pv = i; for (let k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[pv][i])) pv = k; [M[i], M[pv]] = [M[pv], M[i]];
+      for (let k = i + 1; k < n; k++) { const fc = M[k][i] / M[i][i]; for (let jj = i; jj <= n; jj++) M[k][jj] -= fc * M[i][jj]; } } const xx = new Array(n).fill(0); for (let i = n - 1; i >= 0; i--) { let sm = M[i][n]; for (let jj = i + 1; jj < n; jj++) sm -= M[i][jj] * xx[jj]; xx[i] = sm / M[i][i]; } return xx; };
+  const ik = (tg, seed) => { let v = seed.slice(); for (let it = 0; it < 300; it++) { setQ(v); const e = err(tg); if (Math.hypot(...e) < 1e-5) break; const Jm = []; for (let k = 0; k < 6; k++) { const w = v.slice(); w[k] += 1e-4; setQ(w); const e2 = err(tg); Jm.push(e.map((x, i) => (x - e2[i]) / 1e-4)); }
+      const mm = e.length, A = Array.from({ length: mm }, (_, i) => Array.from({ length: mm }, (_, jj) => Jm.reduce((sm, c) => sm + c[i] * c[jj], 0) + (i === jj ? 1e-4 : 0))); const y = solve(A, e); v = v.map((q, k) => q + Jm[k].reduce((sm, c, i) => sm + c * y[i], 0) * 0.8); }
+    setQ(v); return { v, e: Math.hypot(...err(tg).slice(0, 3)) }; };
+  const trace = (path, label) => { // path: [[x, y, z], seconds, eventName?]; returns joint waypoints relative to the start and the event times
+    let seed = [0, -90, 90, -90, -90, 0].map(d => d * Math.PI / 180), t = 0, last = null, worst = 0, where = ''; const wp = [], ev = {};
+    for (const [p, dt, name] of path) { const pos = new THREE.Vector3(...p), steps = last ? Math.max(1, Math.ceil(last.distanceTo(pos) / 0.02)) : 1;
+      for (let k = 1; k <= steps; k++) { const pp = last ? last.clone().lerp(pos, k / steps) : pos.clone(); const r = ik(pp, seed); seed = r.v; if (r.e > worst) { worst = r.e; where = pp.toArray().map(v => v.toFixed(3)).join(','); } t += dt / steps; wp.push([t, r.v.slice()]); }
+      if (name) ev[name] = t; last = pos; }
+    setQ(rest); if (worst > 0.005) throw new Error(label + ' IK: ' + (worst * 1000).toFixed(1) + ' mm off at ' + where);
+    return { wp, ev, T: t, rest }; };
+  return { trace, rest };
+}
+function egrWeldLine() {
+  const T = WELD_T, N = 21, PW = T / N, m = materials(), root = G('EGR_Weld_Line'), BT = 0.855, BW = 0.4, YC = 0.045;
+  const brazed = std('brazed_stainless', 0xa49580, 0.9, 0.36), bead = std('weld_bead', 0x6f675d, 0.85, 0.5), clampM = std('jig_clamp', 0x2a2d31, 0.5, 0.45);
+  const curtain = std('weld_curtain', 0xc8461e, 0.0, 0.55, { transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide });
+  const arcM = std('weld_arc', 0xd8f0ff, 0.0, 0.3, { emissive: 0xa8dcff, emissiveIntensity: 4.0 });
+  const leg4 = (n, x, z, w, d, top) => { box(n, m.aluDark, w, 0.03, d, x, top - 0.015, z); for (const sx of [-1, 1]) for (const sz of [-1, 1]) { prof(n, [x + sx * (w / 2 - 0.03), 0.06, z + sz * (d / 2 - 0.03)], [x + sx * (w / 2 - 0.03), top - 0.03, z + sz * (d / 2 - 0.03)], 0.04); foot(n, x + sx * (w / 2 - 0.03), z + sz * (d / 2 - 0.03)); } };
+  const belt = (x0, x1) => { const L = x1 - x0, c = (x0 + x1) / 2;
+    for (const sz of [-1, 1]) box(root, m.alu, L, 0.1, 0.035, c, BT - 0.055, sz * (BW / 2 + 0.03)); box(root, m.belt, L - 0.02, 0.01, BW, c, BT - 0.005, 0);
+    for (let k = 0, n = Math.max(1, Math.ceil(L / 1.4)); k <= n; k++) { const x = x0 + 0.08 + (L - 0.16) * k / n; for (const sz of [-1, 1]) { prof(root, [x, 0.06, sz * (BW / 2 + 0.03)], [x, BT - 0.11, sz * (BW / 2 + 0.03)], 0.04); foot(root, x, sz * (BW / 2 + 0.03)); } }
+    box(root, m.yellow, 0.03, 0.06, BW, x1 - 0.01, BT + 0.03, 0); };
+  const hang = (n, x0, z0, x1, z1, y0 = 0.15, y1 = 1.95) => { // welding curtain on a rail, hung from posts at both ends
+    const L = Math.hypot(x1 - x0, z1 - z0), a = Math.atan2(z1 - z0, x1 - x0);
+    plane(n, curtain, L, y1 - y0, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, [0, -a, 0]); box(n, m.aluDark, L, 0.03, 0.03, (x0 + x1) / 2, y1 + 0.02, (z0 + z1) / 2, [0, -a, 0]);
+    for (const [x, z] of [[x0, z0], [x1, z1]]) { prof(n, [x, 0.06, z], [x, y1 + 0.04, z], 0.04, m.frameDark); foot(n, x, z); } };
+  const lamp = (n, x, z, y0, name) => { prof(n, [x, y0, z], [x, y0 + 0.35, z], 0.03, m.frameDark); cyl(n, m.lampR, 0.03, 0.06, x, y0 + 0.39, z, 'y', 14); const g = G(name, n); cyl(g, m.lampG, 0.032, 0.06, x, y0 + 0.455, z, 'y', 14); cyl(n, m.lampA, 0.03, 0.002, x, y0 + 0.455, z, 'y', 14); };
+  // part looks (origin at the bottom centre, body centre at YC): brazed core → body (shell, TIG seams) → + gas flanges (MIG beads) → + coolant pipes, bracket
+  const lookCore = n => { box(n, brazed, 0.18, 0.07, 0.09, 0, YC, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, brazed, 0.004, 0.074, 0.094, x, YC, 0); for (const sx of [-1, 1]) box(n, brazed, 0.02, 0.06, 0.07, sx * 0.1, YC, 0); };
+  const lookBody = n => { box(n, m.stainless, 0.184, 0.076, 0.096, 0, YC, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, m.steel, 0.004, 0.08, 0.1, x, YC, 0); for (const sx of [-1, 1]) box(n, m.stainless, 0.024, 0.064, 0.074, sx * 0.102, YC, 0); };
+  const lookTBead = n => { for (const sx of [-1, 1]) box(n, bead, 0.006, 0.082, 0.102, sx * 0.091, YC, 0); };
+  const lookFlange = n => { for (const sx of [-1, 1]) { box(n, m.stainless, 0.01, 0.09, 0.15, sx * 0.135, YC, 0); for (const sy of [-1, 1]) cyl(n, m.aluDark, 0.006, 0.012, sx * 0.135, YC + sy * 0.035, sy * 0.06, 'x', 6); } };
+  const lookFBead = (n, sx) => box(n, bead, 0.008, 0.07, 0.08, sx * 0.127, YC, 0);
+  const lookPipes = n => { for (const sx of [-1, 1]) { cyl(n, m.stainless, 0.011, 0.06, sx * 0.05, 0.105, 0.03, 'y', 8); cyl(n, m.stainless, 0.011, 0.04, sx * 0.05, 0.128, 0.05, 'z', 8); } box(n, m.steel, 0.12, 0.004, 0.03, 0, 0.008, -0.055); };
+  const lookPBead = n => { for (const sx of [-1, 1]) cyl(n, bead, 0.014, 0.006, sx * 0.05, 0.08, 0.03, 'y', 8); for (const sx of [-1, 1]) box(n, bead, 0.006, 0.004, 0.03, sx * 0.06, 0.008, -0.055); };
+
+  // 1. Body TIG cell (x 0): the operator (x 0, z −0.72) takes a brazed core out of the tote on the input stand (x −0.8, z −1.3; a zone of the layout),
+  // sets it between the chucks, slides the body shell over it from the shell rack (x −0.75), pulls the screen down; two fixed torches weld both
+  // shell seams while the jig turns the part once; the screen goes up and the operator puts the part on the hand-off table (x 0.85)
+  const TA = 1.05;   // jig axis height
+  leg4(root, 0, 0, 0.9, 0.5, 0.8);
+  for (const [x, nm] of [[-0.32, 'Tig_Chuck_L'], [0.32, 'Tig_Chuck_R']]) { box(root, m.black, 0.16, TA - 0.8 + 0.12, 0.26, x + Math.sign(x) * 0.06, 0.8 + (TA - 0.8 + 0.12) / 2, 0); const c = G(nm, root, x, TA, 0); cyl(c, m.steel, 0.06, 0.05, 0, 0, 0, 'x', 20); for (let k = 0; k < 3; k++) { const a = k * 2.094; box(c, clampM, 0.04, 0.02, 0.02, -Math.sign(x) * 0.03, Math.cos(a) * 0.045, Math.sin(a) * 0.045); } }
+  prof(root, [0.5, 0.06, 0.35], [0.5, 1.75, 0.35], 0.06, m.frameDark); box(root, m.aluDark, 0.9, 0.08, 0.08, 0.08, 1.75, 0.35); box(root, m.aluDark, 0.06, 0.06, 0.4, 0, 1.73, 0.17);
+  for (const [sx, nm] of [[-1, 'Tig_Torch_L'], [1, 'Tig_Torch_R']]) { const tt = G(nm, root, sx * 0.091, 0, 0); box(tt, m.aluDark, 0.05, 0.3, 0.05, 0, 1.55, 0); cyl(tt, m.black, 0.012, 0.18, 0, 1.31, 0, 'y', 10); cyl(tt, m.orange, 0.009, 0.03, 0, 1.205, 0, 'y', 10); cyl(tt, m.steel, 0.0015, 0.02, 0, 1.18, 0, 'y', 6);
+    const ar = G(nm.replace('Torch', 'Arc'), tt); bin(ar, arcM, xf(new THREE.SphereGeometry(0.014, 10, 8), 0, 1.165, 0)); }
+  box(root, m.sheet, 0.5, 0.6, 0.35, 0.0, 0.3, 0.42); box(root, m.screen, 0.2, 0.12, 0.004, 0.0, 0.5, 0.248); cyl(root, m.black, 0.008, 0.9, 0.2, 0.65, 0.42, 'y', 6); // TIG power source + gas
+  cyl(root, m.steel, 0.09, 1.2, -0.38, 0.6, 0.5, 'y', 16);  // argon bottle
+  const hood = G('Tig_Hood', root); box(hood, m.sheet, 1.1, 0.06, 0.95, 0, 2.3, 0.05); for (const s of [-1, 1]) { box(hood, m.sheet, 1.1, 0.25, 0.02, 0, 2.18, 0.05 + s * 0.47); box(hood, m.sheet, 0.02, 0.25, 0.95, s * 0.55, 2.18, 0.05); } cyl(hood, m.sheet, 0.13, 1.6, 0, 3.1, 0.05, 'y', 20); // fume hood + duct
+  hang(root, -0.55, -0.42, -0.55, 0.62); hang(root, 0.55, -0.42, 0.55, 0.62); hang(root, -0.55, 0.62, 0.55, 0.62);
+  { const sc = G('Tig_Screen', root); plane(sc, curtain, 1.06, 0.85, 0, 1.4, -0.44); box(sc, m.aluDark, 1.06, 0.03, 0.03, 0, 1.84, -0.44); box(sc, m.aluDark, 1.06, 0.03, 0.03, 0, 0.97, -0.44); box(sc, m.black, 0.12, 0.03, 0.04, 0, 0.95, -0.46); }  // lifting front screen (rest: down)
+  leg4(root, -0.75, -0.15, 0.35, 0.3, 0.88); for (let k = 0; k < 4; k++) { box(root, m.stainless, 0.184, 0.076, 0.096, -0.75, 0.92 + k * 0.08, -0.15); }  // shell rack: body shells
+  leg4(root, 0.85, -0.25, 0.4, 0.35, 0.9);  // hand-off table TIG → pressure test
+  opWorker(root, 'Op_Tig', 0, -0.72, 0);
+  // 2. 1st pressure test (x 1.75): chamber with a lifting lid on a bench, pressure gauge, OK / NG lamp; the operator turns the part into the next belt
+  leg4(root, 1.75, 0, 0.7, 0.55, 0.88); box(root, m.aluDark, 0.46, 0.03, 0.36, 1.75, 0.895, 0);
+  for (const s of [-1, 1]) { box(root, m.sheet, 0.46, 0.25, 0.02, 1.75, 1.02, s * 0.18); box(root, m.sheet, 0.02, 0.25, 0.36, 1.75 + s * 0.23, 1.02, 0); }
+  box(root, clampM, 0.24, 0.02, 0.12, 1.75, 0.92, 0);
+  { const ld = G('Test_Lid', root); box(ld, m.yellow, 0.5, 0.03, 0.4, 1.75, 1.16, 0); box(ld, m.black, 0.3, 0.04, 0.06, 1.75, 1.19, 0); } for (const s of [-1, 1]) cyl(root, m.steel, 0.012, 0.55, 1.75 + s * 0.27, 1.2, 0, 'y', 8);
+  box(root, m.sheet, 0.3, 0.32, 0.12, 2.05, 1.35, 0.25); cyl(root, m.sheet, 0.06, 0.012, 2.05, 1.38, 0.312, 'z', 20); box(root, m.black, 0.004, 0.05, 0.002, 2.05, 1.395, 0.32);   // regulator + gauge
+  lamp(root, 1.4, 0.25, 0.9, 'Test_OK');
+  opWorker(root, 'Op_Test', 1.75, -0.72, 0);
+  // 3. robot MIG cell (x 4.3): belt 1 brings the part in (x 2.45 → 3.55); the operator loads it into the positioner with both gas flanges from the
+  // flange bin; the 6-axis robot (south of it, behind the fence) welds each flange seam while the positioner turns the part; out onto belt 2 at x 5.05
+  belt(2.35, 3.7); belt(4.95, 13.0);
+  const PX = 4.3, RB = [4.3, 0.9, 0.5];
+  leg4(root, PX, 0, 0.9, 0.4, 0.75);
+  box(root, m.orange, 0.2, 0.42, 0.3, PX - 0.38, 0.96, 0); box(root, m.orange, 0.12, 0.35, 0.22, PX + 0.36, 0.92, 0);
+  const pc = G('Pos_Chuck', root, PX - 0.25, TA, 0); cyl(pc, m.steel, 0.07, 0.04, 0, 0, 0, 'x', 20); box(pc, clampM, 0.03, 0.16, 0.03, 0.03, 0, 0); box(pc, clampM, 0.03, 0.03, 0.16, 0.03, 0, 0);
+  cyl(root, m.steel, 0.02, 0.1, PX + 0.27, TA, 0, 'x', 10);
+  box(root, m.black, 0.36, RB[1] - 0.02, 0.36, RB[0], (RB[1] - 0.02) / 2 + 0.02, RB[2]); box(root, m.yellow, 0.37, 0.04, 0.37, RB[0], RB[1] - 0.04, RB[2]); box(root, m.aluDark, 0.42, 0.02, 0.42, RB[0], 0.01, RB[2]);
+  box(root, m.sheet, 0.5, 0.75, 0.4, PX + 0.5, 0.375, 0.75); box(root, m.screen, 0.18, 0.1, 0.004, PX + 0.5, 0.6, 0.548); cyl(root, m.black, 0.25, 0.1, PX - 0.5, 0.05, 0.75, 'y', 20); // MIG power source, wire drum
+  for (const [x0, z0, x1, z1] of [[3.75, 1.05, 4.85, 1.05], [3.75, -0.32, 3.75, 1.05], [4.85, -0.32, 4.85, 1.05]]) { box(root, m.mesh, Math.abs(x1 - x0) || 0.02, 1.8, Math.abs(z1 - z0) || 0.02, (x0 + x1) / 2, 1.0, (z0 + z1) / 2); prof(root, [x0, 0.06, z0], [x0, 1.95, z0], 0.045, m.frameDark); prof(root, [x1, 0.06, z1], [x1, 1.95, z1], 0.045, m.frameDark); }
+  for (const x of [3.8, 4.8]) { box(root, m.yellow, 0.04, 1.4, 0.04, x, 0.75, -0.34); box(root, m.black, 0.02, 1.3, 0.02, x, 0.75, -0.31); }   // light curtain at the loading side
+  plane(root, curtain, 0.98, 0.5, PX, 1.7, -0.33);   // weld-light screen above the loading opening
+  cyl(root, m.black, 0.012, 0.25, 4.85, 1.95, 1.05, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(root, mt, 0.03, 0.06, 4.85, 2.1 + k * 0.065, 1.05, 'y', 14);
+  leg4(root, 5.0, -0.42, 0.3, 0.25, 0.88); for (let k = 0; k < 3; k++) for (const s of [-1, 1]) box(root, m.stainless, 0.01, 0.09, 0.15, 5.0 + s * 0.05, 0.93 + k * 0.012, -0.42, [0, 0, Math.PI / 2]); // flange bin
+  opWorker(root, 'Op_Rob', PX, -0.72, 0);
+  const fr = globalThis.FR5 ? globalThis.FR5.clone(true) : null; let rig = null;
+  if (fr) { fr.name = 'Mig_Robot'; fr.position.set(...RB); fr.rotation.y = Math.PI; root.add(fr);
+    const J = [1, 2, 3, 4, 5, 6].map(i => fr.getObjectByName('Joint_' + i)); J.forEach(j => { j.name = 'Mig_' + j.name; });
+    const tool = G('Mig_Torch', J[5], 0, 0, 0.101); { const g1 = new THREE.CylinderGeometry(0.03, 0.03, 0.08, 14); g1.rotateX(Math.PI / 2); g1.translate(0, 0, 0.04); bin(tool, m.black, g1);
+      const g2 = new THREE.CylinderGeometry(0.012, 0.016, 0.17, 12); g2.rotateX(Math.PI / 2); g2.translate(0, 0, 0.165); bin(tool, m.steel, g2); const g3 = new THREE.CylinderGeometry(0.004, 0.009, 0.02, 10); g3.rotateX(Math.PI / 2); g3.translate(0, 0, 0.26); bin(tool, m.orange, g3);
+      const ar = G('Mig_Robot_Arc', tool); bin(ar, arcM, xf(new THREE.SphereGeometry(0.016, 10, 8), 0, 0, 0.275)); }
+    root.updateMatrixWorld(true); rig = ikRig(root, J, new THREE.Vector3(0, 0, 0.101 + 0.275)); rig.J = J; }
+  const robotPath = rig && (() => { const H = [PX, 1.3, 0.25], TY = TA + 0.052, A = [PX - 0.12, TY, 0], B = [PX + 0.12, TY, 0], up = p => [p[0], p[1] + 0.07, p[2]];
+    return rig.trace([[H, 0], [up(A), 1.5], [A, 0.6, 'arcA'], [A, 4.0, 'arcAend'], [up(A), 0.5], [up(B), 0.8], [B, 0.6, 'arcB'], [B, 4.0, 'arcBend'], [up(B), 0.5], [H, 1.4]], 'MIG robot'); })();
+  // 4. three manual MIG booths (x 6.6 / 8.6 / 10.6): the operator lifts the part off the belt, turns to the welding table, fits the coolant pipes
+  // and the bracket and welds them (four seams), then puts it back on the belt; curtains on three sides, open to the belt; fume arm over the table
+  const BX = [6.6, 8.6, 10.6];
+  BX.forEach((x, k) => { const nm = 'Op_Mig_' + (k + 1);
+    hang(root, x - 0.5, -1.65, x - 0.5, -0.3); hang(root, x + 1.25, -1.65, x + 1.25, -0.3); hang(root, x - 0.5, -1.65, x + 1.25, -1.65);
+    leg4(root, x + 0.75, -0.72, 0.6, 0.6, 0.9); box(root, clampM, 0.3, 0.02, 0.16, x + 0.75, 0.91, -0.72); box(root, m.orange, 0.2, 0.08, 0.15, x + 0.92, 0.94, -0.95); for (let q = 0; q < 4; q++) cyl(root, m.stainless, 0.011, 0.14, x + 0.86 + q * 0.03, 0.99, -0.95, 'x', 10); // fixture, pipe tray
+    box(root, m.sheet, 0.35, 0.6, 0.4, x + 0.95, 0.3, -1.3); box(root, m.screen, 0.14, 0.08, 0.004, x + 0.95, 0.5, -1.098); cyl(root, m.black, 0.006, 1.0, x + 0.6, 0.6, -1.0, 'y', 6);  // welder
+    prof(root, [x + 1.15, 0.06, -1.5], [x + 1.15, 2.2, -1.5], 0.06, m.frameDark); cyl(root, m.yellow, 0.05, 0.9, x + 0.95, 2.1, -1.15, 'z', 12); cyl(root, m.sheet, 0.1, 0.12, x + 0.8, 1.75, -0.72, 'y', 16);  // fume arm
+    const arms = opWorker(root, nm, x, -0.72, 0); const tc = G(nm + '_Torch', arms._Arm_R, 0, -0.72, 0.03); cyl(tc, m.black, 0.016, 0.16, 0, 0, 0, 'y', 10); cyl(tc, m.steel, 0.009, 0.08, 0, -0.1, 0.02, 'y', 8);
+    const ar = G(nm + '_Arc', tc); bin(ar, arcM, xf(new THREE.SphereGeometry(0.018, 10, 8), 0, -0.15, 0.03)); });
+  // 5. C/F final inspection (x 12.75 → check fixture at x 13.45) and DMC marking / packing (x 14.15; the shipping pallet stands behind this operator)
+  leg4(root, 13.45, -0.3, 0.5, 0.45, 0.9); box(root, clampM, 0.3, 0.02, 0.18, 13.45, 0.91, -0.3);
+  for (const s of [-1, 1]) prof(root, [13.45 + s * 0.2, 0.9, -0.12], [13.45 + s * 0.2, 1.4, -0.12], 0.03); box(root, m.aluDark, 0.46, 0.04, 0.06, 13.45, 1.42, -0.12);
+  { const cc = G('CF_Clamp', root); box(cc, m.yellow, 0.3, 0.03, 0.2, 13.45, 1.12, -0.3); cyl(cc, m.steel, 0.012, 0.28, 13.45, 1.27, -0.2, 'y', 8); for (const s of [-1, 1]) cyl(cc, m.steel, 0.006, 0.1, 13.45 + s * 0.1, 1.06, -0.3, 'y', 8); }
+  lamp(root, 13.72, -0.5, 0.9, 'CF_OK'); box(root, m.black, 0.25, 0.18, 0.04, 13.15, 1.25, -0.5); box(root, m.screen, 0.22, 0.14, 0.004, 13.15, 1.25, -0.478);
+  leg4(root, 14.15, 0.05, 0.6, 0.45, 0.9); box(root, m.black, 0.32, 0.3, 0.3, 14.15, 1.33, 0.12); box(root, m.black, 0.06, 0.4, 0.06, 14.15, 1.1, 0.25); box(root, m.glass, 0.3, 0.2, 0.002, 14.15, 1.08, -0.1);   // DMC laser marker
+  { const lz = G('DMC_Laser', root); cyl(lz, std('laser_red', 0xff3020, 0, 0.3, { emissive: 0xff2010, emissiveIntensity: 3 }), 0.003, 0.2, 14.15, 1.08, 0.05, 'y', 6); }
+  box(root, m.black, 0.25, 0.4, 0.2, 14.55, 1.1, 0.25); box(root, m.screen, 0.2, 0.3, 0.004, 14.55, 1.15, 0.148);
+  opWorker(root, 'Op_CF', 12.75, -0.72, 0); opWorker(root, 'Op_Pack', 14.15, -0.72, 0);
+
+  // ---- keys
+  const ease = u => u * u * (3 - 2 * u), ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
+  const ser = (evs, rest) => { evs = evs.slice().sort((a, b) => a[0] - b[0]);
+    const f = t => { let k = -1; while (k + 1 < evs.length && evs[k + 1][0] <= t) k++; if (k < 0) return rest; if (k === evs.length - 1) return evs[k][1]; const [t0, v0] = evs[k], [t1, v1] = evs[k + 1]; return v0 + (v1 - v0) * ease(t1 > t0 ? (t - t0) / (t1 - t0) : 1); };
+    return [[0, f(0)], ...evs.filter(e => e[0] > 0 && e[0] < T), [T, f(T)]]; };
+  const vis = (evs, v0) => { evs = evs.slice().sort((a, b) => a[0] - b[0]); let s = v0; for (const [t, v] of evs) if (t <= 0) s = v; return [[0, s], ...evs.filter(e => e[0] > 0 && e[0] < T)]; };
+  const R = -0.15, F = -0.9, TAU = Math.PI * 2;
+  const reach = (op, t0, t1, a = F) => { add(op + '_Arm_R', 'rx', [[t0, R], [t0 + 0.5, a], [t1 - 0.5, a], [t1, R]]); add(op + '_Arm_L', 'rx', [[t0, R], [t0 + 0.5, a + 0.1], [t1 - 0.5, a + 0.1], [t1, R]]); };
+  const turn = (op, list) => add(op + '_Turn', 'ry', list);
+  const PT = [-0.8, 0.68, -1.3], ST = [0.85, 0.9, -0.25], CH = [1.75, 0.93, 0], PJ = [PX, TA - YC, 0], CFP = [13.45, 0.92, -0.3], DM = [14.15, 0.92, 0.05], PAL = [14.15, 0.9, -1.35];
+  const drops = [], picks = [];
+  for (let n = -1; n <= 1; n++) for (let i = 0; i < N; i++) {
+    const s = i * PW + n * T, PN = 'Part_' + (i + 1), P = [], at = (t, p) => P.push([s + t, p]);
+    // 1. TIG
+    turn('Op_Tig', [[s + 1.0, 0], [s + 1.6, -2.2], [s + 1.9, -2.2], [s + 3.2, 0], [s + 4.2, 0], [s + 4.9, -0.95], [s + 5.3, -0.95], [s + 6.0, 0], [s + 18.4, 0], [s + 19.4, 0.9], [s + 20.0, 0.9], [s + 21.0, 0]]);
+    reach('Op_Tig', s + 1.0, s + 4.0, -0.75); reach('Op_Tig', s + 4.4, s + 6.5); reach('Op_Tig', s + 17.6, s + 20.6);
+    at(1.6, PT); at(2.6, [-0.35, 1.2, -0.4]); at(3.4, [0, 1.2, 0]); at(3.9, PJ.map((v, k) => k === 0 ? 0 : v));
+    add(PN + '_Core', 'vis', [[s + 0.5, true], [s + 6.2, false]]); add(PN + '_Body', 'vis', [[s + 0.5, false], [s + 6.2, true]]);
+    add('Tig_Screen', 'y', [[s + 6.6, 0.9], [s + 7.4, 0], [s + 16.8, 0], [s + 17.6, 0.9]]);
+    for (const sd of ['L', 'R']) { add('Tig_Torch_' + sd, 'y', [[s + 7.6, 0], [s + 8.2, -0.06], [s + 16.3, -0.06], [s + 16.9, 0]]); add('Tig_Arc_' + sd, 'vis', [[s + 8.3, true], [s + 16.3, false]]);
+      add('Tig_Chuck_' + sd, 'rx', [[s + 8.3, 0], [s + 16.3, TAU], [s + 16.31, 0]]); }
+    add(PN + '_R', 'rx', [[s + 8.3, 0], [s + 16.3, TAU], [s + 16.31, 0]]); add(PN + '_TBead', 'vis', [[s + 0.5, false], [s + 16.3, true]]);
+    at(18.2, [0, PJ[1], 0]); at(18.8, [0.3, 1.15, -0.1]); at(19.8, [ST[0], 1.0, ST[2]]); at(20.3, ST);
+    // 2. pressure test
+    turn('Op_Test', [[s + 21.4, 0], [s + 22.2, -1.06], [s + 22.5, -1.06], [s + 23.8, 0], [s + 37.9, 0], [s + 38.8, 0.75], [s + 39.3, 0.75], [s + 40.2, 0]]);
+    reach('Op_Test', s + 21.8, s + 25.0); reach('Op_Test', s + 36.9, s + 40.0);
+    at(22.4, ST); at(23.0, [1.2, 1.15, -0.3]); at(24.0, [1.75, 1.25, 0]); at(24.6, CH);
+    add('Test_Lid', 'y', [[s + 24.8, 0.3], [s + 25.6, 0], [s + 35.8, 0], [s + 36.6, 0.3]]); add('Test_OK', 'vis', [[s + 35.4, true], [s + 38.4, false]]);
+    at(37.4, CH); at(38.0, [1.75, 1.25, 0]); at(39.0, [2.45, 1.0, 0]); at(39.5, [2.45, BT, 0]);
+    // 3. robot MIG
+    at(43.0, [3.55, BT, 0]);
+    turn('Op_Rob', [[s + 42.6, 0], [s + 43.4, -0.81], [s + 43.7, -0.81], [s + 45.0, 0], [s + 46.0, 0], [s + 46.8, 0.95], [s + 47.1, 0.95], [s + 47.8, 0], [s + 63.9, 0], [s + 64.7, 0.81], [s + 65.1, 0.81], [s + 66.0, 0]]);
+    reach('Op_Rob', s + 43.0, s + 46.0); reach('Op_Rob', s + 46.4, s + 48.4); reach('Op_Rob', s + 63.0, s + 65.8);
+    at(43.6, [3.55, BT, 0]); at(44.2, [3.75, 1.2, -0.2]); at(45.2, [PX, 1.2, 0]); at(45.7, PJ);
+    add(PN + '_Flange', 'vis', [[s + 0.5, false], [s + 48.0, true]]);
+    const t0 = s + 48.8;
+    if (robotPath) { const AXN = ['ry', 'rz', 'rz', 'rz', 'ry', 'rz'], rp = robotPath;
+      rig.J.forEach((j, q) => add(j.name, AXN[q], [[t0 - 0.01, 0], ...rp.wp.map(([t, v]) => [t0 + t, v[q] - rp.rest[q]]), [t0 + rp.T + 0.01, 0]]));
+      for (const [a, b, sd] of [['arcA', 'arcAend', 'A'], ['arcB', 'arcBend', 'B']]) { add('Mig_Robot_Arc', 'vis', [[t0 + rp.ev[a], true], [t0 + rp.ev[b], false]]);
+        add('Pos_Chuck', 'rx', [[t0 + rp.ev[a], 0], [t0 + rp.ev[b], TAU], [t0 + rp.ev[b] + 0.01, 0]]); add(PN + '_R', 'rx', [[t0 + rp.ev[a], 0], [t0 + rp.ev[b], TAU], [t0 + rp.ev[b] + 0.01, 0]]);
+        add(PN + '_FBead' + sd, 'vis', [[s + 0.5, false], [t0 + rp.ev[b], true]]); } }
+    at(63.6, PJ); at(64.2, [PX, 1.2, 0]); at(65.0, [5.0, 1.05, 0]); at(65.4, [5.05, BT, 0]);
+    // 4. manual MIG booth k (round robin)
+    const bx = BX[i % 3], op = 'Op_Mig_' + (i % 3 + 1), a = 65.4 + (bx - 5.05) / 0.3;
+    at(a, [bx, BT, 0]);
+    turn(op, [[s + a + 0.3, 0], [s + a + 1.6, Math.PI / 2], [s + a + 57.4, Math.PI / 2], [s + a + 58.8, 0]]);
+    reach(op, s + a - 0.4, s + a + 2.6); reach(op, s + a + 3.0, s + a + 5.2, -0.8); reach(op, s + a + 56.6, s + a + 60.0);
+    const W4 = [[6, 16], [19, 29], [32, 42], [45, 55]];
+    for (const [w0, w1] of W4) { add(op + '_Arm_R', 'rx', [[s + a + w0 - 0.8, R], [s + a + w0, -0.85], [s + a + (w0 + w1) / 2, -0.7], [s + a + w1, -0.85], [s + a + w1 + 0.8, R]]); add(op + '_Arm_L', 'rx', [[s + a + w0 - 0.8, R], [s + a + w0, -0.6], [s + a + w1, -0.6], [s + a + w1 + 0.8, R]]); add(op + '_Arc', 'vis', [[s + a + w0, true], [s + a + w1, false]]); }
+    at(a + 0.2, [bx, BT, 0]); at(a + 0.8, [bx, 1.2, -0.3]); at(a + 1.6, [bx + 0.5, 1.15, -0.72]); at(a + 2.0, [bx + 0.75, 0.92, -0.72]);
+    add(PN + '_Pipes', 'vis', [[s + 0.5, false], [s + a + 4.6, true]]); add(PN + '_PBead', 'vis', [[s + 0.5, false], [s + a + 55, true]]);
+    at(a + 57.0, [bx + 0.75, 0.92, -0.72]); at(a + 57.8, [bx + 0.5, 1.2, -0.72]); at(a + 58.8, [bx, 1.2, -0.3]); at(a + 59.4, [bx, BT, 0]);
+    const c = a + 59.4 + (12.75 - bx) / 0.3; at(c, [12.75, BT, 0]);
+    // 5. C/F → DMC → carton on the pallet
+    turn('Op_CF', [[s + c + 0.4, 0], [s + c + 1.4, 1.03], [s + c + 1.9, 1.03], [s + c + 2.8, 0]]); reach('Op_CF', s + c - 0.4, s + c + 2.6);
+    at(c + 0.2, [12.75, BT, 0]); at(c + 0.8, [12.9, 1.2, -0.2]); at(c + 1.5, [13.45, 1.1, -0.3]); at(c + 1.9, CFP);
+    add('CF_Clamp', 'y', [[s + c + 2.2, 0], [s + c + 2.8, -0.08], [s + c + 9.5, -0.08], [s + c + 10.1, 0]]); add('CF_OK', 'vis', [[s + c + 9.6, true], [s + c + 12.6, false]]);
+    turn('Op_Pack', [[s + c + 10.2, 0], [s + c + 11.0, -1.03], [s + c + 11.3, -1.03], [s + c + 12.2, 0], [s + c + 17.8, 0], [s + c + 19.4, Math.PI], [s + c + 20.6, Math.PI], [s + c + 22.0, 0]]);
+    reach('Op_Pack', s + c + 10.4, s + c + 13.2); reach('Op_Pack', s + c + 16.6, s + c + 21.0, -0.75);
+    at(c + 11.0, CFP); at(c + 11.6, [13.8, 1.2, -0.35]); at(c + 12.4, [14.15, 1.2, 0]); at(c + 12.8, DM);
+    add('DMC_Laser', 'vis', [[s + c + 13.4, true], [s + c + 16.4, false]]);
+    at(c + 17.2, DM); at(c + 17.8, [14.15, 1.25, -0.2]); at(c + 19.4, [14.15, 1.2, -1.2]); at(c + 20.2, PAL);
+    const d = c + 20.4; if (n === 0) { drops.push(((s + d) % T + T) % T); picks.push(((s + 1.6) % T + T) % T); }
+    add(PN, 'vis', [[s + 1.6, true], [s + d, false]]);
+    at(d + 0.05, PT);
+    for (const [cc, k] of [['x', 0], ['y', 1], ['z', 2]]) add(PN + '_' + cc.toUpperCase(), cc, P.map(([t, p]) => [t, p[k]]));
+  }
+  for (let i = 0; i < N; i++) { // part nodes: X > Y > Z > Part (shown while in the line) > R (turns about the body axis) > looks
+    const PN = 'Part_' + (i + 1), x = G(PN + '_X', root), y = G(PN + '_Y', x), z = G(PN + '_Z', y), p = G(PN, z), r = G(PN + '_R', p, 0, YC, 0), lk = G(PN + '_Look', r, 0, -YC, 0);
+    lookCore(G(PN + '_Core', lk)); lookBody(G(PN + '_Body', lk)); lookTBead(G(PN + '_TBead', lk)); lookFlange(G(PN + '_Flange', lk));
+    lookFBead(G(PN + '_FBeadA', lk), -1); lookFBead(G(PN + '_FBeadB', lk), 1); lookPipes(G(PN + '_Pipes', lk)); lookPBead(G(PN + '_PBead', lk));
+  }
+  root.userData.weld = { drops: drops.sort((a, b) => a - b).map(v => +v.toFixed(2)), picks: picks.sort((a, b) => a - b).map(v => +v.toFixed(2)) };
+  const keys = [];
+  for (const [key, evs] of Object.entries(ch)) {
+    const [node, c] = key.split('|');
+    if (c === 'vis') keys.push([node, 'vis', vis(evs, /_(Arc|Arc_[LR])$|^Mig_Robot_Arc$|^(Test_OK|CF_OK|DMC_Laser)$|^Part_\d+$|_(Body|TBead|Flange|FBead[AB]|Pipes|PBead)$/.test(node) ? false : true)]);
+    else keys.push([node, c, ser(evs, /_Arm_/.test(node) ? R : 0)]);
+  }
+  return cycleClip(finalize(root), 'Weld_Cycle', T, keys, 4);
+}
+
 function brazedCore() { // vacuum-brazed core (semi-finished): stainless core 180 × 70 × 90 with both gas tanks, brazing tint
   const m = materials(), root = G('Brazed_Core'), mt = std('brazed_stainless', 0xa49580, 0.9, 0.36);
   box(root, mt, 0.18, 0.07, 0.09, 0, 0.035, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(root, mt, 0.004, 0.074, 0.094, x, 0.035, 0); for (const sx of [-1, 1]) box(root, mt, 0.02, 0.06, 0.07, sx * 0.1, 0.035, 0);
@@ -1350,7 +1559,7 @@ function toteGrid(name, item, L, W, H) { // tote holding 8 parts in a grid (2 al
 export const MODELS = {
   tote_blanks4: () => { const r = G('Tote_Blanks_4'); r.add(tote()); for (let i = 0; i < 4; i++) box(r, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); return finalize(r); }, /* 4 kits (line A) */
   tote_blanks: () => { const r = G('Tote_Blanks'); r.add(tote()); for (let i = 0; i < 8; i++) box(r, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); return finalize(r); }, /* 8 kits of plate blanks */
-  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ pitch: 64, kits: 4, mirror: true }), /* line A: a tote of 4 kits per 256 s; lifts towards line B */ pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
+  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ pitch: 64, kits: 4, mirror: true }), /* line A: a tote of 4 kits per 256 s; lifts towards line B */ egr_weld_line: egrWeldLine, pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,

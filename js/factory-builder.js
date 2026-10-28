@@ -642,7 +642,7 @@
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
-    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line|egr_core_line|egr_core_line_manual)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
+    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line|egr_core_line|egr_core_line_manual|egr_weld_line)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
     if (/^e3_fr\d+$/.test(k) || k === 'arm') return ['equip', 'arm'];
     if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];

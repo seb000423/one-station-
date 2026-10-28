@@ -1,11 +1,11 @@
 """Builds assets/layouts/egr-factory.json, ONE BUILDER's default example: one 64 x 40 m hall (8 m eave) around the EGR
 cooler line, every part at real scale, with material flowing through it continuously:
 
-  inbound dock  --AGV-->  AS/RS cell (two rack rows, stacker crane, I/O loop: totes circulate rack → pick station → rack)
-  -> EGR auto line: pick -> Ni paste dispensing -> drying / sintering -> vision + NG -> insert moulding  --AMR-->
-  assembly parts supply -> manual assembly / leak test / inspection-packing benches (south)  --weighing AMR-->  assembled
-  --forklift-->  finished-goods racks  --forklift-->  shipping dock
-The brazed core is a semi-finished part: it only reaches the racks after assembly and the leak test.
+  north shutter  --AGV-->  AS/RS cells (plate kits)  ->  two EGR core lines (A: manual paste, B: ONE STATION robot cell):
+  process inspection -> core stacking -> Ni paste (six lines) -> vacuum brazing -> vision + NG  --AMR-->
+  welding line (south): Body TIG -> 1st pressure test -> robot MIG -> three manual MIG booths -> C/F final inspection -> DMC, carton
+  on the shipping pallet  --forklift-->  finished-goods rack  --forklift-->  shipping dock
+The brazed core is a semi-finished part: it only reaches the rack as a finished, packed cooler.
 
 Building: clad walls with a window band, two sectional doors (inbound south-west, shipping south-east), H columns on a
 6 m grid, two 20 m roof spans with trusses, purlins, skylights and LED high-bays (js/factory-kit.js).
@@ -104,23 +104,20 @@ add('rack', '완제품 랙 A', 22, -17.9, 0, {'bays': 4, 'levels': 3, 'bayWidth'
 add('rack', '완제품 랙 B', 22, -14.4, 0, {'bays': 4, 'levels': 3, 'bayWidth': 2.7, 'depth': 1.1, 'levelHeight': 2.0, 'perSlot': 2, 'fill': 45, 'load': 'carton'})
 model('리치 지게차 (대기)', 'uw_reachlift', 29.0, -16.2, PI2)
 
-# ---------------------------------------------------------------- downstream (south): the brazed core is semi-finished; it goes to assembly (flanges, pipes, bracket) and
-# leak test (gas / coolant side), then DMC marking, final inspection and packing (8 coolers per 600 × 400 × 300 carton) onto the shipping
-# pallet, and only then to the finished-goods area. Benches face south (rot π), operators sit on the lane side at z 11.22.
+# ---------------------------------------------------------------- downstream (south): the brazed core is semi-finished; the welding line turns it into the cooler:
+# Body TIG (shell over the core) → 1st pressure test → robot MIG (gas flanges) → three manual MIG booths (coolant pipes, bracket) → C/F final
+# inspection → DMC marking → carton (8 coolers, 600 × 400 × 300) on the shipping pallet behind the packing operator. One baked model
+# (Weld_Cycle 512 s, 21 coolers: the good output of both core lines, one every 24.38 s); its origin sits at (WX0, WZ), its box is centred on
+# (x 6.87, z −0.305) in model space. Operators stand on the lane side (−Z).
 NL, SL = -8.0, 8.0                   # lanes: eastbound north (south of line B), westbound south
-BZ, OPZ = 12.0, 11.22
-PER = round(512 / 21, 3)                               # A: 7 good cores per 512 s, B: 14 → one every 24.381 s on average
-def cell(x0, kinds, cycle, names):
-    out = []
-    for (kind, dx, side, ph), nm in zip(((kinds[0], -1.1, -1, 0), (kinds[1], 1.1, 1, round(cycle / 2, 3))), names):
-        out.append(add('bench', nm, x0 + dx, BZ, math.pi, {'kind': kind, 'length': 1.2, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': cycle, 'side': side, 'phase': ph}))
-    return out
-AX = -7.0; ACYC = round(2 * PER, 3)                    # two stations, each assembles and leak-tests one cooler per 48.8 s
-asm = cell(AX, ('assembly', 'leak'), ACYC, ('조립 (플랜지 · 파이프 · 브래킷)', '리크 테스트 (가스 · 냉각수)'))
-for nm, x in (('조립 스테이션', AX - 1.1), ('리크 테스트 스테이션', AX + 1.1)): zone(nm, 'storage', x, BZ + 0.75, w=1.2, d=0.4)
-PX = 4.0                                              # DMC marking, final inspection, packing: the operator lays each cooler into the carton on the pallet beside the bench
-zone('DMC · 최종 검사 · 포장 스테이션', 'storage', PX, BZ + 0.75, w=1.4, d=0.4)
-pack = add('bench', 'DMC 각인 · 최종 검사 · 포장', PX, BZ, math.pi, {'kind': 'pack', 'length': 1.2, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': PER, 'side': -1, 'phase': 0})
+WX0, WZ = -10.0, 12.35
+PW = 512 / 21
+model('EGR 용접 라인 (Body TIG → 강압 검사 → 로봇 MIG → 수동 MIG → C/F → 포장)', 'e3_egr_weld_line', WX0 + 6.87, WZ - 0.305)
+WELD_PICK = [round(1.6 + i * PW, 2) for i in range(21)]                    # the TIG operator takes core i out of the tote (mirrors egrWeldLine in models.js)
+WELD_DROP = sorted(round((170.867 + i * PW) % 512, 2) for i in range(21))   # the packing operator lays cooler i into the carton on the pallet
+for nm, dx, w in (('Body TIG 용접 셀', 0, 1.4), ('1차 강압 검사', 1.75, 1.2), ('로봇 MIG 용접 셀', 4.3, 1.4), ('수동 MIG 작업대 1', 6.95, 1.5), ('수동 MIG 작업대 2', 8.95, 1.5),
+                  ('수동 MIG 작업대 3', 10.95, 1.5), ('C/F 최종 검사', 13.1, 1.0), ('DMC 각인 · 포장', 14.15, 1.0)):
+    zone(nm, 'storage', WX0 + dx, WZ + 1.4, w=w, d=0.4)
 
 # ---------------------------------------------------------------- zones (stock kept: AMRs wait when a pickup is empty / a drop-off is full)
 # the AMR leaves with the 7 good cores of two furnace batches (one 256 s cycle) and always right before a 110 s gap, so the next AMR is in place
@@ -128,13 +125,11 @@ pack = add('bench', 'DMC 각인 · 최종 검사 · 포장', PX, BZ, math.pi, {'
 for k, L in LINES.items():   # the AMR leaves with the 7 good cores of one clip (two furnace batches), right before the long gap; 2 cores of the previous run are in it at start
     cz = zone(f'브레이징 코어 적재 (라인 {k})', 'pickup', *L['out'], w=0.8, d=1.2, track=True, stock=2, cap=16, supplyAt=L['good'], supplyPeriod=8 * L['P'], unitKg=0.9, thresholdKg=6.3, unit='part', load='e3_brazed_core')
     cz['perm'] = {'amr': True}
-az = zone('조립 · 리크 완료 적재', 'pickup', AX, OPZ, w=0.9, d=1.2, track=True, stock=0, cap=16, supplyAt=[round(ACYC - 2.5, 3), round(ACYC / 2 - 2.5, 3)], supplyPeriod=ACYC, unitKg=1.5, thresholdKg=12, unit='part', load='e3_egr_cooler')
-az['perm'] = {'amr': True}
-zone('조립 투입대 (브레이징 코어)', 'dropoff', AX - 2.3, 11.05, w=0.7, d=0.5, track=True, stock=1, cap=3, consume=round(8 * PER, 1), unit='tote', standH=0.62, load='e3_tote_brazed')
-zone('포장 투입대 (EGR 쿨러)', 'dropoff', PX - 1.2, 11.05, w=0.7, d=0.5, track=True, stock=1, cap=3, consume=round(8 * PER, 1), unit='tote', standH=0.62, load='e3_tote_coolers')
-# the shipping pallet is built beside the packing bench: a carton per 8 coolers, 2 layers of 4 (64 coolers); the forklift's forks enter it 1.16 m ahead of its stop
-PALX, PALZ = PX + 1.35, 11.4
-zone('출하 팔레트 적재', 'pickup', PALX, PALZ, w=1.4, d=1.4, track=True, stock=40, cap=64, supplyAt=[round(PER - 2.5, 3)], supplyPeriod=PER, unitKg=1.5, thresholdKg=96, unit='pallet', perBox=8, layers=2, load='e3_pack_box')
+# the input stand: a core AMR rolls a tote of 7 brazed cores onto it; the tote is done when the TIG operator has taken its 7th core
+zone('용접 투입대 (브레이징 코어)', 'dropoff', WX0 - 0.8, r3(WZ - 1.3), w=0.7, d=0.5, track=True, stock=2, cap=3, consumeAt=[WELD_PICK[6], WELD_PICK[13], WELD_PICK[20]], consumePeriod=512, unit='tote', standH=0.62, load='e3_tote_brazed')
+# the shipping pallet stands behind the packing operator: a carton per 8 coolers, 2 layers of 4 (64 coolers); the forklift's forks enter it 1.16 m ahead of its stop
+PALX, PALZ = WX0 + 14.15, r3(WZ - 1.75)
+zone('출하 팔레트 적재', 'pickup', PALX, PALZ, w=1.4, d=1.4, track=True, stock=40, cap=64, supplyAt=WELD_DROP, supplyPeriod=512, unitKg=1.5, thresholdKg=96, unit='pallet', perBox=8, layers=2, load='e3_pack_box')
 # finished goods: a pallet rack facing the lane; the packing forklift puts each pallet into the middle bay on the bottom deck (0.21 m), the
 # shipping forklift takes it out again
 FGX, FGZ = 14.0, -11.3
@@ -152,12 +147,12 @@ for k, ex, zz in (('A', EXA, AZA + 1.6), ('B', EXB, AZB - 1.6)):
 zone('부품 상자 입고 B (북 셔터)', 'pickup', NDOOR - 1.2, -18.75, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=120, unit='tote', standH=0.62, load='e3_tote_blanks')    # trucks bring them
 zone('부품 상자 입고 A (북 셔터)', 'pickup', NDOOR - 0.4, -18.75, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=120, unit='tote', standH=0.62, load='e3_tote_blanks4')
 zone('빈 상자 반납 (북 셔터)', 'dropoff', NDOOR + 0.6, -18.75, w=0.7, d=0.6, track=True, stock=0, cap=3, consume=60, unit='tote', standH=0.62, load='e3_tote_600x400')
-PARK = {'코어 A': (5.6, -15.0), '코어 B': (0.6, -8.9), '조립품': (AX + 2.6, 10.2), '포장 지게차': (9.4, 11.6)}
+PARK = {'코어 A': (5.6, -15.0), '코어 B': (0.6, -8.9), '포장 지게차': (9.4, 11.6)}
 for nm, (x, z) in PARK.items():
     zone(nm + (' 대기' if '지게차' in nm else ' AMR 대기'), 'storage', x, z, w=1.4 if '지게차' in nm else 1.0, d=1.4 if '지게차' in nm else 1.0)
 
 # ---------------------------------------------------------------- AMR network and movers
-north = sorted({0.0, 0.6, OXB, 3.2, 4.4, 11.64, FGX}); south = sorted({AX, AX - 2.3, AX + 2.6, PX - 1.2, PALX, 9.4, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers
+north = sorted({0.0, 0.6, OXB, 3.2, 4.4, 11.64, FGX}); south = sorted({WX0 - 0.8, PALX, 9.4, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers
 route('순환 경로', [(-28, NL)] + [(x, NL) for x in north] + [(28, NL), (28, SL)] + [(x, SL) for x in south] + [(-28, SL), (-28, NL)], oneway=True)
 route('남행 연결로', [(11.64, NL), (11.64, SL)], oneway=True)
 route('북행 연결로', [(0.0, SL), (0.0, NL)], oneway=True)
@@ -172,10 +167,7 @@ route('자동창고 입고 통로', [(NDOOR, -18.0), (NDOOR, -13.9), (4.4, -13.9
 for x in (LIFT_IN, LIFT_OUT):
     route('도킹', [(x, -13.2), (x, -13.85)]); route('도킹', [(x, -13.2), (x, -12.55)])
 route('도킹', [(4.4, -15.0), (5.6, -15.0)])                 # line A's second core AMR waits here
-route('도킹', [(AX, SL), (AX, OPZ)])                        # between the two operators of the assembly cell
-for x in (AX - 2.3, PX - 1.2):
-    route('도킹', [(x, SL), (x, 10.4)])
-route('도킹', [(AX + 2.6, SL), (AX + 2.6, 9.6)])
+route('도킹', [(WX0 - 0.8, SL), (WX0 - 0.8, 10.4)])            # the core AMRs roll their tote onto the welding line's input stand
 route('도킹', [(PALX, SL), (PALX, r3(PALZ - 1.16))])        # forklift: forks into the pallet beside the packing bench
 route('도킹', [(9.4, SL), (9.4, 10.6)])                      # the packing forklift waits here until the pallet is full
 route('셔터 통로', [(DOORS[1], SL), (DOORS[1], 16.4)])
@@ -184,11 +176,7 @@ stop = lambda at, act, dwell=8: {'at': ref[at], 'act': act, 'dwell': dwell}
 deck = lambda name, x, z, stops: add('amr', name, x, z, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.2, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400', 'stops': stops})
 for ln, starts in (('A', ((-4.0, NL), (14.0, SL))), ('B', ((-2.0, NL), (12.0, SL)))):
     for k, (x, z) in enumerate(starts):
-        deck(f'코어 AMR {ln}{k + 1}', x, z, [stop(f'코어 {ln} AMR 대기', 'wait', 1), stop(f'브레이징 코어 적재 (라인 {ln})', 'wait', 1), stop(f'브레이징 코어 적재 (라인 {ln})', 'load', 4), stop('조립 투입대 (브레이징 코어)', 'unload', 6)])
-for k, (x, z) in enumerate(((-12.0, SL), (6.0, SL))):
-    deck(f'조립품 AMR {k + 1}', x, z, [stop('조립품 AMR 대기', 'wait', 1), stop('조립 · 리크 완료 적재', 'wait', 1), stop('조립 · 리크 완료 적재', 'load', 4), stop('포장 투입대 (EGR 쿨러)', 'unload', 6)])
-for bnch in asm: bnch['params']['feeds'] = ref['조립 · 리크 완료 적재']
-pack['params']['feeds'] = ref['출하 팔레트 적재']
+        deck(f'코어 AMR {ln}{k + 1}', x, z, [stop(f'코어 {ln} AMR 대기', 'wait', 1), stop(f'브레이징 코어 적재 (라인 {ln})', 'wait', 1), stop(f'브레이징 코어 적재 (라인 {ln})', 'load', 4), stop('용접 투입대 (브레이징 코어)', 'unload', 6)])
 fork = lambda name, x, z, stops: add('amr', name, x, z, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'e3_pack_box', 'layers': 2, 'stops': stops})
 ex = lambda k: [stop(f'부품 상자 입고 {k} (북 셔터)', 'load', 5), stop(f'자동창고 {k} 입고 리프트', 'unload', 5), stop(f'자동창고 {k} 반출 리프트', 'load', 5), stop('빈 상자 반납 (북 셔터)', 'unload', 5)]
 add('amr', '자동창고 입고 AGV', NDOOR, -16.0, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 5, 'load': 'e3_tote_blanks', 'loads': ['e3_tote_blanks', 'e3_tote_blanks4', 'e3_tote_600x400'], 'stops': ex('A') + ex('B')})
@@ -200,6 +188,6 @@ out = os.path.join(ROOT, 'assets/layouts/egr-factory.json')
 with open(out, 'w', encoding='utf-8') as f: json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 idx = os.path.join(ROOT, 'assets/layouts/index.json')
 with open(idx, encoding='utf-8') as f: examples = [e for e in json.load(f) if e['file'] != 'egr-factory.json']
-examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · A/B 비교: 라인 A 작업자 수동 도포 / 라인 B ONE STATION 자동 도포 · 자동창고 → 프레스 → 코어 적층 → 도포 → 진공 브레이징 → 검사 · NG → AMR → 조립 · 리크 테스트 → DMC · 포장 (팔레트) → 지게차 → 완제품 → 출하'})
+examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · A/B 비교: 라인 A 작업자 수동 도포 / 라인 B ONE STATION 자동 도포 · 자동창고 → 공정검사 → 코어 적층 → 도포 → 진공 브레이징 → 검사 · NG → AMR → Body TIG → 1차 강압 검사 → 로봇 MIG → 수동 MIG → C/F 최종 검사 → DMC · 포장 (팔레트) → 지게차 → 완제품 → 출하'})
 with open(idx, 'w', encoding='utf-8') as f: json.dump(examples, f, ensure_ascii=False)
 print(out, len(objects), 'objects')
