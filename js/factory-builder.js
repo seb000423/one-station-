@@ -124,7 +124,8 @@
   function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
   // a document with only the supported types; returns how many objects were dropped
   function sanitize(d) {
-    const objects = (d.objects || []).filter(o => o && KEEP.includes(o.type) && window.FactoryElements.TYPES[o.type]);
+    const U = window.FactoryUnity, known = o => o.type !== 'ufmodel' || !U || !(o.params || {}).model || (o.params.items && o.params.items.length) || U.CATALOG[(U.ALIAS || {})[o.params.model] || o.params.model]; // models removed from the catalog (e.g. the Unity 2.3 / 4.6 m belts) are dropped
+    const objects = (d.objects || []).filter(o => o && KEEP.includes(o.type) && window.FactoryElements.TYPES[o.type] && known(o));
     return { doc: { version: 2, factory: { ...FACTORY_DEFAULT, ...(d.factory || {}) }, objects: clone(objects) }, dropped: (d.objects || []).length - objects.length };
   }
   const emptyDoc = () => ({ version: 2, factory: { ...FACTORY_DEFAULT }, objects: [] });
