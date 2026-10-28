@@ -708,7 +708,7 @@ function pressLine() {
 // on its rail, a U-shaped I/O loop at the −X end (outfeed → pick station → infeed, 1.25 m). Two totes circulate: every 32 s the crane
 // drops the tote it retrieved onto the outfeed, takes the one coming back off the infeed, stores it in the slot emptied last time and
 // fetches the next. Four slots rotate, so every rack slot visibly empties and fills; nothing appears or vanishes anywhere else.
-function asrsCell() {
+function asrsCell(o = {}) {
   const m = materials(), root = G('ASRS_Cell'), body = G('ASRS_Cell_Body', root, -4.2, 0, 0);
   const P = 32, T = 4 * P, RZ = 0.95, LV = [1.5, 3.0, 4.5, 6.0], TIO = 1.25, R = 0.45, XC = -3.3;
   const slotX = (b, p) => 2.35 + 2.7 * b + [-0.99, -0.33, 0.33, 0.99][p];
@@ -772,6 +772,7 @@ function asrsCell() {
     const clip = a => { a = a.filter(([t]) => t >= 0 && t <= T); return a; };
     const v = clip(vs).sort((a, b) => a[0] - b[0]);
     keys.push(['Loop_' + k + '_X', 'x', clip(xs)], ['Loop_' + k + '_Z', 'z', clip(zs)], ['Loop_' + k + '_Tote', 'vis', [[0, i === 1], ...v]]);
+    if (o.picks && !o.picks.includes(k)) return; // this tote's stacks are not picked (a line taking a kit every other visit)
     const sub = []; for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P; sub.push([s + 16, false], [s + 1.4 + 2 * P - 0.1, true]); } // top substrate: picked at 16, the next tote out has its own
     const sv4 = sub.filter(([t]) => t > 0 && t < T).sort((a, b) => a[0] - b[0]); keys.push(['Loop_' + k + '_Sub_4', 'vis', [[0, !sv4[0][1]], ...sv4]]);
   });
@@ -1063,6 +1064,8 @@ function packBox() { // 600 × 400 × 300 mm packing carton for 8 coolers (divid
 // paste on the seams → brazed core (jig off at the unloader). Core 6 of 8 fails the post-braze check.
 const CORE_T = 256, CORE_FIRST = 126; // furnace loads at 126 + 128 n
 function egrCoreLine(o = {}) {
+  // P: seconds between kits (32 on the AS/RS clock; 64 = every other tote visit); DT: dispensing time at the stop (auto 12 s, manual 40 s)
+  const P = o.pitch || 32, DT = o.manual ? 40 : 12, TT = 8 * P, A0 = 60 + (DT - 12), F0 = A0 + 2 + 2 * P;
   const m = materials(), root = G(o.manual ? 'EGR_Core_Line_Manual' : 'EGR_Core_Line_Auto'), BT = 0.855, BW = 0.5;
   const brazed = std('brazed_stainless', 0xa49580, 0.9, 0.36), clampM = std('jig_clamp', 0x2a2d31, 0.5, 0.45), glow = std('furnace_glow', 0xff7a1a, 0.0, 0.6, { emissive: 0xff5a00, emissiveIntensity: 2.4 });
   // part looks (origin at the part's bottom centre)
@@ -1167,20 +1170,20 @@ function egrCoreLine(o = {}) {
   const ease = u => u * u * (3 - 2 * u), ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
   const ser = (evs, rest) => { evs = evs.slice().sort((a, b) => a[0] - b[0]);
     const f = t => { let k = -1; while (k + 1 < evs.length && evs[k + 1][0] <= t) k++; if (k < 0) return rest; if (k === evs.length - 1) return evs[k][1]; const [t0, v0] = evs[k], [t1, v1] = evs[k + 1]; return v0 + (v1 - v0) * ease(t1 > t0 ? (t - t0) / (t1 - t0) : 1); };
-    return [[0, f(0)], ...evs.filter(e => e[0] > 0 && e[0] < CORE_T), [CORE_T, f(CORE_T)]]; };
-  const vis = (evs, v0) => { evs = evs.slice().sort((a, b) => a[0] - b[0]); let s = v0; for (const [t, v] of evs) if (t <= 0) s = v; return [[0, s], ...evs.filter(e => e[0] > 0 && e[0] < CORE_T)]; };
+    return [[0, f(0)], ...evs.filter(e => e[0] > 0 && e[0] < TT), [TT, f(TT)]]; };
+  const vis = (evs, v0) => { evs = evs.slice().sort((a, b) => a[0] - b[0]); let s = v0; for (const [t, v] of evs) if (t <= 0) s = v; return [[0, s], ...evs.filter(e => e[0] > 0 && e[0] < TT)]; };
   // trays: furnace cycle n starts at F = 126 + 128 n with tray n mod 2; the tray waits at the loader from F − 116, in the furnace F … F + 102,
   // at the unload table F + 106 … F + 125, back on the return line, at the loader again at F + 140 (= the cycle after next − 116)
-  const trayKeys = F => ({ x: [[F - 116, 7.375], [F, 7.375], [F + 4, FX], [F + 102, FX], [F + 106, 12.6], [F + 125, 12.6], [F + 127, 12.6], [F + 136, 7.375]], z: [[F + 125, 0], [F + 127, 1.25], [F + 136, 1.25], [F + 139, 0]] });
+  const trayKeys = F => ({ x: [[F - (4 * P - 12), 7.375], [F, 7.375], [F + 4, FX], [F + 102, FX], [F + 106, 12.6], [F + 125, 12.6], [F + 127, 12.6], [F + 136, 7.375]], z: [[F + 125, 0], [F + 127, 1.25], [F + 136, 1.25], [F + 139, 0]] });
   for (let n = -3; n < 4; n++) {
-    const F = CORE_FIRST + 128 * n, tk = trayKeys(F), i = ((n % 2) + 2) % 2;
+    const F = F0 + 4 * P * n, tk = trayKeys(F), i = ((n % 2) + 2) % 2;
     add('Tray_' + i + '_X', 'x', tk.x.map(([t, v]) => [t, v - 7.375])); add('Tray_' + i + '_Z', 'z', tk.z);
     add('Door_F', 'z', [[F - 1.5, 0], [F - 0.3, -1.9], [F + 4.4, -1.9], [F + 6, 0]]); add('Door_R', 'z', [[F + 100, 0], [F + 101.6, -1.9], [F + 106.4, -1.9], [F + 108, 0]]);
     for (const x of ['9_4', '10_1', '10_8']) add('Furnace_Glow_' + x, 'vis', [[F + 8, true], [F + 96, false]]);
   }
   const NG = 5, slotOff = s => -0.525 + 0.35 * s;
   for (let j = -9; j < 9; j++) {
-    const k = ((j % 8) + 8) % 8, P = 'Core_' + (k + 1), b = 32 * j + 16, ng = k === NG;
+    const k = ((j % 8) + 8) % 8, PN = 'Core_' + (k + 1), b = P * j + 16, ng = k === NG;
     // picker: top blank stack in the AS/RS tote → belt
     add('Picker_X', 'x', [[b - 2, 0], [b - 1, -1.3], [b + 0.8, -1.3], [b + 2.8, 0]]);
     add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.714 - 1.366)], [b, -(1.714 - 1.366)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.714 - BT)], [b + 3.8, -(1.714 - BT)], [b + 4.6, 0]]);
@@ -1190,22 +1193,22 @@ function egrCoreLine(o = {}) {
     add('Op_Stack_Arm_R', 'rx', [[b + 12.6, -0.15], [b + 13.6, -0.6], [b + 14.4, -0.95], [b + 15.6, -0.6], [b + 16.6, -0.95], [b + 18.0, -0.5], [b + 19.0, -0.95], [b + 21.6, -0.95], [b + 22.4, -0.15]]);
     add('Op_Stack_Turn', 'ry', [[b + 13, 0], [b + 13.8, -0.5], [b + 14.6, 0], [b + 15.6, -0.5], [b + 16.4, 0], [b + 18.6, 0.5], [b + 19.4, 0]]);
     // the core: belt → press → stacking → dispensing → loader pick point
-    const xs = [[b + 3.8, 0], [b + 4, 0], [b + 8, 1.2], [b + 10.6, 1.2], [b + 13, 2.8], [b + 22.6, 2.8], [b + 28, 4.6], [b + 41, 4.6], [b + 42.4, 6.4]];
-    add(P + '_Blank', 'vis', [[b + 3.8, true], [b + 9.3, false]]); add(P + '_Formed', 'vis', [[b + 3.8, false], [b + 9.3, true], [b + 17, false]]);
-    add(P + '_Core', 'vis', [[b + 3.8, false], [b + 17, true]]); add(P + '_Clamp', 'vis', [[b + 3.8, false], [b + 21, true]]);
-    const D = b + 29; [1, 2, 3].forEach(s => add(P + '_Paste_' + s, 'vis', [[b + 3.8, false], [D + 3.7 * s, true]]));
+    const xs = [[b + 3.8, 0], [b + 4, 0], [b + 8, 1.2], [b + 10.6, 1.2], [b + 13, 2.8], [b + 22.6, 2.8], [b + 28, 4.6], [b + 29 + DT, 4.6], [b + 30.4 + DT, 6.4]];
+    add(PN + '_Blank', 'vis', [[b + 3.8, true], [b + 9.3, false]]); add(PN + '_Formed', 'vis', [[b + 3.8, false], [b + 9.3, true], [b + 17, false]]);
+    add(PN + '_Core', 'vis', [[b + 3.8, false], [b + 17, true]]); add(PN + '_Clamp', 'vis', [[b + 3.8, false], [b + 21, true]]);
+    const D = b + 29, q = DT / 12; [1, 2, 3].forEach(s => add(PN + '_Paste_' + s, 'vis', [[b + 3.8, false], [D + 3.7 * s * q, true]]));
     if (!o.manual) {
       add('Align_Light', 'vis', [[D, true], [D + 0.4, false]]);
       add('Disp_X', 'x', [[D + 0.5, 0], [D + 1, -0.0625], [D + 4.2, -0.0625], [D + 4.7, 0], [D + 7.9, 0], [D + 8.4, 0.0625], [D + 11.6, 0.0625], [D + 12, 0]]);
       add('Disp_Z', 'z', [[D + 0.5, 0], [D + 1, -0.046], [D + 1.5, -0.046], [D + 3.7, 0.046], [D + 4.7, 0.046], [D + 7.4, -0.046], [D + 8.4, -0.046], [D + 11.1, 0.046], [D + 12, 0]]);
       add('Disp_Needle', 'y', [[D + 1, 0], [D + 1.5, -0.12], [D + 11.1, -0.12], [D + 11.6, 0]]);
     } else {
-      add('Op_Disp_Arm_R', 'rx', [[D, -0.15], [D + 1, -0.95], [D + 3.7, -1.05], [D + 4.5, -0.9], [D + 7.4, -1.05], [D + 8.2, -0.9], [D + 11.1, -1.05], [D + 12, -0.15]]);
-      add('Op_Disp_Arm_L', 'rx', [[D, -0.15], [D + 1, -0.8], [D + 11.1, -0.8], [D + 12, -0.15]]);
-      add('Op_Disp_Turn', 'ry', [[D + 1, 0], [D + 3.7, 0.12], [D + 4.5, -0.05], [D + 7.4, 0.08], [D + 8.2, -0.08], [D + 11.1, 0.05], [D + 12, 0]]);
+      add('Op_Disp_Arm_R', 'rx', [[D, -0.15], [D + q, -0.95], [D + 3.7 * q, -1.05], [D + 4.5 * q, -0.9], [D + 7.4 * q, -1.05], [D + 8.2 * q, -0.9], [D + 11.1 * q, -1.05], [D + 12 * q, -0.15]]);
+      add('Op_Disp_Arm_L', 'rx', [[D, -0.15], [D + q, -0.8], [D + 11.1 * q, -0.8], [D + 12 * q, -0.15]]);
+      add('Op_Disp_Turn', 'ry', [[D + q, 0], [D + 3.7 * q, 0.12], [D + 4.5 * q, -0.05], [D + 7.4 * q, 0.08], [D + 8.2 * q, -0.08], [D + 11.1 * q, 0.05], [D + 12 * q, 0]]);
     }
     // loader → tray slot; the furnace batch; unloader → inspection belt
-    const a = b + 44, F = CORE_FIRST + 128 * Math.ceil((a - CORE_FIRST + 1e-6) / 128), slot = 3 - Math.round((F - 2 - a) / 32), tk = trayKeys(F), u = F + 106 + 6 * slot, sx = slotOff(slot);
+    const a = b + 32 + DT, F = F0 + 4 * P * Math.ceil((a - F0 + 1e-6) / (4 * P)), slot = 3 - Math.round((F - 2 - a) / P), tk = trayKeys(F), u = F + 106 + 6 * slot, sx = slotOff(slot);
     add('Loader_X', 'x', [[a - 2.2, 0], [a - 1.4, 0], [a + 0.2, 7.375 + sx - 6.4], [a + 1.2, 7.375 + sx - 6.4], [a + 2.6, 0]]);
     add('Loader_Y', 'y', [[a - 2.2, 0], [a - 1.8, -(1.6 - BT)], [a - 1.6, -(1.6 - BT)], [a - 1.3, 0], [a + 0.2, 0], [a + 0.6, -(1.6 - BT - 0.04)], [a + 0.8, -(1.6 - BT - 0.04)], [a + 1.2, 0]]);
     add('Loader_Part', 'vis', [[a - 1.6, true], [a + 0.8, false]]);
@@ -1214,19 +1217,19 @@ function egrCoreLine(o = {}) {
     add('Unloader_Part', 'vis', [[u, true], [u + 1.9, false]]);
     for (const [t, v] of tk.x) if (t > a + 0.8 && t < u) xs.push([t, v + sx]); xs.push([a - 1.6, 6.4], [a + 0.8, 7.375 + sx], [u, 12.6 + sx], [u + 1.9, 13.6]);
     const ys = [[b + 3.8, 0], [a - 1.6, 0], [a + 0.8, 0.04], [u, 0.04], [u + 1.9, 0]], zs = [[b + 3.8, 0]];
-    add(P + '_Paste', 'vis', [[b + 3.8, true], [F + 50, false]]); add(P + '_CoreS', 'vis', [[b + 3.8, true], [F + 50, false]]); add(P + '_Brazed', 'vis', [[b + 3.8, false], [F + 50, true]]);
-    add(P + '_Clamp2', 'vis', [[b + 3.8, true], [u + 1.9, false]]);
+    add(PN + '_Paste', 'vis', [[b + 3.8, true], [F + 50, false]]); add(PN + '_CoreS', 'vis', [[b + 3.8, true], [F + 50, false]]); add(PN + '_Brazed', 'vis', [[b + 3.8, false], [F + 50, true]]);
+    add(PN + '_Clamp2', 'vis', [[b + 3.8, true], [u + 1.9, false]]);
     let end;
     add('Vision_Flash', 'vis', [[u + 5.4, true], [u + 5.7, false]]);
     if (ng) { xs.push([u + 7.3, 14.9]); zs.push([u + 7.6, 0], [u + 8.4, -0.55]); ys.push([u + 8.4, 0], [u + 9, -0.47]); add('NG_Pusher', 'z', [[u + 7.5, 0], [u + 8.4, -0.48], [u + 9.2, 0]]); end = u + 9.2; }
     else { xs.push([u + 12.8, 16.45], [u + 13.4, 16.85]); ys.push([u + 12.8, 0], [u + 13.4, -0.2]); end = u + 13.6; }
-    add(P, 'vis', [[b + 3.8, true], [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
-    add(P + '_X', 'x', xs); add(P + '_Y', 'y', ys); add(P + '_Z', 'z', zs);
+    add(PN, 'vis', [[b + 3.8, true], [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
+    add(PN + '_X', 'x', xs); add(PN + '_Y', 'y', ys); add(PN + '_Z', 'z', zs);
   }
   for (let k = 0; k < 8; k++) { // core nodes: X > Y > Z > looks
-    const P = 'Core_' + (k + 1), x = G(P + '_X', root, 0, BT, 0), y = G(P + '_Y', x), z = G(P + '_Z', y), n = G(P, z);
-    blank(G(P + '_Blank', n)); formed(G(P + '_Formed', n)); const c = G(P + '_Core', n); core(G(P + '_CoreS', c), m.stainless); core(G(P + '_Brazed', c), brazed);
-    const cl = G(P + '_Clamp', n); clamps(G(P + '_Clamp2', cl)); pasteLines(G(P + '_Paste', n), P + '_Paste_');
+    const PN = 'Core_' + (k + 1), x = G(PN + '_X', root, 0, BT, 0), y = G(PN + '_Y', x), z = G(PN + '_Z', y), n = G(PN, z);
+    blank(G(PN + '_Blank', n)); formed(G(PN + '_Formed', n)); const c = G(PN + '_Core', n); core(G(PN + '_CoreS', c), m.stainless); core(G(PN + '_Brazed', c), brazed);
+    const cl = G(PN + '_Clamp', n); clamps(G(PN + '_Clamp2', cl)); pasteLines(G(PN + '_Paste', n), PN + '_Paste_');
   }
   const keys = [];
   for (const [key, evs] of Object.entries(ch)) {
@@ -1234,7 +1237,7 @@ function egrCoreLine(o = {}) {
     if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Vision_Flash|Align_Light|Furnace_Glow)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) ? false : true)]);
     else keys.push([node, c, ser(evs, /_Arm_/.test(node) ? -0.15 : 0)]);
   }
-  return cycleClip(finalize(root), 'Core_Cycle', CORE_T, keys, 5);
+  return cycleClip(finalize(root), 'Core_Cycle', TT, keys, 5 * 32 / P); // the slower line samples less often (same file size)
 }
 
 function brazedCore() { // vacuum-brazed core (semi-finished): stainless core 180 × 70 × 90 with both gas tanks, brazing tint
@@ -1249,7 +1252,7 @@ function toteGrid(name, item, L, W, H) { // tote holding 8 parts in a grid (2 al
 }
 
 export const MODELS = {
-  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true }), pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
+  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ picks: ['A'] }), pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,

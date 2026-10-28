@@ -28,12 +28,12 @@
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델' };
+  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델', kpi: 'KPI 패널' };
   const MACHINES = ['ufmodel']; // js/factory-unity.js: equipment comes only from the Asset Store models (모델 tab)
   // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
   // chargers, process machines) is dropped when a saved layout is opened
   // conveyor, rack, tote, fence and roof are back as real-scale parametric parts (js/factory-kit.js)
-  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench'];
+  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi'];
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'bench', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
@@ -57,6 +57,7 @@
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
     fence: [['length', '길이 (m)', 0.5, 0.5, 100], ['height', '높이 (m)', 0.1, 0.5, 4], ['panel', '패널 폭 (m)', 0.1, 0.5, 3]],
     roof: [['length', '길이 (m, X)', 1, 6, 300], ['span', '폭 (m, Z)', 1, 6, 60], ['h', '처마 높이 (m, 0 = 천장)', 0.5, 0, 30], ['bay', '트러스 간격 (m)', 0.5, 3, 12], ['rise', '지붕 경사 높이 (m)', 0.1, 0, 4], ['sheet', '지붕판 보이기', 'check']],
+    kpi: [['title', '제목', 'text'], ['w', '폭 (m)', 0.1, 1, 12], ['h', '높이 (m)', 0.1, 0.5, 6], ['y', '설치 높이 (m)', 0.1, 0, 8]],
     bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장'], ['dispense', '수동 도포 (디스펜서)']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2], ['worker', '앉은 작업자', 'check'], ['cycle', '작업 사이클 (s, 완료 버튼)', 1, 5, 600, p => p.worker], ['feeds', '완성품 구역 (안돈 호출)', 'place'], ['side', 'AMR 상자 위치 (-1 왼쪽 · 0 없음 · 1 오른쪽)', 1, -1, 1, p => p.worker], ['phase', '사이클 시작 지연 (s)', 1, 0, 600, p => p.worker]],
     tote: [['kind', '종류', 'select', [['tote', '플라스틱 상자'], ['carton', '골판지 상자']]], ['length', '길이 (m)', 0.05, 0.1, 2], ['width', '폭 (m)', 0.05, 0.1, 2], ['height', '높이 (m)', 0.02, 0.05, 1.5], ['stack', '쌓은 수', 1, 1, 12]],
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],

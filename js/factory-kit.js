@@ -277,6 +277,34 @@
     for (const sx of [-1, 1]) { add(pp, 'Bench_Pipe', cylGeo(0.011, 0.011, 0.06, 10), K.steel, sx * 0.05, 0.1, 0.03); }
   }
 
+  // ---------------------------------------------------------------- KPI board (A/B comparison over a line): a black board on two posts, yellow title,
+  // rows "label|value[|note]"; readable from both sides; mirrored for ONE MONITOR (its viewer mirrors X)
+  TYPES.kpi = {
+    label: 'KPI 패널', group: 'route',
+    defaults: () => ({ title: 'KPI', rows: [], w: 3.6, h: 2.0, y: 2.4 }),
+    build: (g, p) => {
+      const W = p.w, Hb = p.h, Y = p.y, rows = (p.rows || []).map(r => String(r).split('|')), CW = 1024, CH = Math.round(CW * Hb / W);
+      const tex = canvasTex(CW, CH, (x, w, h) => {
+        if (!FE.inView()) { x.translate(w, 0); x.scale(-1, 1); }
+        x.fillStyle = '#0d0f12'; x.fillRect(0, 0, w, h); x.fillStyle = '#eec539'; x.fillRect(0, 0, w, 10); x.fillRect(0, 0, 14, h);
+        x.font = 'bold 64px sans-serif'; x.fillStyle = '#eec539'; x.textBaseline = 'middle'; x.fillText(p.title || '', 48, 70);
+        const rh = Math.min(86, (h - 140) / Math.max(1, rows.length));
+        rows.forEach(([l, v, n], i) => { const yy = 150 + i * rh + rh / 2;
+          x.fillStyle = 'rgba(255,255,255,0.08)'; if (i % 2 === 0) x.fillRect(30, yy - rh / 2, w - 60, rh);
+          x.font = '40px sans-serif'; x.fillStyle = '#b8bec6'; x.textAlign = 'left'; x.fillText(l || '', 48, yy);
+          x.font = 'bold 50px sans-serif'; x.fillStyle = '#ffffff'; x.textAlign = 'right'; x.fillText(v || '', w - (n ? 250 : 48), yy);
+          if (n) { x.font = '30px sans-serif'; x.fillStyle = '#7dffb2'; x.fillText(n, w - 48, yy); } x.textAlign = 'left'; });
+      });
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      const face = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }); face.name = 'KPI_Face';
+      box(g, 'KPI_Frame', W + 0.08, Hb + 0.08, 0.05, K.black, 0, Y + Hb / 2, 0);
+      for (const [z, ry] of [[0.026, 0], [-0.026, Math.PI]]) { const m = add(g, 'KPI_Screen', new THREE.PlaneGeometry(W, Hb), face, 0, Y + Hb / 2, z); m.rotation.y = ry; }
+      for (const sx of [-1, 1]) { if (p.hang) { add(g, 'KPI_Cable', cylGeo(0.006, 0.006, Math.max(0.1, p.hang - Y - Hb), 6), K.black, sx * (W / 2 - 0.2), (p.hang + Y + Hb) / 2, 0); continue; } // hung from the roof steel at p.hang
+        box(g, 'KPI_Post', 0.08, Y, 0.08, K.black, sx * (W / 2 - 0.2), Y / 2, 0); box(g, 'KPI_Foot', 0.4, 0.02, 0.4, K.black, sx * (W / 2 - 0.2), 0.01, 0); }
+    },
+    footprint: p => [p.w, 0.4]
+  };
+
   // ---------------------------------------------------------------- safety fence (black mesh panels, posts every panel)
   TYPES.fence = {
     label: '안전 펜스', group: 'building',
