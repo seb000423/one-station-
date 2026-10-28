@@ -65,6 +65,13 @@
     ['egr_st01', 'station-01', '조립 작업대 1'], ['egr_st02', 'station-02', '조립 작업대 2'], ['egr_st03', 'station-03', '리크 테스트 작업대 1'],
     ['egr_st04', 'station-04', '리크 테스트 작업대 2'], ['egr_st05', 'station-05', '검사 · 포장 작업대'], ['egr_rack', 'rack-sliding', '슬라이딩 부품 랙'], ['egr_pallet', 'pallet', '팔레트']
   ]) MODELS[id] = { url: EGR + file + '.glb', label };
+  // EGR line v3 (Ni paste dispensing → belt → stacking → AMR): procedural equipment from tools/egr-line-v3/ and the
+  // FAIRINO FR5 cobot converted from the maker's STEP (joints Joint_1…Joint_6). Metres, uncompressed.
+  const E3 = 'assets/models/egr-line-v3/';
+  for (const file of ['asrs_crane', 'asrs_rail_4m', 'rack_bay_10m', 'dispense_cell', 'vision_gantry', 'ng_chute', 'amr_roller_deck', 'conveyor_stopper',
+    'roller_conveyor_1m', 'roller_conveyor_2m', 'roller_curve_90', 'belt_conveyor_2m', 'fence_panel_1m', 'fence_panel_2m', 'tote_600x400', 'egr_cooler', 'fr5',
+    'hall_wall_6m', 'hall_column', 'hall_roof_6m', 'floor_6m', 'floor_6m_aisle', ...[1, 2, 3, 4, 5, 6, 7, 8].map(n => 'bay_sign_0' + n)
+  ]) MODELS['e3_' + file] = { url: E3 + file + '.glb', label: file };
   const entries = {}; // id → { state: 'loading' | 'ready' | 'failed', scene, promise }
   let loader = null; // Promise<GLTFLoader>
 

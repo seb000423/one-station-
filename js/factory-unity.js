@@ -9,6 +9,7 @@
 // and the Unity Factory building, carts and workers come in the same way, one part each.
 // The EGR cooler line workstations (assets/models/egr-line/) stay in the catalog for saved layouts but are not in the
 // palette. Every other catalog entry is its own palette tile (모델 tab) with a thumbnail from assets/models/thumbs/.
+// The EGR line v3 models (assets/models/egr-line-v3/, keys e3_*) come first, as the 'EGR 라인' group.
 (function () {
   const FE = window.FactoryElements; if (!FE) return;
   const { mat, box } = FE.helpers;
@@ -16,7 +17,7 @@
 
   // id → { label, size: [x, y, z] m, parts: [[asset id, x, y, z]] }  (parts share the GLB origin; the Unity
   // prefab offsets are mirrored in X because the GLBs come out of Blender's FBX import, not Unity's)
-  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인'; // group names shown in the 모델 tab
+  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인', E3 = 'EGR 라인'; // group names shown in the 모델 tab
   const CATALOG = {
     line01: { label: '캐비닛 벨트 유닛', group: UF, size: [0.93, 1.26, 0.90], parts: [['uf_line01', 0, 0, 0]] },
     line02: { label: '소형 벨트 유닛', group: UF, size: [0.69, 0.89, 0.69], parts: [['uf_line02', 0, 0, 0]] },
@@ -66,11 +67,42 @@
     egr_st04: { label: '리크 테스트 작업대 2', group: EGR, size: [1.02, 2.15, 1.13], parts: [['egr_st04', 0, 0, 0]] },
     egr_st05: { label: '검사 · 포장 작업대', group: EGR, size: [1.22, 2.15, 1.13], parts: [['egr_st05', 0, 0, 0]] },
     egr_rack: { label: '슬라이딩 부품 랙', group: EGR, size: [0.47, 1.54, 1.48], parts: [['egr_rack', 0, 0, 0]] },
-    egr_pallet: { label: '팔레트', group: EGR, size: [1.0, 0.15, 1.2], parts: [['egr_pallet', 0, 0, 0]] }
+    egr_pallet: { label: '팔레트', group: EGR, size: [1.0, 0.15, 1.2], parts: [['egr_pallet', 0, 0, 0]] },
+    // EGR line v3 (assets/models/egr-line-v3/): keepY = the model is authored at its working height (top rail, roof)
+    e3_asrs_crane: { label: '자동창고 스태커 크레인', group: E3, size: [3.52, 10.01, 0.87], parts: [['e3_asrs_crane', 0, 0, 0]] },
+    e3_asrs_rail_4m: { label: '스태커 크레인 레일 4 m', group: E3, size: [4.0, 10.74, 0.24], parts: [['e3_asrs_rail_4m', 0, 0, 0]], keepY: true },
+    e3_rack_bay_10m: { label: '자동창고 랙 (10 m)', group: E3, size: [2.86, 10.21, 1.15], parts: [['e3_rack_bay_10m', 0, 0, 0]] },
+    e3_dispense_cell: { label: 'Ni 페이스트 도포 셀', group: E3, size: [2.43, 2.52, 1.72], parts: [['e3_dispense_cell', 0, 0, 0]] },
+    e3_vision_gantry: { label: '비전 카메라 게이트', group: E3, size: [1.66, 2.0, 0.62], parts: [['e3_vision_gantry', 0, 0, 0]] },
+    e3_ng_chute: { label: 'NG 배출 슈트', group: E3, size: [1.05, 0.97, 0.54], parts: [['e3_ng_chute', 0, 0, 0]] },
+    e3_amr_roller_deck: { label: 'AMR 롤러 상판', group: E3, size: [0.96, 0.3, 0.71], parts: [['e3_amr_roller_deck', 0, 0, 0]] },
+    e3_conveyor_stopper: { label: '컨베이어 스토퍼', group: E3, size: [0.16, 0.2, 0.08], parts: [['e3_conveyor_stopper', 0, 0, 0]] },
+    e3_roller_conveyor_1m: { label: '롤러 컨베이어 1 m', group: E3, size: [1.0, 0.77, 0.64], parts: [['e3_roller_conveyor_1m', 0, 0, 0]] },
+    e3_roller_conveyor_2m: { label: '롤러 컨베이어 2 m', group: E3, size: [2.01, 0.77, 0.71], parts: [['e3_roller_conveyor_2m', 0, 0, 0]] },
+    e3_roller_curve_90: { label: '롤러 컨베이어 곡선 90°', group: E3, size: [1.41, 0.77, 1.41], parts: [['e3_roller_curve_90', 0, 0, 0]] },
+    e3_belt_conveyor_2m: { label: '벨트 컨베이어 2 m', group: E3, size: [2.03, 0.78, 0.93], parts: [['e3_belt_conveyor_2m', 0, 0, 0]] },
+    e3_fence_panel_1m: { label: '안전 펜스 1 m', group: E3, size: [1.07, 2.0, 0.14], parts: [['e3_fence_panel_1m', 0, 0, 0]] },
+    e3_fence_panel_2m: { label: '안전 펜스 2 m', group: E3, size: [2.07, 2.0, 0.14], parts: [['e3_fence_panel_2m', 0, 0, 0]] },
+    e3_tote_600x400: { label: '부품 상자 600×400', group: E3, size: [0.61, 0.27, 0.42], parts: [['e3_tote_600x400', 0, 0, 0]] },
+    e3_egr_cooler: { label: 'EGR 쿨러 (부품)', group: E3, size: [0.44, 0.16, 0.15], parts: [['e3_egr_cooler', 0, 0, 0]] },
+    e3_fr5: { label: '적재 로봇 FR5', group: E3, size: [0.61, 0.68, 0.28], parts: [['e3_fr5', 0, 0, 0]] },
+    e3_hall_wall_6m: { label: '공장 벽 6 m (창문)', group: E3, size: [6.06, 10.0, 0.22], parts: [['e3_hall_wall_6m', 0, 0, 0]] },
+    e3_hall_column: { label: '공장 기둥 10 m', group: E3, size: [0.5, 10.03, 0.9], parts: [['e3_hall_column', 0, 0, 0]] },
+    e3_hall_roof_6m: { label: '공장 지붕 트러스 6 m', group: E3, size: [6.0, 2.34, 24.1], parts: [['e3_hall_roof_6m', 0, 0, 0]], keepY: true },
+    e3_floor_6m: { label: '바닥 6 m', group: E3, size: [6.0, 0.01, 6.0], parts: [['e3_floor_6m', 0, 0, 0]] },
+    e3_floor_6m_aisle: { label: '바닥 6 m (통로선)', group: E3, size: [6.0, 0.01, 6.0], parts: [['e3_floor_6m_aisle', 0, 0, 0]] },
+    e3_bay_sign_01: { label: '랙 번호판 01', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_01', 0, 0, 0]] },
+    e3_bay_sign_02: { label: '랙 번호판 02', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_02', 0, 0, 0]] },
+    e3_bay_sign_03: { label: '랙 번호판 03', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_03', 0, 0, 0]] },
+    e3_bay_sign_04: { label: '랙 번호판 04', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_04', 0, 0, 0]] },
+    e3_bay_sign_05: { label: '랙 번호판 05', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_05', 0, 0, 0]] },
+    e3_bay_sign_06: { label: '랙 번호판 06', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_06', 0, 0, 0]] },
+    e3_bay_sign_07: { label: '랙 번호판 07', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_07', 0, 0, 0]] },
+    e3_bay_sign_08: { label: '랙 번호판 08', group: E3, size: [0.5, 0.5, 0.02], parts: [['e3_bay_sign_08', 0, 0, 0]] }
   };
   // palette tiles: one per catalog entry (모델 tab), images rendered by tools/render-thumbs.cjs. Only the Asset Store
-  // groups are offered; the EGR workstations stay in the catalog so saved layouts that use them still open.
-  const GROUPS = [UF, UW];
+  // and EGR line v3 groups are offered; the EGR workstations stay in the catalog so saved layouts that use them still open.
+  const GROUPS = [E3, UF, UW];
   const thumb = k => 'assets/models/thumbs/' + k + '.webp';
   const OPTIONS = Object.entries(CATALOG).filter(([, v]) => GROUPS.includes(v.group)).map(([k, v]) => [k, v.label]);
   const entry = p => CATALOG[p.model] || CATALOG.line01;
@@ -96,7 +128,8 @@
         if (id === 'uf_arm') for (const [n, w, ax] of ARM_JOINTS) { const node = m.getObjectByName(n); if (node) { const j = A.jointWrap(node, w); j.userData.axis = ax; } }
       }
       if (all.children.length) {
-        const placed = A.placed(all, 'UF_Model'); placed.scale.setScalar(s); g.add(placed);
+        const y0 = c.keepY ? A.bounds(all).min.y : 0;
+        const placed = A.placed(all, 'UF_Model'); all.position.y += y0; placed.scale.setScalar(s); g.add(placed);
         g.userData.ufLoaded = !missing;
       }
       if (missing) { // stand-in box until the GLB(s) arrive (or for a part that failed to load)
