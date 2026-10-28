@@ -70,6 +70,7 @@
     // flowAxis 'x' = conveys along local X (js/factory-unity-groups.js flow); clip = a baked animation played from the sim clock
     e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, cat: 'EGR 라인', size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle', clipLen: 26.8 },
     e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
+    e3_injection_cell: { label: '사출 셀 (인서트 사출기 · 취출 로봇)', group: E3, cat: 'EGR 라인', size: [4.67, 3.25, 3.6], parts: [['e3_injection_cell', 0, 0, 0]], clip: 'Inject_Cycle', clipLen: 24 },
     e3_press_line_2level: { label: '2층 컨베이어 + 프레스 라인', group: E3, cat: 'EGR 라인', size: [8.0, 3.27, 1.65], parts: [['e3_press_line_2level', 0, 0, 0]], clip: 'Press_Cycle', clipLen: 36 },
     e3_dispense_cell: { label: 'Ni 페이스트 도포 셀', group: E3, cat: 'EGR 라인', size: [2.43, 2.52, 1.72], parts: [['e3_dispense_cell', 0, 0, 0]], clip: 'Dispense_Cycle', clipLen: 24 },
     e3_vision_gantry: { label: '비전 카메라 게이트', group: E3, cat: 'EGR 라인', size: [1.66, 2.0, 0.62], parts: [['e3_vision_gantry', 0, 0, 0]] },
@@ -82,6 +83,7 @@
     e3_fence_panel_1m: { label: '안전 펜스 1 m', group: E3, cat: 'EGR 라인', size: [1.07, 2.0, 0.14], parts: [['e3_fence_panel_1m', 0, 0, 0]] },
     e3_fence_panel_2m: { label: '안전 펜스 2 m', group: E3, cat: 'EGR 라인', size: [2.07, 2.0, 0.14], parts: [['e3_fence_panel_2m', 0, 0, 0]] },
     e3_fr5: { label: '적재 로봇 FR5', group: E3, cat: '로봇', size: [0.61, 0.68, 0.28], parts: [['e3_fr5', 0, 0, 0]] },
+    e3_asrs_cell: { label: '자동창고 일체형 셀 (랙 · 크레인 · 입출고 루프)', group: E3, cat: '물류', size: [15.93, 7.75, 3.05], parts: [['e3_asrs_cell', 0, 0, 0]], clip: 'ASRS_Cycle', clipLen: 128 },
     e3_asrs_crane: { label: '자동창고 스태커 크레인', group: E3, cat: '물류', size: [3.52, 7.51, 0.87], parts: [['e3_asrs_crane', 0, 0, 0]], clip: 'Crane_Cycle', clipLen: 32 },
     e3_asrs_rail_4m: { label: '스태커 크레인 레일 4 m', group: E3, cat: '물류', size: [4.0, 7.94, 0.24], parts: [['e3_asrs_rail_4m', 0, 0, 0]] },
     e3_rack_bay: { label: '자동창고 랙 (7.5 m)', group: E3, cat: '물류', size: [2.86, 7.51, 1.15], parts: [['e3_rack_bay', 0, 0, 0]] },

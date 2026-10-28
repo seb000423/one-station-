@@ -644,7 +644,7 @@
     if (k === 'e3_fr5' || k === 'arm') return ['equip', 'arm'];
     if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];
-    if (k === 'line06') return ['equip', 'press'];
+    if (k === 'line06' || k === 'e3_injection_cell') return ['equip', 'press'];
     if (/^ctrl\d$/.test(k) || k === 'line08' || k === 'line09') return ['equip', 'cabinet'];
     if (/^(e3_egr_cooler|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
     if (/^(uw_shelf|uw_pallet|uw_sunoko|uw_pedestal|uw_plasticbox_|uw_cardboard_|e3_tote)/.test(k)) return ['equip', 'rack'];

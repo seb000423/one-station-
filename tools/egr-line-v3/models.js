@@ -701,7 +701,156 @@ function pressLine() {
   return cycleClip(finalize(root), 'Press_Cycle', T, keys);
 }
 
+// ---------------------------------------------------------------- 10. integrated AS/RS cell (15.8 × 3.0 × 7.8 m): two 4-bay rack rows on an aisle, the stacker crane
+// on its rail, a U-shaped I/O loop at the −X end (outfeed → pick station → infeed, 1.25 m). Two totes circulate: every 32 s the crane
+// drops the tote it retrieved onto the outfeed, takes the one coming back off the infeed, stores it in the slot emptied last time and
+// fetches the next. Four slots rotate, so every rack slot visibly empties and fills; nothing appears or vanishes anywhere else.
+function asrsCell() {
+  const m = materials(), root = G('ASRS_Cell'), body = G('ASRS_Cell_Body', root, -4.2, 0, 0);
+  const P = 32, T = 4 * P, RZ = 0.95, LV = [1.5, 3.0, 4.5, 6.0], TIO = 1.25, R = 0.45, XC = -3.3;
+  const slotX = (b, p) => 2.35 + 2.7 * b + [-0.99, -0.33, 0.33, 0.99][p];
+  const bay0 = rackBay('01'); // one bay, cloned: the clones share geometry, so the GLB carries it once; only the number plate differs
+  for (const side of [-1, 1]) for (let b = 0; b < 4; b++) { const num = String(b + 1 + (side > 0 ? 0 : 4)).padStart(2, '0'), r = bay0.clone(); r.traverse(o => { if (o.isMesh && o.material.name === 'bay_sign_01') o.material = signMat(num); }); r.position.set(2.35 + 2.7 * b, 0, side * RZ); r.rotation.y = side > 0 ? Math.PI : 0; body.add(r); }
+  // floor rail (−2.9 … 12.1) and the top guide rail carried by the rack tops
+  const rail = G('ASRS_Rail', body), L = 15, rx = (12.1 - 2.9) / 2;
+  box(rail, m.black, L, 0.015, 0.24, rx, 0.0075, 0); box(rail, m.steel, L, 0.085, 0.06, rx, 0.0575, 0);
+  for (let x = -2.9 + 0.25; x < 12.1; x += 0.5) box(rail, m.aluDark, 0.06, 0.03, 0.22, x, 0.03, 0);
+  box(rail, m.steel, 12.1 - 1.0, 0.12, 0.06, 6.55, 7.56, 0); box(rail, m.black, 11.1, 0.02, 0.22, 6.55, 7.63, 0);
+  for (let x = 1.5; x < 12.1; x += 2.7) box(rail, m.aluDark, 0.06, 0.06, 2 * RZ + 1.1, x - 0.15, 7.72, 0);
+  const crane = asrsCrane(); crane.position.x = -0.82; body.add(crane);
+  // I/O loop: outfeed (−Z) and infeed (+Z) along X, cross transfer with the pick station at XC
+  const io = G('IO_Loop', body);
+  const rollers = (name, x0, x1, z0, z1) => { const along = Math.abs(x1 - x0) > Math.abs(z1 - z0), len = along ? Math.abs(x1 - x0) : Math.abs(z1 - z0), n = Math.round(len / 0.15);
+    for (let k = 0; k < n; k++) { const u = (k + 0.5) / n, x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * u;
+      const r = anim(G(name + '_Roller_' + String(k + 1).padStart(2, '0'), io, x, TIO - 0.025, z), 'rotate', along ? 'z' : 'x', -Infinity, Infinity); cyl(r, m.steel, 0.025, 0.5, 0, 0, 0, along ? 'z' : 'x', 12); }
+    for (const s of [-1, 1]) { const w = 0.29; if (along) box(io, m.alu, len, 0.1, 0.035, (x0 + x1) / 2, TIO - 0.04, z0 + s * w); else box(io, m.alu, 0.035, 0.1, len, x0 + s * w, TIO - 0.04, (z0 + z1) / 2); }
+    for (let k = 0; k <= Math.ceil(len / 1.4); k++) { const u = k / Math.ceil(len / 1.4), x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * u;
+      for (const s of [-1, 1]) { const px = along ? x : x + s * 0.29, pz = along ? z + s * 0.29 : z; prof(io, [px, 0.06, pz], [px, TIO - 0.09, pz], 0.045); foot(io, px, pz); } }
+  };
+  rollers('Outfeed', 0.3, XC + 0.3, -RZ, -RZ); rollers('Infeed', XC + 0.3, 0.3, RZ, RZ); rollers('Transfer', XC, XC, -RZ - 0.3, RZ + 0.3);
+  for (const z of [-RZ, RZ]) { box(io, m.yellow, 0.06, 0.18, 0.62, 0.36, TIO + 0.06, z); box(io, m.black, 0.04, 0.05, 0.04, 0.2, TIO + 0.08, z + 0.32); } // end stops, tote sensors
+  // pick station on the transfer: frame, light curtain posts, stack light and an HMI
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(io, [XC + sx * 0.45, 0.06, sz * 0.45], [XC + sx * 0.45, 2.3, sz * 0.45], 0.045);
+  for (const sx of [-1, 1]) prof(io, [XC + sx * 0.45, 2.3, -0.45], [XC + sx * 0.45, 2.3, 0.45], 0.045);
+  for (const sz of [-1, 1]) prof(io, [XC - 0.45, 2.3, sz * 0.45], [XC + 0.45, 2.3, sz * 0.45], 0.045);
+  box(io, m.yellow, 0.92, 0.04, 0.04, XC, 2.33, 0); cyl(io, m.lampG, 0.03, 0.08, XC + 0.45, 2.45, 0.45, 'y', 12); cyl(io, m.yellow, 0.03, 0.08, XC + 0.45, 2.53, 0.45, 'y', 12);
+  box(io, m.black, 0.06, 0.36, 0.46, XC - 0.5, 1.55, 0.6); box(io, m.screen, 0.02, 0.3, 0.4, XC - 0.47, 1.55, 0.6);
+  // stored totes (merged) in every slot except the four that rotate and a few gaps
+  const SL = [[1, 1, 1, 1], [-1, 3, 0, 2], [1, 3, 3, 0], [-1, 0, 2, 3]]; // side, bay, position, level
+  const st = G('Stored_Totes', body);
+  for (const side of [-1, 1]) for (let b = 0; b < 4; b++) for (let p = 0; p < 4; p++) for (let l = 0; l < 4; l++) {
+    if (SL.some(s => s[0] === side && s[1] === b && s[2] === p && s[3] === l) || (b * 7 + p * 5 + l * 3 + (side > 0 ? 1 : 0)) % 9 === 0) continue;
+    const x = slotX(b, p), y = LV[l] + 0.065, z = side * (RZ - 0.05);
+    box(st, m.tote, 0.58, 0.012, 0.38, x, y + 0.012, z); for (const s of [-1, 1]) { box(st, m.tote, 0.6, 0.27, 0.008, x, y + 0.145, z + s * 0.196); box(st, m.tote, 0.008, 0.27, 0.4, x + s * 0.296, y + 0.145, z); }
+  }
+  const slots = SL.map(([side, b, p, l], j) => { const n = G('Slot_Tote_' + (j + 1), body, slotX(b, p), LV[l] + 0.065, side * (RZ - 0.05)); n.add(tote()); return { n, side, x: slotX(b, p), y: LV[l] + 0.065 }; });
+  const carried = G('Carried_Tote', crane.getObjectByName('Crane_Fork2'), 0.82, 0.26, 0); carried.add(tote());
+  const loops = ['A', 'B'].map(k => { const x = G('Loop_' + k + '_X', body, 0, TIO, -RZ), z = G('Loop_' + k + '_Z', x); const v = G('Loop_' + k + '_Tote', z); v.add(tote()); return k; });
+  // keys
+  const car = s => s + 0.03 - 0.26 - 1.0, dn = s => s - 0.03 - 0.26 - 1.0, cx = [], cy = [], fz = [], cv = [[0, true]], sv = slots.map(() => []);
+  for (let k = 0; k < 4; k++) {
+    const s = P * k, A = slots[k], B = slots[(k + 1) % 4];
+    cx.push([s, 0], [s + 5.2, 0], [s + 11, A.x], [s + 13.6, A.x], [s + 19, B.x], [s + 21.6, B.x], [s + 28, 0]);
+    cy.push([s, car(TIO)], [s + 1.2, car(TIO)], [s + 1.6, dn(TIO)], [s + 3.8, dn(TIO)], [s + 4.2, car(TIO)], [s + 5.2, car(TIO)], [s + 11, car(A.y)], [s + 12.2, car(A.y)], [s + 12.6, dn(A.y)], [s + 13.6, dn(A.y)], [s + 19, dn(B.y)], [s + 20.2, dn(B.y)], [s + 20.6, car(B.y)], [s + 21.6, car(B.y)], [s + 28, car(TIO)]);
+    fz.push([s, 0], [s + 1.2, -R], [s + 1.6, -R], [s + 2.6, 0], [s + 3.8, R], [s + 4.2, R], [s + 5.2, 0], [s + 11, 0], [s + 12.2, A.side * R], [s + 12.6, A.side * R], [s + 13.6, 0], [s + 19, 0], [s + 20.2, B.side * R], [s + 20.6, B.side * R], [s + 21.6, 0]);
+    cv.push([s + 1.4, false], [s + 4.0, true], [s + 12.4, false], [s + 20.4, true]);
+    sv[k].push([s + 12.4, true]); sv[(k + 1) % 4].push([s + 20.4, false]);
+  }
+  const close = a => [...a, [T, a[0][1]]];
+  const keys = [['ASRS_Crane', 'x', close(cx)], ['Crane_Carriage', 'y', close(cy)], ['Crane_Fork', 'z', close(fz)], ['Crane_Fork2', 'z', close(fz)], ['Carried_Tote', 'vis', cv]];
+  sv.forEach((v, j) => { v.sort((a, b) => a[0] - b[0]); keys.push(['Slot_Tote_' + (j + 1), 'vis', [[0, !v[0][1]], ...v]]); });
+  // loop totes: tote A rides the loop after periods 0 and 2, tote B after 1 and 3; path relative to the outfeed drop point
+  const PATH = [[0, 0, 0], [2.6, 0, 0], [10, XC, 0], [13, XC, RZ], [20, XC, RZ], [23, XC, 2 * RZ], [30, 0, 2 * RZ], [2 * P - 0.2, 0, 2 * RZ], [2 * P, 0, 0]];
+  loops.forEach((k, i) => {
+    const xs = [], zs = [], vs = [];
+    for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P + 1.4; for (const [u, x, z] of PATH) { xs.push([s + u, x]); zs.push([s + u, z]); } vs.push([s, true], [s + P + 2.6, false]); }
+    const clip = a => { a = a.filter(([t]) => t >= 0 && t <= T); return a; };
+    const v = clip(vs).sort((a, b) => a[0] - b[0]);
+    keys.push(['Loop_' + k + '_X', 'x', clip(xs)], ['Loop_' + k + '_Z', 'z', clip(zs)], ['Loop_' + k + '_Tote', 'vis', [[0, i === 1], ...v]]);
+  });
+  return cycleClip(finalize(root), 'ASRS_Cycle', T, keys);
+}
+
+// ---------------------------------------------------------------- 11. insert injection moulding cell (machine 4.1 × 1.2 × 2.0 m; with feeder, robot and outfeed 4.5 × 2.9 × 2.5 m)
+// A top-entry traverse robot on the fixed platen takes the moulded bracket off the moving half, puts the next metal insert in, drops the
+// part on the outfeed belt (it slides into the bin at the end) and fetches a new insert from the bowl feeder nest. Clamp closes, the
+// injection unit moves in, injects, holds and cools, pulls back, the clamp opens and the ejector pushes the part out. Resin comes from
+// the material box behind the machine (refilled by an AMR) through the vacuum loader on the hopper. INJECT_T s per shot.
+const INJECT_T = 24;
+function injectionCell() {
+  const m = materials(), root = G('Injection_Cell'), Y = 1.4, OPEN = 0.45, XG = 0.105, ZN = 1.25, ZC = 1.85;
+  // base (with a yellow stripe), control cabinet + HMI at the front of the injection end
+  box(root, m.sheet, 4.05, 0.8, 1.15, -0.2, 0.45, 0); box(root, m.black, 4.1, 0.06, 1.2, -0.2, 0.03, 0); box(root, m.black, 4.07, 0.04, 1.17, -0.2, 0.87, 0);
+  for (const sz of [-1, 1]) box(root, m.yellow, 4.06, 0.05, 0.004, -0.2, 0.75, sz * 0.577);
+  box(root, m.sheet, 0.5, 1.1, 0.35, -1.9, 1.4, 0.45); box(root, m.black, 0.42, 0.3, 0.02, -1.9, 1.65, 0.63); box(root, m.screen, 0.36, 0.24, 0.005, -1.9, 1.65, 0.641);
+  cyl(root, m.lampG, 0.025, 0.06, -1.75, 2.0, 0.55, 'y', 12); cyl(root, m.yellow, 0.025, 0.06, -1.75, 2.06, 0.55, 'y', 12); cyl(root, m.red, 0.025, 0.06, -1.75, 2.12, 0.55, 'y', 12);
+  // clamp: fixed platen, moving platen on four tie bars, rear platen and the clamp cylinder; mould halves
+  box(root, m.black, 0.16, 1.1, 1.1, -0.35, Y, 0); box(root, m.steel, 0.15, 0.5, 0.5, -0.195, Y, 0);           // fixed platen + fixed half
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) cyl(root, m.stainless, 0.045, 2.15, 0.65, Y + sy * 0.42, sz * 0.42, 'x', 16);
+  box(root, m.black, 0.2, 1.1, 1.1, 1.65, Y, 0); cyl(root, m.steel, 0.16, 0.7, 1.2, Y, 0, 'x', 28); box(root, m.yellow, 0.18, 0.18, 0.22, 1.65, Y + 0.65, 0);
+  const mp = G('Moving_Platen', root, 0.11 + OPEN, Y, 0);
+  box(mp, m.black, 0.16, 1.1, 1.1, 0, 0, 0); box(mp, m.steel, 0.15, 0.5, 0.5, -0.155, 0, 0); cyl(mp, m.steel, 0.1, 0.6, 0.38, 0, 0, 'x', 24);
+  const ej = G('Ejector', mp, 0, 0, 0); for (const z of [-0.05, 0.05]) cyl(ej, m.stainless, 0.008, 0.06, -0.24, 0, z, 'x', 8);
+  const part = (n, x) => { box(n, m.black, 0.02, 0.09, 0.13, x, 0, 0); box(n, m.black, 0.03, 0.03, 0.03, x + 0.02, 0.025, 0); cyl(n, m.stainless, 0.012, 0.025, x, 0, 0.04, 'x', 12); };
+  const insert = (n, x) => cyl(n, m.stainless, 0.012, 0.025, x, 0, 0, 'x', 12);
+  const mpart = G('Mould_Part', mp, -0.24, 0, 0); part(mpart, 0);
+  const mins = G('Mould_Insert', root, -0.11, Y, 0.04); insert(mins, 0);
+  // injection unit on its carriage: nozzle, barrel with heater bands, hopper + vacuum loader, screw drive
+  const iu = G('Injection_Unit', root, 0, 0, 0);
+  cyl(iu, m.steel, 0.03, 0.12, -0.49, Y, 0, 'x', 16); cyl(iu, m.stainless, 0.075, 1.15, -1.1, Y, 0, 'x', 24);
+  for (let x = -0.62; x > -1.6; x -= 0.16) cyl(iu, m.aluDark, 0.09, 0.1, x, Y, 0, 'x', 24);
+  box(iu, m.sheet, 0.7, 0.55, 0.6, -2.0, Y, 0); box(iu, m.yellow, 0.7, 0.05, 0.004, -2.0, Y + 0.2, 0.302);
+  cyl(iu, m.steel, 0.12, 0.15, -1.55, Y + 0.17, 0, 'y', 20); cyl(iu, m.glass, 0.17, 0.35, -1.55, Y + 0.42, 0, 'y', 24, 0.2); cyl(iu, m.sheet, 0.2, 0.12, -1.55, Y + 0.66, 0, 'y', 24);
+  cyl(iu, m.black, 0.03, 0.4, -1.55, Y + 0.9, 0, 'y', 10);
+  const drv = G('Screw_Drive', iu, -2.38, Y, 0); cyl(drv, m.black, 0.14, 0.06, 0, 0, 0, 'x', 6); box(drv, m.yellow, 0.065, 0.04, 0.24, 0, 0, 0);
+  // guard: frame and polycarbonate doors on both sides of the clamp, open roof for the robot
+  for (const sz of [-1, 1]) { for (const x of [-0.45, 0.6, 1.75]) prof(root, [x, 0.87, sz * 0.62], [x, 2.05, sz * 0.62], 0.04, m.frameDark);
+    prof(root, [-0.45, 2.05, sz * 0.62], [1.75, 2.05, sz * 0.62], 0.04, m.frameDark); box(root, m.glass, 2.18, 1.14, 0.01, 0.65, 1.46, sz * 0.62); box(root, m.black, 0.03, 0.2, 0.04, 0.55, 1.4, sz * 0.65); }
+  // top-entry traverse robot: post on the fixed platen, beam along Z out over the front, vertical arm, gripper with a kick axis
+  const rb = G('Robot_Base', root);
+  box(rb, m.yellow, 0.14, 0.4, 0.14, XG, 2.15, -0.3); box(rb, m.yellow, 0.16, 0.16, 2.7, XG, 2.43, 0.85); box(rb, m.black, 0.18, 0.04, 2.7, XG, 2.53, 0.85);
+  box(rb, m.black, 0.2, 0.2, 0.2, XG, 2.43, -0.55); box(rb, m.black, 0.16, 0.1, 2.4, XG, 2.34, 0.85);
+  const tr = G('Robot_Traverse', rb, XG, 0, 0); box(tr, m.aluDark, 0.3, 0.26, 0.3, 0.2, 2.43, 0); box(tr, m.black, 0.12, 0.12, 0.12, 0.2, 2.62, 0);
+  const arm = G('Robot_Arm', tr, 0, 0, 0); box(arm, m.alu, 0.08, 0.95, 0.1, 0, 2.3 + 0.475, 0); box(arm, m.yellow, 0.084, 0.04, 0.104, 0, 3.2, 0);
+  const grip = G('Gripper', arm, 0, 2.3, 0); box(grip, m.aluDark, 0.16, 0.06, 0.2, 0, 0, 0);
+  for (const sx of [-1, 1]) { box(grip, m.black, 0.012, 0.11, 0.16, sx * 0.07, -0.08, 0); cyl(grip, m.rubber, 0.02, 0.02, sx * 0.06, -0.14, 0.05, 'x', 10); }
+  const gp = G('Grip_Part', grip, 0.1, -0.1, 0); part(gp, 0);
+  const gi = G('Grip_Insert', grip, -0.09, -0.1, 0.04); insert(gi, 0);
+  // insert feeder: vibratory bowl, linear track, nest; outfeed belt into a parts bin
+  const fd = G('Insert_Feeder', root);
+  box(fd, m.sheet, 0.5, 0.75, 0.5, -0.8, 0.375, ZN); cyl(fd, m.stainless, 0.22, 0.12, -0.8, 0.86, ZN, 'y', 32); cyl(fd, m.black, 0.12, 0.06, -0.8, 0.79, ZN, 'y', 20);
+  box(fd, m.alu, 0.75, 0.03, 0.06, -0.24, 0.96, ZN); box(fd, m.aluDark, 0.3, 0.9, 0.3, XG, 0.45, ZN); box(fd, m.yellow, 0.12, 0.04, 0.12, XG, 0.92, ZN);
+  for (const x of [-0.08, 0.0, 0.05]) for (const z of [-0.06, 0.06]) cyl(fd, m.stainless, 0.012, 0.025, -0.8 + x * 2, 0.93, ZN + z * 1.5, 'y', 10);
+  const nx = G('Nest_Insert_X', fd, XG - 0.09, 1.0, ZN), ni = G('Nest_Insert', nx); cyl(ni, m.stainless, 0.012, 0.025, 0, 0, 0, 'y', 12);
+  const cv = G('Outfeed_Belt', root); box(cv, m.alu, 1.9, 0.1, 0.42, 0.7, 0.8, ZC); box(cv, m.belt, 1.9, 0.01, 0.36, 0.7, 0.855, ZC);
+  for (const x of [-0.15, 1.55]) for (const sz of [-1, 1]) { prof(cv, [x, 0.06, ZC + sz * 0.18], [x, 0.75, ZC + sz * 0.18], 0.04); foot(cv, x, ZC + sz * 0.18); }
+  box(cv, m.black, 0.14, 0.14, 0.12, 1.55, 0.78, ZC - 0.27);
+  const pb = G('Parts_Bin', root, 1.95, 0, ZC); box(pb, m.tote, 0.6, 0.02, 0.4, 0, 0.32, 0);
+  for (const s of [-1, 1]) { box(pb, m.tote, 0.6, 0.3, 0.012, 0, 0.47, s * 0.2); box(pb, m.tote, 0.012, 0.3, 0.4, s * 0.3, 0.47, 0); }
+  for (const [x, z, r] of [[-0.15, -0.08, 0.3], [0.05, 0.06, 1.2], [0.18, -0.05, 2.1], [-0.05, 0.1, 2.8], [0.1, -0.1, 0.9]]) { const p = G('Bin_Pile', pb, x, 0.36, z); p.rotation.set(0, r, Math.PI / 2); part(p, 0); }
+  for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(pb, [x, 0.0, z], [x, 0.31, z], 0.03, m.frameDark);
+  const bx = G('Belt_Part_X', root, XG + 0.1, 0.86 + 0.065, ZC), by = G('Belt_Part_Y', bx), bp = G('Belt_Part', by); bp.rotation.z = Math.PI / 2; part(bp, 0);
+  // material box behind the machine (the AMR swaps it) with the loader hose up to the hopper
+  const mb = G('Material_Box', root, -1.55, 0, -1.0); box(mb, m.black, 0.8, 0.12, 0.8, 0, 0.06, 0); box(mb, m.yellow, 0.76, 0.7, 0.76, 0, 0.47, 0); box(mb, m.black, 0.6, 0.01, 0.6, 0, 0.825, 0);
+  bin(root, m.black, new THREE.TubeGeometry(new THREE.CatmullRomCurve3([[-1.55, 0.6, -1.0], [-1.55, 1.2, -1.05], [-1.55, 2.3, -0.75], [-1.55, 2.5, -0.25], [-1.55, Y + 1.1, 0]].map(v => new THREE.Vector3(...v))), 32, 0.03, 8));
+
+  const D = 0.8, DN = 1.2, DC = 1.275;   // arm strokes into the mould gap / to the nest / to the belt
+  return cycleClip(finalize(root), 'Inject_Cycle', INJECT_T, [
+    ['Moving_Platen', 'x', [[0, -OPEN], [0.1, -OPEN], [1.5, 0], [5.6, 0], [7.0, -OPEN], [24, -OPEN]]],
+    ['Ejector', 'x', [[0, 0], [1.5, 0], [2.0, -0.04], [3.5, -0.04], [4.0, 0], [24, 0]]],
+    ['Injection_Unit', 'x', [[0, 0], [7.0, 0], [8.0, 0.06], [20, 0.06], [21, 0], [24, 0]]],
+    ['Screw_Drive', 'rx', [[0, 0], [10, 0], [16, Math.PI * 8], [24, Math.PI * 8]]],
+    ['Robot_Traverse', 'z', [[0, ZN], [0.5, ZN], [2.0, 0], [5.6, 0], [7.0, ZC], [8.2, ZC], [9.2, ZN], [24, ZN]]],
+    ['Robot_Arm', 'y', [[0, 0], [2.0, 0], [3.0, -D], [4.6, -D], [5.6, 0], [7.0, 0], [7.6, -DC], [8.0, -DC], [8.4, 0], [9.2, 0], [9.8, -DN], [10.0, -DN], [10.6, 0], [24, 0]]],
+    ['Gripper', 'x', [[0, 0], [3.0, 0], [3.5, 0.1], [3.6, 0.1], [4.0, -0.1], [4.2, -0.1], [4.6, 0], [24, 0]]],
+    ['Mould_Part', 'vis', [[0, true], [3.5, false], [9, true]]], ['Mould_Insert', 'vis', [[0, false], [4.0, true], [9, false]]],
+    ['Grip_Part', 'vis', [[0, false], [3.5, true], [7.8, false]]], ['Grip_Insert', 'vis', [[0, true], [4.0, false], [9.9, true]]],
+    ['Nest_Insert', 'vis', [[0, true], [9.9, false], [12, true]]], ['Nest_Insert_X', 'x', [[0, 0], [11.9, 0], [11.95, -0.55], [12, -0.55], [14, 0], [24, 0]]],
+    ['Belt_Part', 'vis', [[0, false], [7.8, true], [15.2, false]]], ['Belt_Part_X', 'x', [[0, 0], [8.2, 0], [14.2, 1.45], [15.0, 1.75], [24, 0]]], ['Belt_Part_Y', 'y', [[0, 0], [14.2, 0], [15.0, -0.5], [15.5, -0.5], [16, 0], [24, 0]]]]);
+}
+
 export const MODELS = {
+  asrs_cell: asrsCell, injection_cell: injectionCell,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
