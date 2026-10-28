@@ -138,7 +138,7 @@ add('amr', '부품 공급 AMR', 9.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length
     'stops': [stop('가공품 반출', 'load'), stop('조립 부품 공급', 'unload')]})
 tend['params'].update({'from': ref['가공 소재 공급'], 'feeds': ref['가공품 반출']})
 stack['params'].update({'feeds': ref['적재 완료 (FR5)']})
-add('amr', '출하 지게차', 12.0, SL, 0, {'model': 'uw_forklift', 'length': 3.0, 'width': 1.5, 'speed': 1.3, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
+add('amr', '출하 지게차', 12.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.3, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
     'stops': [stop('조립 완료', 'load'), stop('출하 대기', 'unload', 12)]})
 
 doc = {'version': 2, 'factory': {'width': W, 'depth': D, 'height': H}, 'objects': objects}

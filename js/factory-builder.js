@@ -130,9 +130,14 @@
     const f = t / g.dt - n; return g.acc[n] + (g.acc[n + 1] - g.acc[n]) * f;
   }
   window.__gateTime = gateTime;
+  // AMR plans learn where each zone stands (load / unload hand-off animation, js/factory-unity-groups.js)
+  function withZones(M) {
+    if (M && M.amr && !M.__zones) { M.__zones = true; const at = name => { const o = doc.objects.find(o => o.type === 'zone' && o.name === name); return o ? { x: o.x, z: o.z } : null; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
+    return M;
+  }
   function motion() {
     const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params && o.params.items ? o.params.items.length : o.params])); // model groups: their item list never changes in the builder
-    if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
+    if (!motionCache || key !== motionKey) { motionCache = withZones(FM().plans(doc)); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
     return motionCache;
   }
   function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
@@ -385,10 +390,10 @@
   function cancelDrawing() { if (!drawing) return; if (drawing.preview) S().scene.remove(drawing.preview); drawing = null; placing = null; }
 
   // a palette entry is a type, or 'ufmodel:<catalog key>' for a model tile (type + model preset)
-  const splitPlace = s => { const [type, model] = s.split(':'); return { type, model }; };
+  const splitPlace = s => { const [type, model, variant] = s.split(':'); return { type, model, variant }; };
   function startPlacing(place) {
     if (PATHS.includes(place)) return startDrawing(null, place);
-    const { type, model } = splitPlace(place);
+    const { type, model, variant } = splitPlace(place);
     if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
     cancelPlacing(); placing = place;
     ghost = type === 'station'
@@ -410,9 +415,9 @@
   }
   const modelLabel = (type, model) => (model && window.FactoryUnity && FactoryUnity.CATALOG[model] ? FactoryUnity.CATALOG[model].label : TYPE_LABEL[type]);
   const candidate = (place, p) => {
-    const { type, model } = splitPlace(place);
+    const { type, model, variant } = splitPlace(place);
     const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
-    if (model && ['conveyor', 'tote', 'bench'].includes(type)) c.params.kind = model; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
+    if (model && ['conveyor', 'tote', 'bench'].includes(type)) c.params.kind = model; if (variant && type === 'conveyor') c.params.shape = variant; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
     if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
     return c;
   };
@@ -606,33 +611,77 @@
     ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
-  // palette tabs: each tab shows its own sections of thumbnail tiles (catalog models, parametric parts, movers), searchable.
-  //   모델: process equipment, robots, conveyors, racks, parts · 건물: hall parts and shells · 동선·구역: zones, walkways, aisle marks · 이동체: AMRs, AGVs, forklifts, workers
-  const MOVER_MODELS = ['e3_amr_deck_bot', 'e3_omron_agv', 'uw_forklift', 'uw_reachlift', 'uw_palletrobot', 'uf_cart', 'uf_wagon', 'uw_trolley'];
+  // palette: four tabs (건물 / 설비 / 동선·구역 / 이동체); each opens on a grid of category icons, a category opens its part
+  // tiles (thumbnails) with a back button and breadcrumb; the search box searches the whole tab. Every catalog model sits in
+  // exactly one category (CATOF below), parametric parts (js/factory-kit.js) and element types lead their category.
+  const CI = { // minimal line icons for the categories
+    conveyor: '<rect x="2" y="10" width="20" height="5" rx="2.5"/><circle cx="6" cy="12.5" r="1"/><circle cx="12" cy="12.5" r="1"/><circle cx="18" cy="12.5" r="1"/><path d="M5 15v5M19 15v5"/>',
+    cell: '<rect x="3" y="5" width="18" height="15" rx="1"/><path d="M3 9h18M8 20v-6h8v6"/>',
+    bench: '<path d="M3 10h18M5 10v10M19 10v10M5 4v6M19 4v6M5 4h14"/>',
+    arm: '<path d="M5 21h8M9 21v-5l4-6 5 2M13 10l-2-4"/><circle cx="18" cy="12" r="1.5"/>',
+    asrs: '<path d="M3 3v18M9 3v18M3 8h6M3 13h6M3 18h6"/><rect x="14" y="3" width="3" height="18"/><path d="M17 12h3"/>',
+    rack: '<path d="M4 3v18M20 3v18M4 8h16M4 14h16M4 20h16"/>',
+    vision: '<path d="M4 21V4h16v17"/><rect x="9" y="6" width="6" height="4"/><path d="M12 10v3M9 15l3-2 3 2"/>',
+    press: '<path d="M4 21h16M6 21V4h12v17M6 7h12"/><rect x="9" y="9" width="6" height="4"/><path d="M8 17h8"/>',
+    cabinet: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="M12 3v18M10 11h.01M14 11h.01"/>',
+    part: '<path d="M4 9h16v8H4z"/><path d="M7 9V6M17 9V6M4 13h16"/>',
+    wall: ICON.wall, column: ICON.column, door: ICON.door, roof: '<path d="M2 12 12 5l10 7M5 10v9M19 10v9M5 15h14"/>', fence: '<path d="M4 4v17M12 4v17M20 4v17M4 7h16M4 18h16M4 11l8 7M12 11l8 7"/>', stairs: ICON.stairs,
+    floor: '<path d="M3 17 9 7h12l-6 10z"/><path d="M6 12h12"/>', zone: ICON.zone, walkway: ICON.walkway, aisle: '<path d="M3 20 9 4M21 20 15 4M12 6v3M12 12v3M12 18v2"/>', route: ICON.route,
+    amr: ICON.amr, agv: '<rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V5h12v6M6 8h12"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/>',
+    forklift: '<path d="M4 17V8h6l3 5v4M17 4v14M17 18h4M10 8V5"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/>', worker: ICON.worker, cart: '<path d="M4 6h3l2 9h10l2-7H8"/><circle cx="10" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/>'
+  };
+  // catalog model → [tab, category]
+  const CATOF = k => {
+    if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
+    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
+    if (k === 'e3_fr5' || k === 'arm') return ['equip', 'arm'];
+    if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
+    if (k === 'e3_vision_gantry') return ['equip', 'vision'];
+    if (k === 'line06') return ['equip', 'press'];
+    if (/^ctrl\d$/.test(k) || k === 'line08' || k === 'line09') return ['equip', 'cabinet'];
+    if (/^(e3_egr_cooler|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
+    if (/^(uw_shelf|uw_pallet|uw_sunoko|uw_pedestal|uw_plasticbox_|uw_cardboard_|e3_tote)/.test(k)) return ['equip', 'rack'];
+    if (/^e3_hall_wall/.test(k)) return ['building', 'wall']; if (k === 'e3_hall_column') return ['building', 'column']; if (k === 'e3_hall_door_6m') return ['building', 'door'];
+    if (/^e3_hall_(roof|gable)/.test(k)) return ['building', 'roof']; if (/^e3_fence/.test(k)) return ['building', 'fence'];
+    if (k === 'e3_floor_6m_aisle') return ['route', 'aisle']; if (/^e3_floor|_building$/.test(k)) return ['building', 'floor'];
+    if (/^(e3_amr_deck_bot|e3_amr_roller_deck|uw_palletrobot)$/.test(k)) return ['mover', 'amr']; if (k === 'e3_omron_agv') return ['mover', 'agv'];
+    if (/^uw_(forklift|reachlift)$/.test(k)) return ['mover', 'forklift']; if (/worker$/.test(k)) return ['mover', 'worker'];
+    if (/^(uf_cart|uf_wagon|uw_trolley)$/.test(k)) return ['mover', 'cart'];
+    return ['equip', 'cell'];
+  };
+  const PAL = {
+    building: [['wall', '벽', [['wall', '벽 (창문 · 길이 조절)']]], ['column', '기둥', [['column', 'H형강 기둥']]], ['door', '출입문 · 셔터', [['door', '셔터 출입문']]], ['roof', '지붕', [['roof', '지붕 트러스 (크기 조절)']]],
+      ['fence', '펜스', [['fence', '안전 펜스 (길이 조절)']]], ['stairs', '계단', [['stairs', '계단', 'type']]], ['floor', '바닥 · 건물 모듈', []]],
+    equip: [['conveyor', '컨베이어', [['conveyor:roller', '롤러 컨베이어 (직선)'], ['conveyor:belt', '벨트 컨베이어 (직선)'], ['conveyor:roller:curve', '롤러 컨베이어 곡선 90°', 'assets/models/thumbs/kit_conveyor_roller.webp'], ['conveyor:belt:uturn', '벨트 컨베이어 U턴', 'assets/models/thumbs/kit_conveyor_belt.webp']]],
+      ['cell', '작업 셀', []], ['bench', '작업대', [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']]], ['arm', '로봇 팔', []],
+      ['asrs', '자동창고 · 크레인', []], ['rack', '랙 · 상자', [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']]],
+      ['vision', '검사 · 비전', []], ['press', '프레스 · 가공기', []], ['cabinet', '제어반 · 캐비닛', []], ['part', '부품 · 소품', []]],
+    route: [['zone', '구역', [['zone', '구역 (적재 · 하역 · 보관 · 금지)', 'type']]], ['walkway', '보행로', [['walkway', '보행로', 'type']]], ['aisle', '통로선', []], ['route', '경로', [['route', 'AMR 경로', 'type'], ['walkroute', '작업자 경로', 'type']]]],
+    mover: [['amr', 'AMR', [['amr:e3_amr_deck_bot', 'AMR (롤러 상판) · 움직임'], ['amr:uw_palletrobot', '팔레트 운반 로봇 · 움직임']]], ['agv', 'AGV', [['amr:e3_omron_agv', 'AGV (Omron, 트롤리) · 움직임'], ['amr:agv', 'AGV 리프트 · 움직임']]],
+      ['forklift', '지게차', [['amr:uw_forklift', '지게차 · 움직임']]], ['worker', '작업자', [['worker', '작업자 · 움직임', 'type']]], ['cart', '대차', []]]
+  };
+  const palCat = {}; // tab → open category (null = the icon grid)
   function paletteTiles(tab) {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
     const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group));
-    const kit = ([place, label, img], g) => `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 놓은 뒤 오른쪽 설정에서 크기 · 동작을 바꿉니다"><img src="${img || 'assets/models/thumbs/kit_' + place.replace(':', '_') + '.webp'}" alt="" loading="lazy" draggable="false"><span>${esc(label)}</span></button>`;
-    const typ = ([t, l], g) => `<button type="button" class="tile kit typ" draggable="true" data-place="${t}" data-q="${esc((l + ' ' + g).toLowerCase())}" title="${esc(l)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(t)}</i><span>${esc(l)}</span></button>`;
-    const model = ([k, c], g) => `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`;
-    const byCat = (cat, keep = () => true) => shown.filter(([k, c]) => (c.cat || '공정 설비') === cat && keep(k));
-    const SEC = {
-      models: [['EGR 라인', [['conveyor:roller', '롤러 컨베이어 (길이 · 폭 · 높이 조절)'], ['conveyor:belt', '벨트 컨베이어 (길이 · 폭 · 높이 조절)']], byCat('EGR 라인', k => !/fence/.test(k))],
-        ['로봇', [], byCat('로봇')],
-        ['물류 · 보관', [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']], byCat('물류', k => !MOVER_MODELS.includes(k))],
-        ['공장 설비', [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']], byCat('공장 설비')],
-        ['부품 · 소품', [], byCat('부품 · 소품')]],
-      building: [['구조 · 외피 (크기 조절)', [['wall', '벽 (창문 · 길이 조절)'], ['column', 'H형강 기둥'], ['door', '셔터 출입문'], ['roof', '지붕 트러스 (크기 조절)'], ['fence', '안전 펜스 (길이 조절)']], []],
-        ['기타 건물 요소', [['stairs', '계단', 'type']], []], ['건물 모듈 · 바닥', [], byCat('건물', k => !/aisle/.test(k))]],
-      route: [['구역 · 동선', [['zone', '구역 (적재 · 하역 · 보관 · 금지)', 'type'], ['walkway', '보행로', 'type']], []], ['바닥 표시', [], byCat('건물', k => /aisle/.test(k))]],
-      mover: [['움직이는 이동체 (경로 · 작업 순서)', [['amr:e3_amr_deck_bot', 'AMR (롤러 상판)', U.thumb('e3_amr_deck_bot')], ['amr:e3_omron_agv', 'AGV (Omron, 트롤리)', U.thumb('e3_omron_agv')], ['amr:uw_forklift', '지게차', U.thumb('uw_forklift')], ['amr:uw_palletrobot', '팔레트 운반 로봇', U.thumb('uw_palletrobot')], ['worker', '작업자', 'type'], ['route', 'AMR 경로', 'type'], ['walkroute', '작업자 경로', 'type']], []],
-        ['정지 차량 · 대차 · 사람 (배치용)', [], shown.filter(([k, c]) => MOVER_MODELS.includes(k) || c.cat === '사람')]]
+    const moverThumb = { 'amr:e3_amr_deck_bot': 'e3_amr_deck_bot', 'amr:uw_palletrobot': 'uw_palletrobot', 'amr:e3_omron_agv': 'e3_omron_agv', 'amr:uw_forklift': 'uw_forklift' };
+    const tileOf = ([place, label, img], g) => {
+      if (img === 'type') return `<button type="button" class="tile kit typ" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(place)}</i><span>${esc(label)}</span></button>`;
+      const src = img || (moverThumb[place] ? U.thumb(moverThumb[place]) : /^amr:/.test(place) ? '' : 'assets/models/thumbs/kit_' + place.split(':').slice(0, 2).join('_') + '.webp');
+      return `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 놓은 뒤 오른쪽 설정에서 크기 · 동작을 바꿉니다">${src ? `<img src="${src}" alt="" loading="lazy" draggable="false">` : `<i class="ic">${icon('amr')}</i>`}<span>${esc(label)}</span></button>`;
     };
-    return `<input class="find" type="search" placeholder="${tab === 'models' ? '모델' : '요소'} 검색">` + (SEC[tab] || []).map(([g, kits, list]) => (kits.length || list.length)
-      ? `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${kits.map(k => (k[2] === 'type' ? typ(k, g) : kit(k, g))).join('')}${list.map(e => model(e, g)).join('')}</div></div>` : '').join('');
+    const model = ([k, c], g) => `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`;
+    const TAB = { building: '건물', equip: '설비', route: '동선·구역', mover: '이동체' }[tab];
+    const cats = (PAL[tab] || []).map(([key, label, kits]) => [key, label, kits, shown.filter(([k]) => { const [t, c] = CATOF(k); return t === tab && c === key; })]).filter(([, , kits, list]) => kits.length + list.length);
+    const tilesOf = ([key, label, kits, list]) => kits.map(t => tileOf(t, label)).join('') + list.map(e => model(e, label)).join('');
+    const open = cats.find(c => c[0] === palCat[tab]);
+    const search = `<input class="find" type="search" placeholder="${TAB} 전체 검색">`;
+    const all = `<div class="mgrp all" hidden><div class="tiles">${cats.map(tilesOf).join('')}</div></div>`; // what the search box filters
+    if (open) return search + `<div class="pcrumb"><button type="button" data-back title="분류 목록으로">‹</button><span>${TAB} › <b>${esc(open[1])}</b></span></div><div class="mgrp cur"><div class="tiles">${tilesOf(open)}</div></div>` + all;
+    return search + `<div class="cats">${cats.map(([key, label, kits, list]) => `<button type="button" class="cat" data-cat="${key}"><i class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${CI[key] || ''}</svg></i><span>${esc(label)}</span><em>${kits.length + list.length}</em></button>`).join('')}</div>` + all;
   }
-  const TABS = [['models', '모델', null], ['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
+  const TABS = [['building', '건물', PALETTE[0][1]], ['equip', '설비', null], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
   const css = `
   .fb-on .view .hud.tr{display:none}
   .fb-on .view .hud.tl{left:262px;top:var(--fbbar,58px)}
@@ -677,14 +726,23 @@
   #fbPanel .pal .tile img{width:100%;aspect-ratio:1;object-fit:contain;background:rgba(255,255,255,.04);border-radius:2px}
   #fbPanel .pal .tile .ic{display:grid;place-items:center;width:100%;aspect-ratio:1;background:rgba(255,255,255,.04);border-radius:2px;color:var(--accent,#eec539)}
   #fbPanel .pal .tile .ic svg{width:42%;height:42%}
+  #fbPanel .pal .cats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+  #fbPanel .pal button.cat{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px 8px;border:1px solid rgba(255,255,255,.1);border-radius:6px;background:rgba(255,255,255,.03);color:#fff;font-size:11.5px;position:relative;cursor:pointer}
+  #fbPanel .pal button.cat:hover{border-color:rgba(238,197,57,.55);background:rgba(238,197,57,.06)}
+  #fbPanel .pal button.cat .ic{width:34px;height:34px;color:var(--accent,#eec539)}
+  #fbPanel .pal button.cat .ic svg{width:100%;height:100%}
+  #fbPanel .pal button.cat em{position:absolute;top:4px;right:6px;font-style:normal;font-size:9.5px;color:rgba(255,255,255,.45)}
+  #fbPanel .pal .pcrumb{display:flex;align-items:center;gap:8px;margin:6px 0 4px;font-size:12px;color:rgba(255,255,255,.6)}
+  #fbPanel .pal .pcrumb b{color:#fff}
+  #fbPanel .pal .pcrumb button{width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--accent,#eec539);font-size:16px;line-height:1;cursor:pointer}
   #fbLabels{position:absolute;inset:0;pointer-events:none;z-index:4}
   #fbLabels .lead{position:absolute;inset:0;width:100%;height:100%}
   #fbLabels .lead line{stroke:rgba(238,197,57,.75);stroke-width:1}
   #fbLabels .lead circle{fill:#eec539}
-  #fbLabels .card{position:absolute;width:150px;height:40px;box-sizing:border-box;padding:4px 8px 4px 10px;border-radius:6px;background:rgba(10,12,15,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-left:3px solid #eec539;color:#fff;font:600 12px/1.25 'IBM Plex Sans KR',system-ui,sans-serif;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:6px;pointer-events:auto;cursor:pointer;transition:transform .12s}
+  #fbLabels .card{position:absolute;width:128px;height:34px;box-sizing:border-box;padding:4px 8px 4px 10px;border-radius:6px;background:rgba(10,12,15,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-left:3px solid #eec539;color:#fff;font:600 11px/1.2 'IBM Plex Sans KR',system-ui,sans-serif;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:6px;pointer-events:auto;cursor:pointer;transition:transform .12s}
   #fbLabels .card:hover{transform:scale(1.06);border-color:rgba(238,197,57,.6);z-index:2}
   #fbLabels .card b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-  #fbLabels .card .n{grid-row:1/3;grid-column:2;align-self:center;font:700 18px/1 'IBM Plex Mono',ui-monospace,monospace;color:#eec539}
+  #fbLabels .card .n{grid-row:1/3;grid-column:2;align-self:center;font:700 15px/1 'IBM Plex Mono',ui-monospace,monospace;color:#eec539}
   #fbLabels .card .n i{font-style:normal;font-size:11px;color:rgba(255,255,255,.55);margin-left:1px}
   #fbLabels .card em{font-style:normal;font-size:10.5px;color:#ffb37c}
   #fbLabels .card em.k{color:rgba(255,255,255,.55)}
@@ -779,7 +837,7 @@
   .fbModal .acts{display:flex;justify-content:flex-end}
   .fbModal .acts button{display:inline-block;padding:7px 14px}
   @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:0 7px;font-size:11.5px} }`;
-  let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'models';
+  let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'equip';
   // short messages appear as a toast in the 3D view and fade out
   function note(t, warn) {
     let n = $('#fbToast'); if (!n) { n = document.createElement('div'); n.id = 'fbToast'; $('.view').appendChild(n); }
@@ -827,8 +885,10 @@
       const pal = panel.querySelector('.pal'), items = TABS.find(t => t[0] === k)[2];
       pal.classList.add('models'); // every tab is a tile grid now
       pal.innerHTML = paletteTiles(tab); void items; // every tab: sections of tiles (see paletteTiles)
-      const find = pal.querySelector('.find');
-      if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); pal.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); pal.querySelectorAll('.mgrp').forEach(g => { g.hidden = !g.querySelector('.tile:not([hidden])'); }); };
+      const find = pal.querySelector('.find'), allG = pal.querySelector('.mgrp.all'), rest = [...pal.querySelectorAll('.cats, .pcrumb, .mgrp.cur')];
+      if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); allG.hidden = !q; rest.forEach(e => { e.hidden = !!q; }); allG.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); };
+      pal.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { palCat[tab] = b.dataset.cat; showTab(tab); });
+      const back = pal.querySelector('[data-back]'); if (back) back.onclick = () => { palCat[tab] = null; showTab(tab); };
       pal.querySelectorAll('[data-place]').forEach(b => {
         b.addEventListener('click', () => startPlacing(b.dataset.place));
         b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', b.dataset.place); startPlacing(b.dataset.place); });
@@ -1149,7 +1209,7 @@
     const flowing = doc.objects.some(o => o.type === 'conveyor' && o.params && o.params.source);
     // conveyors with a source need time to fill: at least 120 s then
     const frames = Math.min(Math.ceil(3600 / SPF), Math.max(flowing ? Math.ceil(120 / SPF) : 1, cells.length ? Math.max(...cells.map(c => c.rec.info.frames)) : Math.max(1, ...others.map(o => Math.ceil(FE.cycleSeconds(o) / SPF)), ...loops.map(p => Math.ceil(p / SPF)))));
-    const M = FM().plans(doc, { horizon: frames * SPF + SPF }); // AMRs simulated together over the whole recording
+    const M = withZones(FM().plans(doc, { horizon: frames * SPF + SPF })); // AMRs simulated together over the whole recording
     const building = [], extra = [];
     for (const o of others) {
       const g = FE.build(o, doc.factory); building.push(g);
@@ -1390,6 +1450,7 @@
   /* ---------- screen-space labels: one compact card per zone (name · stock · state), black glass with a yellow accent;
      cards avoid each other (stacked upwards with a thin leader line to their anchor), fade with distance, show details on
      hover and select their object on click. 라벨 menu: 모두 / 재고 · 상태 / 이름 / 끄기 (floor-painted names follow it too) */
+  const labelCards = new Map(), labelSlots = new Map();
   let labelMode = (() => { try { return localStorage.getItem('fb-labels') || 'all'; } catch (e) { return 'all'; } })(), labelLayer = null, lastLabels = 0;
   function labelTick(M, t, now) {
     if (now - lastLabels < 120) return; lastLabels = now;
@@ -1401,7 +1462,7 @@
     const s = S(), cam = s.camera, el = s.renderer.domElement, r = el.getBoundingClientRect(), vr = view.getBoundingClientRect(), Z = (M && M.zones) || {};
     for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'zone') g.traverse(m => { if (m.userData.floorLabel) m.visible = labelMode === 'all' || labelMode === 'name'; }); }
     const cards = labelLayer.querySelector('.cards'), lead = labelLayer.querySelector('.lead');
-    if (labelMode === 'off' || labelMode === 'name') { cards.innerHTML = ''; lead.innerHTML = ''; return; }
+    if (labelMode === 'off' || labelMode === 'name') { cards.innerHTML = ''; lead.innerHTML = ''; lead.__svg = ''; labelCards.clear(); labelSlots.clear(); return; }
     const items = [];
     for (const o of doc.objects) {
       if (o.type !== 'zone') continue;
@@ -1413,17 +1474,26 @@
       const state = stock == null ? '' : cap && stock >= cap ? '가득 참' : stock === 0 ? '비어 있음' : '';
       items.push({ id: o.id, x, y, d, op, name: o.name, kind, stock, cap, state, keep: p.kind === 'keepout' });
     }
-    items.sort((a, b) => a.d - b.d);
-    const placed = [], html = [], lines = [], W = 150, H = 40;
+    // stable layout: a fixed order (document order), each card keeps its previous slot while that slot is still free
+    // (no re-solving every frame), whole pixels, and the DOM nodes persist (only changed text / positions are written)
+    const placed = [], lines = [], W = 128, H = 34, seen = new Set(), st = labelMode === 'stock' || labelMode === 'all';
     for (const it of items) {
-      let cy = it.y - H - 14, k = 0; const box = () => ({ x0: it.x - W / 2, x1: it.x + W / 2, y0: cy, y1: cy + H });
-      while (k < 5 && placed.some(b => { const a = box(); return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0; })) { cy -= H + 6; k++; }
-      if (k === 5) continue; placed.push(box());
-      const st = labelMode === 'stock' || labelMode === 'all';
-      html.push(`<div class="card${it.state ? ' warn' : ''}" data-id="${it.id}" style="left:${(it.x - W / 2) | 0}px;top:${cy | 0}px;opacity:${it.op.toFixed(2)}" title="${esc(it.name)} · ${esc(it.kind)}${it.stock != null ? ` · 재고 ${it.stock}${it.cap ? ' / ' + it.cap : ''}` : ''}${it.keep ? ' · 진입 금지' : ''} — 클릭하면 선택"><b>${esc(it.name)}</b>${st && it.stock != null ? `<span class="n">${it.stock}${it.cap ? '<i>/' + it.cap + '</i>' : ''}</span>` : ''}${it.state ? `<em>${it.state}</em>` : `<em class="k">${esc(it.kind)}</em>`}</div>`);
-      lines.push(`<line x1="${it.x | 0}" y1="${(it.y - 2) | 0}" x2="${it.x | 0}" y2="${(cy + H) | 0}" style="opacity:${it.op.toFixed(2)}"/><circle cx="${it.x | 0}" cy="${it.y | 0}" r="2.5" style="opacity:${it.op.toFixed(2)}"/>`);
+      const prev = labelSlots.get(it.id), ax = Math.round(it.x), ay = Math.round(it.y);
+      const box = cy => ({ x0: ax - W / 2, x1: ax + W / 2, y0: cy, y1: cy + H }), hit = b => placed.some(q => b.x0 < q.x1 - 2 && b.x1 > q.x0 + 2 && b.y0 < q.y1 - 2 && b.y1 > q.y0 + 2);
+      let k = prev && Math.abs(prev.ax - ax) < 3 && Math.abs(prev.ay - ay) < 3 && !hit(box(ay - H - 14 - prev.k * (H + 6))) ? prev.k : 0;
+      if (k !== (prev && prev.k)) { k = 0; while (k < 5 && hit(box(ay - H - 14 - k * (H + 6)))) k++; }
+      if (k === 5) continue;
+      const cy = ay - H - 14 - k * (H + 6); placed.push(box(cy)); labelSlots.set(it.id, { ax, ay, k }); seen.add(it.id);
+      let c = labelCards.get(it.id);
+      if (!c) { c = document.createElement('div'); c.dataset.id = it.id; cards.appendChild(c); labelCards.set(it.id, c); }
+      const html = `<b>${esc(it.name)}</b>${st && it.stock != null ? `<span class="n">${it.stock}${it.cap ? '<i>/' + it.cap + '</i>' : ''}</span>` : ''}${it.state ? `<em>${it.state}</em>` : `<em class="k">${esc(it.kind)}</em>`}`;
+      if (c.__html !== html) { c.innerHTML = html; c.__html = html; c.title = `${it.name} · ${it.kind}${it.stock != null ? ` · 재고 ${it.stock}${it.cap ? ' / ' + it.cap : ''}` : ''}${it.keep ? ' · 진입 금지' : ''} — 클릭하면 선택`; }
+      const cls = 'card' + (it.state ? ' warn' : ''), sty = `left:${ax - W / 2}px;top:${cy}px;opacity:${it.op.toFixed(1)}`;
+      if (c.className !== cls) c.className = cls; if (c.__sty !== sty) { c.style.cssText = sty; c.__sty = sty; }
+      lines.push(`<line x1="${ax}" y1="${ay - 2}" x2="${ax}" y2="${cy + H}" style="opacity:${it.op.toFixed(1)}"/><circle cx="${ax}" cy="${ay}" r="2.5" style="opacity:${it.op.toFixed(1)}"/>`);
     }
-    cards.innerHTML = html.join(''); lead.innerHTML = lines.join('');
+    for (const [id, c] of labelCards) if (!seen.has(id)) { c.remove(); labelCards.delete(id); labelSlots.delete(id); }
+    const svg = lines.join(''); if (lead.__svg !== svg) { lead.innerHTML = svg; lead.__svg = svg; }
   }
   function updateLogistics(M, t) {
     const Z = M.zones || {};
@@ -1480,6 +1550,6 @@
     return true;
   }
 
-  window.FactoryBuilder = { factory: () => ({ ...doc.factory }), doc: () => (syncActive(), clone(doc)), exportAll, loadDoc, docFromLegacy, busy, place: (place, x, z) => placeAt(place, { x, z }) }; // place: what a palette tile + floor click does (scripts, tests)
+  window.FactoryBuilder = { factory: () => ({ ...doc.factory }), doc: () => (syncActive(), clone(doc)), exportAll, loadDoc, docFromLegacy, busy, place: (place, x, z) => placeAt(place, { x, z }), look: (from, at) => camTo(new THREE.Vector3(...from), new THREE.Vector3(...at), 0.01) }; // place: what a palette tile + floor click does; look: camera (scripts, tests)
   if (window.__station) init(); else addEventListener('load', init);
 })();

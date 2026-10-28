@@ -39,7 +39,7 @@
     uf_tablet: { label: '태블릿 (공장)', group: UF, cat: '부품 · 소품', size: [0.31, 0.22, 0.01], parts: [['uf_tablet', 0, 0, 0]] },
     uw_building: { label: '창고 건물', group: UW, cat: '건물', size: [37.66, 9.80, 65.03], parts: [['uw_building', 0, 0, 0]] },
     uw_shelf: { label: '파렛트 랙 15.5 m', group: UW, cat: '물류', size: [1.14, 7.06, 15.52], parts: [['uw_shelf', 0, 0, 0]] },
-    uw_forklift: { label: '지게차', group: UW, cat: '물류', size: [1.49, 2.79, 4.74], parts: [['uw_forklift', 0, 0, 0]] },
+    uw_forklift: { label: '지게차', group: UW, cat: '물류', size: [1.12, 2.09, 3.56], parts: [['uw_forklift', 0, 0, 0]] },
     uw_reachlift: { label: '리치 지게차', group: UW, cat: '물류', size: [1.20, 2.48, 2.57], parts: [['uw_reachlift', 0, 0, 0]] },
     uw_palletrobot: { label: '팔레트 운반 로봇', group: UW, cat: '물류', size: [0.76, 0.13, 0.99], parts: [['uw_palletrobot', 0, 0, 0]] },
     uw_trolley: { label: '롤 대차', group: UW, cat: '물류', size: [1.24, 1.83, 1.12], parts: [['uw_trolley', 0, 0, 0]] },

@@ -292,7 +292,7 @@
      forklift's inner mast and the load rise while it loads (params.liftLow) and up to params.lift when it unloads
      at a zone whose name contains params.liftAt. A worker can push a prop (params.prop, e.g. 'uw_trolley').
      A tracked zone shows its stock as pallets (params.load: a carton key, or 'tray' for 8 product trays). */
-  const TY = FE.TYPES, LOAD = { uw_forklift: [1.55, 0.18], uw_palletrobot: [0, 0.14], e3_amr_deck_bot: [0, 0.62], e3_omron_agv: [0, 1.15] }; // load x, y in the AMR frame
+  const TY = FE.TYPES, LOAD = { uw_forklift: [1.16, 0.14], uw_palletrobot: [0, 0.14], e3_amr_deck_bot: [0, 0.62], e3_omron_agv: [0, 1.15] }; // load x, y in the AMR frame
   const OWN = { e3_amr_deck_bot: true, e3_omron_agv: true }; // EGR line v3 AMRs: modelled front +X, carry their load without a pallet
   const front = (m, name) => { const turn = new THREE.Group(); turn.add(m); m.rotation.y = Math.PI / 2; return A.placed(turn, name); };
   function loadOn(parent, kind, y0 = 0.13) { // a pallet's load
@@ -324,17 +324,43 @@
     if (/^하역 중/.test(label)) { const hi = p.lift && p.liftAt && label.includes(p.liftAt) ? p.lift : lo; return f < 0.35 ? lo + (hi - lo) * ease(f / 0.35) : f < 0.65 ? hi : hi * (1 - ease((f - 0.65) / 0.35)); }
     return pl.carry && pl.carry(t) ? lo : 0;
   }
+  // load / unload as a visible hand-off: during the dwell at a zone the load travels between the zone (where the stock stands)
+  // and the deck / forks, with a small lift — instead of vanishing there and appearing on the AMR. Positions in the AMR frame,
+  // from the plan's pose and the zone centre (plan.zoneAt, set by js/factory-builder.js).
+  function transfer(p, pl, t) {
+    if (!pl || !pl.ok || pl.still || !pl.state || !pl.zoneAt) return null;
+    const m = /^(적재|하역) 중 \((.+)\)$/.exec(pl.state(t) || ''); if (!m) return null;
+    const z = pl.zoneAt(m[2]); if (!z) return null;
+    const q = pl.pose(t), dx = z.x - q.x, dz = z.z - q.z, c = Math.cos(q.yaw), s = Math.sin(q.yaw);
+    const lx = c * dx - s * dz, lz = s * dx + c * dz;   // zone centre in the AMR frame (yaw about +Y)
+    const [ox, oy] = LOAD[p.model] || [0, 0.14], { f } = dwellPhase(pl, t), u = ease((f - 0.12) / 0.7);
+    const k = m[1] === '적재' ? u : 1 - u;               // 0 = at the zone, 1 = on the AMR
+    return { x: lx + (ox - lx) * k, z: lz * (1 - k), dy: (oy - 0.0) * (k - 1) + 0.25 * Math.sin(Math.PI * k), show: true };
+  }
   TY.amr.animate = (g, p, t, pl) => {
     const L = liftAt(p, pl, t), mast = g.getObjectByName('Rig_mast_2'), load = g.getObjectByName('AMR_Load');
     if (mast && mast.userData.y != null) mast.position.y = mast.userData.y + L;
-    if (load && load.userData.y != null) load.position.y = load.userData.y + L;
+    if (load && load.userData.y != null) {
+      const tr = transfer(p, pl, t);
+      if (load.userData.x == null) load.userData.x = load.position.x;
+      if (tr) { load.position.set(tr.x, load.userData.y + L + tr.dy, tr.z); load.visible = true; }
+      else { load.position.set(load.userData.x, load.userData.y + L, 0); }
+    }
   };
   TY.amr.drives = (g, p, frames, spf, pl) => {
     if (!pl || !pl.ok || pl.still) return [];
     const out = [], mast = g.getObjectByName('Rig_mast_2'), load = g.getObjectByName('AMR_Load');
     const rec = (node, y) => { const y0 = y(0), s = new Array(frames); node.position.y = y0; for (let f = 0; f < frames; f++) s[f] = Math.round((y(f * spf) - y0) * 1000); out.push({ node, dir: 'LinearY', rev: false, series: s }); };
     if (mast && mast.userData.y != null) rec(mast, t => mast.userData.y + liftAt(p, pl, t));
-    if (load && load.userData.y != null) rec(load, t => (pl.carry && !pl.carry(t) ? HIDE : load.userData.y + liftAt(p, pl, t))); // the load exists only while carried
+    if (load && load.userData.y != null) {
+      // the load exists while carried and while it is handed over; X / Z of the hand-off on wrappers (one drive per node)
+      rec(load, t => { const tr = transfer(p, pl, t); return tr ? load.userData.y + liftAt(p, pl, t) + tr.dy : pl.carry && !pl.carry(t) ? HIDE : load.userData.y + liftAt(p, pl, t); });
+      const x0 = load.position.x, tx = new THREE.Group(), tz = new THREE.Group(); tx.name = g.name + '_Load_TX'; tz.name = g.name + '_Load_TZ';
+      load.parent.add(tx); tx.add(tz); tz.add(load); load.position.x = 0; tx.position.x = x0;
+      const sx = new Array(frames), sz = new Array(frames);
+      for (let f = 0; f < frames; f++) { const tr = transfer(p, pl, f * spf); sx[f] = tr ? Math.round((tr.x - x0) * 1000) : 0; sz[f] = tr ? Math.round(tr.z * 1000) : 0; }
+      if (sx.some(v => v)) out.push({ node: tx, dir: 'LinearX', rev: true, series: sx }); if (sz.some(v => v)) out.push({ node: tz, dir: 'LinearZ', rev: false, series: sz });
+    }
     return out;
   };
   const workerBuild = TY.worker.build;

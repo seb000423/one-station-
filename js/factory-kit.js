@@ -79,7 +79,7 @@
 
   // ---------------------------------------------------------------- conveyor (roller / belt; straight, 90° curve, U-turn)
   const conv = TYPES.conveyor, convDefaults = conv.defaults;
-  conv.defaults = () => Object.assign(convDefaults(), { height: 0.85, width: 0.6, length: 4 });
+  conv.defaults = () => Object.assign(convDefaults(), { height: 0.85, width: 0.6, length: 2 });
   conv.build = (g, p) => {
     const P = FE.conveyorPath(p), W = p.width, H = p.height, r = 0.035, pitch = 0.1;
     const degPerSec = (p.speed / r) * 180 / Math.PI * (p.dir < 0 ? -1 : 1);
@@ -196,7 +196,7 @@
   // ---------------------------------------------------------------- safety fence (black mesh panels, posts every panel)
   TYPES.fence = {
     label: '안전 펜스', group: 'building',
-    defaults: () => ({ length: 4, height: 2.0, panel: 1.0 }),
+    defaults: () => ({ length: 2, height: 2.0, panel: 1.0 }),
     build: (g, p) => {
       const n = Math.max(1, Math.round(p.length / p.panel)), pw = p.length / n;
       for (let i = 0; i <= n; i++) { const x = -p.length / 2 + i * pw; box(g, 'Fence_Post', 0.06, p.height, 0.06, K.black, x, p.height / 2, 0); box(g, 'Fence_Foot', 0.14, 0.008, 0.14, K.black, x, 0.004, 0); }

@@ -59,6 +59,7 @@
     ['uw_worker', 'Worker', '작업자 (창고)'],
     ['uw_tablet', 'Tablet', '태블릿 (창고)']
   ]) MODELS[id] = { url: UW + file + '.glb', label };
+  MODELS.uw_forklift.scale = 0.75; // the Asset Store forklift is modelled ~1.33× too big (2.8 m tall): 2.1 m overhead guard, 3.6 m with forks
   // EGR cooler assembly line workstations (converted from the line's CAD, fasteners removed, meshopt compressed)
   const EGR = 'assets/models/egr-line/';
   for (const [id, file, label] of [
@@ -90,6 +91,7 @@
     const e = entries[id] = { state: 'loading', scene: null };
     e.promise = getLoader().then(L => new Promise((ok, fail) => L.load(m.url, ok, undefined, fail))).then(gltf => {
       const root = gltf.scene; root.name = 'Model_' + id;
+      if (m.scale) root.scale.multiplyScalar(m.scale); // unit fix at the source, for every use (catalog, movers, thumbnails)
       root.traverse(o => {
         delete o.userData.realvirtual; // the library's own drives; console 2 gets ours from drives()
         if (o.isMesh) { o.castShadow = o.receiveShadow = true; }

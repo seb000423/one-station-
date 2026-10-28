@@ -166,7 +166,7 @@
       build: (g, p) => {
         box(g, 'Walkway_Floor', p.length, 0.006, p.width, M.walkway, 0, 0.003, 0).castShadow = false;
         for (const s of [-1, 1]) box(g, 'Walkway_Edge', p.length, 0.008, 0.08, M.yellow, 0, 0.004, s * (p.width / 2 - 0.04)).castShadow = false;
-        const lab = labelPlane(p.label || '보행로', Math.min(p.length, p.width * 2.5), '#e9f5ee'); g.add(lab);
+        const lab = labelPlane(p.label || '보행로', Math.min(p.length * 0.5, p.width * 1.4, 1.4), '#e9f5ee', true); lab.userData.floorLabel = true; g.add(lab); // painted on the walkway
       },
       footprint: p => [p.length, p.width]
     },
@@ -179,7 +179,7 @@
         const edge = mat(c);
         for (const [w, d, x, z] of [[p.w, 0.08, 0, -p.d / 2], [p.w, 0.08, 0, p.d / 2], [0.08, p.d, -p.w / 2, 0], [0.08, p.d, p.w / 2, 0]]) box(g, 'Zone_Edge', w, 0.012, d, edge, x, 0.006, z).castShadow = false;
         // the name is painted on the floor; console 1 shows one screen-space card per zone (name, stock, state) instead of floating labels
-        const name = labelPlane(p.label || (ZONE_KIND[p.kind] || ZONE_KIND.none)[0], Math.min(p.w, 2.6), '#ffffff', true); name.name = 'Zone_Name'; name.userData.floorLabel = true; g.add(name);
+        const name = labelPlane(p.label || (ZONE_KIND[p.kind] || ZONE_KIND.none)[0], Math.min(p.w * 0.75, 1.5), '#ffffff', true); name.name = 'Zone_Name'; name.userData.floorLabel = true; g.add(name);
       },
       footprint: p => [p.w, p.d]
     },
