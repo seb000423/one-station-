@@ -6,6 +6,7 @@
 // Needle_Head, Door_L, …) and carry userData.anim = { type, axis, min, max } (exported as glTF extras).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { egrModuleLine } from './module-line.js';
 
 // ---------------------------------------------------------------- materials
 const std = (name, color, metalness, roughness, extra = {}) => {
@@ -1557,6 +1558,7 @@ function toteGrid(name, item, L, W, H) { // tote holding 8 parts in a grid (2 al
 }
 
 export const MODELS = {
+  egr_module_line: egrModuleLine, /* the welding module line (5 cells) rebuilt from generic equipment, tools/egr-line-v3/module-line.js */
   tote_blanks4: () => { const r = G('Tote_Blanks_4'); r.add(tote()); for (let i = 0; i < 4; i++) box(r, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); return finalize(r); }, /* 4 kits (line A) */
   tote_blanks: () => { const r = G('Tote_Blanks'); r.add(tote()); for (let i = 0; i < 8; i++) box(r, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); return finalize(r); }, /* 8 kits of plate blanks */
   brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ pitch: 64, kits: 4, mirror: true }), /* line A: a tote of 4 kits per 256 s; lifts towards line B */ egr_weld_line: egrWeldLine, pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
@@ -1567,3 +1569,6 @@ export const MODELS = {
   rack_bay: () => rackBay('01'), ...Object.fromEntries(['01', '02', '03', '04', '05', '06', '07', '08'].map(n => ['bay_sign_' + n, () => baySign(n)])),
   hall_wall_6m: wallPanel, hall_door_6m: doorPanel, hall_gable_24m: gableWall, hall_column: hallColumn, hall_roof_6m: roofTruss, floor_6m: () => floorTile(false), floor_6m_aisle: () => floorTile(true)
 };
+
+// helpers shared with tools/egr-line-v3/module-line.js (the welding module line rebuilt from these parts)
+export { G, box, cyl, tor, prof, foot, plane, bin, xf, std, anim, materials, finalize, cycleClip, opWorker, ikRig, fencePanel, egrCoolerGeo };
