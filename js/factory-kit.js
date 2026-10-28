@@ -36,6 +36,7 @@
     screen: mat(0x0f1726, { metalness: 0.1, roughness: 0.25, emissive: 0x1a2a46, emissiveIntensity: 1 }),
     green: mat(0x2bbd5a, { metalness: 0, roughness: 0.4, emissive: 0x2bbd5a, emissiveIntensity: 0.5 }), andonOff: mat(0x5a4a20, { metalness: 0, roughness: 0.5 }), andonOn: mat(0xffb020, { metalness: 0, roughness: 0.3, emissive: 0xffa010, emissiveIntensity: 2 }),
     pants: mat(0x2d3640, { metalness: 0, roughness: 0.8 }), vest: mat(0x3d4855, { metalness: 0, roughness: 0.75 }), skin: mat(0xd9a782, { metalness: 0, roughness: 0.7 }), helmet: mat(0xf2f2f0, { metalness: 0.1, roughness: 0.4 }),
+        ceramic: mat(0xece8de, { metalness: 0, roughness: 0.55 }), paste: mat(0x55585c, { metalness: 0.4, roughness: 0.6 }), syringe: mat(0xe8eef2, { metalness: 0, roughness: 0.3, transparent: true, opacity: 0.85 }),
         tote: mat(0x8fa39c, { metalness: 0, roughness: 0.55 }), carton: mat(0xc49a63, { metalness: 0, roughness: 0.9 }), wood: mat(0xb88a55, { metalness: 0, roughness: 0.85 })
   };
   K.clad = mat(0xd9dde1, { metalness: 0.35, roughness: 0.42, normalMap: ribNormal() }); K.roof = mat(0xc9ced3, { metalness: 0.3, roughness: 0.5, normalMap: ribNormal(), side: THREE.DoubleSide });
@@ -179,7 +180,9 @@
     label: '작업대', group: 'equipment',
     // worker: a seated operator on a stool in front (+Z); cycle: seconds per finished part — the hands work on the part, then
     // the operator presses the done button; the andon lamp shows the call (its output zone waiting for an AMR)
-    defaults: () => ({ kind: 'assembly', length: 1.6, depth: 0.8, height: 0.9, worker: true, cycle: 40, feeds: '' }),
+    // side (±1, local X; 0 = none): the operator puts each finished part into the tote on the AMR waiting on that side (its output zone)
+    // instead of passing it on; phase (s) shifts the cycle (two benches sharing one AMR). kind 'dispense': manual Ni paste dispensing
+    defaults: () => ({ kind: 'assembly', length: 1.6, depth: 0.8, height: 0.9, worker: true, cycle: 40, feeds: '', side: 0, phase: 0 }),
     build: (g, p) => {
       const L = p.length, D = p.depth, H = p.height, X = L / 2 - 0.0225, Z = D / 2 - 0.0225;
       for (const [x, z] of [[-X, -Z], [X, -Z], [-X, Z], [X, Z]]) { prof(g, 'Bench_Leg', [x, 0.06, z], [x, H - 0.03, z]); foot(g, x, 0, z); }
@@ -192,7 +195,17 @@
       box(g, 'Bench_Monitor', 0.4, 0.26, 0.03, K.black, L / 2 - 0.35, H + 0.38, -Z + 0.12); box(g, 'Bench_Screen', 0.36, 0.22, 0.002, K.screen, L / 2 - 0.35, H + 0.38, -Z + 0.136);
       if (p.kind === 'leak') { box(g, 'Leak_Tester', 0.5, 0.35, 0.4, K.sheet, -L / 4, H + 0.175, 0); box(g, 'Leak_Display', 0.2, 0.08, 0.002, K.screen, -L / 4, H + 0.25, 0.201); add(g, 'Leak_Gauge', cylGeo(0.05, 0.05, 0.03, 20), K.steel, -L / 4 + 0.15, H + 0.25, 0.21).rotation.x = Math.PI / 2; }
       if (p.kind === 'pack') { box(g, 'Pack_Scale', 0.35, 0.05, 0.35, K.sheet, -L / 4, H + 0.025, 0); box(g, 'Pack_Box', 0.45, 0.25, 0.3, K.carton, L / 6, H + 0.125, 0.1); }
-      if (p.kind === 'assembly') { box(g, 'Asm_Fixture', 0.45, 0.06, 0.25, K.aluDark, 0, H + 0.03, 0.05); box(g, 'Asm_Part', 0.4, 0.09, 0.11, K.steel, 0, H + 0.105, 0.05); }
+      if (p.kind === 'assembly' && !p.side) { box(g, 'Asm_Fixture', 0.45, 0.06, 0.25, K.aluDark, 0, H + 0.03, 0.05); box(g, 'Asm_Part', 0.4, 0.09, 0.11, K.steel, 0, H + 0.105, 0.05); }
+      if (p.kind === 'dispense') { // bench-top dispenser controller with pressure gauge, syringe holder, foot switch, substrate tray
+        box(g, 'Disp_Controller', 0.26, 0.12, 0.24, K.sheet, -L / 2 + 0.2, H + 0.06, -Z + 0.2); box(g, 'Disp_Display', 0.12, 0.05, 0.002, K.screen, -L / 2 + 0.2, H + 0.08, -Z + 0.321);
+        add(g, 'Disp_Gauge', cylGeo(0.03, 0.03, 0.02, 16), K.steel, -L / 2 + 0.29, H + 0.08, -Z + 0.33).rotation.x = Math.PI / 2;
+        add(g, 'Disp_Holder', cylGeo(0.012, 0.012, 0.18, 8), K.aluDark, -L / 2 + 0.38, H + 0.09, -Z + 0.2); box(g, 'Disp_Pedal', 0.22, 0.05, 0.28, K.black, 0.1, 0.025, Z + 0.25);
+        box(g, 'Disp_Tray', 0.3, 0.02, 0.22, K.black, L / 2 - 0.25, H + 0.01, -Z + 0.2); for (let k = 0; k < 6; k++) box(g, 'Disp_Tray_Sub', 0.2, 0.012, 0.14, K.ceramic, L / 2 - 0.25, H + 0.026 + k * 0.013, -Z + 0.2);
+      }
+      if (p.side && p.worker) { // the part on the fixture (substrate → paste stripes / moulded part being assembled) and the one in the operator's hand
+        box(g, 'Bench_Fixture', 0.3, 0.03, 0.22, K.aluDark, 0, H + 0.015, 0.05);
+        const bp = new THREE.Group(); bp.name = 'Bench_Part'; bp.position.set(0, H + 0.036, 0.05); g.add(bp); bp.userData.y = bp.position.y; benchPartLook(bp, p.kind, 'Bench_Paste_');
+      }
       // done button + andon tower at the front right corner
       const bx = L / 2 - 0.12, bz = D / 2 - 0.08;
       box(g, 'Bench_Button_Box', 0.1, 0.06, 0.1, K.black, bx, H + 0.03, bz); const btn = new THREE.Group(); btn.name = 'Bench_Button'; btn.position.set(bx, H + 0.06, bz); g.add(btn);
@@ -201,16 +214,24 @@
       add(g, 'Andon_Off', cylGeo(0.035, 0.035, 0.09, 16), K.andonOff, L / 2 - 0.05, H + 1.45, -Z + 0.05);
       const on = new THREE.Group(); on.name = 'Andon_On'; on.position.set(L / 2 - 0.05, H + 1.45, -Z + 0.05); g.add(on); add(on, 'Andon_Lamp', cylGeo(0.037, 0.037, 0.092, 16), K.andonOn); on.visible = false;
       if (p.worker) seated(g, H, D);
+      if (p.side && p.worker) { const arm = g.getObjectByName(p.side > 0 ? 'Op_Arm_R' : 'Op_Arm_L'), hp = new THREE.Group(); hp.name = 'Op_Hand_Part'; hp.position.set(0, -0.3, -0.33); arm.add(hp); hp.userData.y = hp.position.y; benchPartLook(hp, p.kind, null); }
       TYPES.bench.animate(g, p, 0, null);
     },
     animate: (g, p, t, plan) => {
       const a = benchPose(p, t), L = g.getObjectByName('Op_Arm_L'), R = g.getObjectByName('Op_Arm_R'), b = g.getObjectByName('Bench_Button'), on = g.getObjectByName('Andon_On');
-      if (L) { L.rotation.x = a.l; R.rotation.x = a.r; R.rotation.y = a.ry; } if (b) b.position.y = b.userData.y0 != null ? b.userData.y0 - a.press * 0.012 : (b.userData.y0 = b.position.y);
+      if (L) { L.rotation.x = a.l; R.rotation.x = a.r; L.parent.rotation.y = a.lry; R.parent.rotation.y = a.ry; const op = g.getObjectByName('Operator_Turn'); if (op) op.rotation.y = a.turn; }
+      if (b) b.position.y = b.userData.y0 != null ? b.userData.y0 - a.press * 0.012 : (b.userData.y0 = b.position.y);
       if (on) on.visible = !!(plan && plan.lamp);
+      const bp = g.getObjectByName('Bench_Part'), hp = g.getObjectByName('Op_Hand_Part');
+      if (bp) { bp.visible = a.part; for (let k = 1; k <= 3; k++) { const s = g.getObjectByName('Bench_Paste_' + k); if (s) s.visible = a.stripes >= k; } } if (hp) hp.visible = a.hand;
     },
     drives: (g, p, frames, spf, plan) => {
       const out = [], warp = plan && plan.warp ? plan.warp : t => t, deg = 180 / Math.PI;
       for (const [n, k, dir, rev] of [['Op_Arm_L', 'l', 'RotationX', false], ['Op_Arm_R', 'r', 'RotationX', false]]) { const node = g.getObjectByName(n); if (!node) continue; const a0 = benchPose(p, 0)[k], s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = Math.round((benchPose(p, warp(f * spf))[k] - a0) * deg * 100) / 100; out.push({ node, dir, rev, series: s }); }
+      for (const [n, k] of [['Op_Arm_L_Swing', 'lry'], ['Op_Arm_R_Swing', 'ry'], ['Operator_Turn', 'turn']]) { const node = g.getObjectByName(n); if (!node) continue; const a0 = benchPose(p, 0)[k], s = new Array(frames); let any = false; for (let f = 0; f < frames; f++) { s[f] = Math.round((benchPose(p, warp(f * spf))[k] - a0) * deg * 100) / 100; any = any || s[f] !== 0; } if (any) out.push({ node, dir: 'RotationY', rev: true, series: s }); }
+      const vis = (node, on) => { node.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = on(benchPose(p, warp(f * spf))) ? 0 : -50000; if (s.some(v => v !== s[0]) || s[0]) out.push({ node, dir: 'LinearY', rev: false, series: s }); };
+      const bp = g.getObjectByName('Bench_Part'), hp = g.getObjectByName('Op_Hand_Part');
+      if (bp) { vis(bp, a => a.part); for (let k = 1; k <= 3; k++) { const s = g.getObjectByName('Bench_Paste_' + k); if (s) vis(s, a => a.stripes >= k); } } if (hp) vis(hp, a => a.hand);
       const on = g.getObjectByName('Andon_On'); if (on && plan && plan.lampAt) { on.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = plan.lampAt(f * spf) ? 0 : -50000; out.push({ node: on, dir: 'LinearY', rev: false, series: s }); }
       return out;
     },
@@ -220,20 +241,32 @@
 
   // seated operator (stylised, 1.75 m standing): stool, legs, torso in a work vest, head with a white helmet, two arms that work
   function seated(g, H, D) {
-    const z = D / 2 + 0.38, op = new THREE.Group(); op.name = 'Operator'; op.position.set(0, 0, z); g.add(op);
+    const z = D / 2 + 0.38, op0 = new THREE.Group(); op0.name = 'Operator'; op0.position.set(0, 0, z); g.add(op0); const op = new THREE.Group(); op.name = 'Operator_Turn'; op0.add(op);
     add(op, 'Op_Stool', cylGeo(0.18, 0.18, 0.04, 20), K.black, 0, 0.6, 0); add(op, 'Op_Stool_Post', cylGeo(0.025, 0.025, 0.58, 8), K.aluDark, 0, 0.3, 0); add(op, 'Op_Stool_Base', cylGeo(0.25, 0.25, 0.03, 16), K.black, 0, 0.015, 0);
     for (const sx of [-0.1, 0.1]) { box(op, 'Op_Thigh', 0.13, 0.13, 0.42, K.pants, sx, 0.69, -0.19); box(op, 'Op_Shin', 0.11, 0.48, 0.11, K.pants, sx, 0.4, -0.38); box(op, 'Op_Shoe', 0.11, 0.07, 0.24, K.black, sx, 0.035, -0.42); }
     box(op, 'Op_Torso', 0.38, 0.55, 0.22, K.vest, 0, 0.97, 0.02).rotation.x = -0.12;
     add(op, 'Op_Head', cylGeo(0.095, 0.1, 0.22, 16), K.skin, 0, 1.38, -0.04); add(op, 'Op_Helmet', cylGeo(0.115, 0.12, 0.08, 16), K.helmet, 0, 1.49, -0.04);
     for (const [n, sx] of [['Op_Arm_L', -0.23], ['Op_Arm_R', 0.23]]) {
-      const arm = new THREE.Group(); arm.name = n; arm.position.set(sx, 1.18, 0.0); op.add(arm);
+      const sw = new THREE.Group(); sw.name = n + '_Swing'; sw.position.set(sx, 1.18, 0.0); op.add(sw); const arm = new THREE.Group(); arm.name = n; sw.add(arm); // swing (Y) > arm (X)
       box(arm, n + '_Upper', 0.09, 0.3, 0.09, K.vest, 0, -0.15, 0); const fore = box(arm, n + '_Fore', 0.08, 0.08, 0.32, K.skin, 0, -0.29, -0.16); void fore;
     }
   }
   // the operator's arms over one cycle: small hand work on the part, then the right hand reaches to the done button
   function benchPose(p, t) {
-    const T = Math.max(5, p.cycle || 40), u = ((t % T) + T) % T, w = Math.sin(u * 2.4) * 0.12, reach = u > T - 3 ? Math.sin(Math.PI * (u - (T - 3)) / 3) : 0;
-    return { l: -0.35 + w, r: -0.35 - w * 0.8 - reach * 0.55, ry: -reach * 0.5, press: reach > 0.85 ? 1 : 0 };
+    const T = Math.max(5, p.cycle || 40), u = (((t + (p.phase || 0)) % T) + T) % T, w = Math.sin(u * 2.4) * 0.12;
+    if (!p.side) { const reach = u > T - 3 ? Math.sin(Math.PI * (u - (T - 3)) / 3) : 0; return { l: -0.35 + w, r: -0.35 - w * 0.8 - reach * 0.55, ry: -reach * 0.5, lry: 0, turn: 0, press: reach > 0.85 ? 1 : 0, part: false, hand: false, stripes: 0 }; }
+    // side output: take a substrate from the tray (0 … 2 s), work on it (dispense: three stripes), lift it (T − 5), turn and lay it in the
+    // tote on the AMR at the side (T − 2.5, BENCH_PLACE), come back
+    const s = p.side, sw = u < T - 5 ? 0 : u < T - 3.5 ? (u - (T - 5)) / 1.5 : u < T - 2.5 ? 1 : u < T - 1.2 ? 1 - (u - (T - 2.5)) / 1.3 : 0, e = sw * sw * (3 - 2 * sw);
+    const work = u >= 2 && u < T - 5, f = work ? (u - 2) / (T - 7) : 0, arm = -0.35 + (work ? w : 0) - e * 0.45, other = -0.35 + (work ? -w * 0.8 : 0);
+    return { l: s > 0 ? other : arm, r: s > 0 ? arm : other, ry: s > 0 ? -e * 1.25 : 0, lry: s < 0 ? e * 1.25 : 0, turn: -s * e * 0.55, press: 0,
+      part: u >= 2 && u < T - 5, hand: u >= T - 5 && u < T - 2.5, stripes: p.kind === 'dispense' ? (u >= T - 5 ? 3 : work ? Math.floor(f * 3.2) : 0) : 0 };
+  }
+  // the part on a side-output bench: dispense → ceramic substrate (+ three paste stripes named pre + k); assembly / pack → the moulded part
+  function benchPartLook(n, kind, pre) {
+    box(n, 'Bench_Part_Plate', 0.2, 0.012, 0.14, K.ceramic, 0, 0.006, 0);
+    if (kind === 'dispense') [-0.06, 0, 0.06].forEach((x, i) => { const s = new THREE.Group(); s.name = pre ? pre + (i + 1) : 'Hand_Paste'; n.add(s); box(s, 'Bench_Paste', 0.014, 0.004, 0.1, K.paste, x, 0.014, 0); });
+    else { box(n, 'Bench_Part_Body', 0.24, 0.02, 0.18, K.black, 0, -0.004, 0); for (const sz of [-1, 1]) box(n, 'Bench_Part_Rib', 0.24, 0.026, 0.02, K.black, 0, 0.012, sz * 0.08); for (const x of [-0.06, 0, 0.06]) box(n, 'Bench_Part_Ni', 0.012, 0.003, 0.1, K.steel, x, 0.0135, 0); }
   }
 
   // ---------------------------------------------------------------- safety fence (black mesh panels, posts every panel)

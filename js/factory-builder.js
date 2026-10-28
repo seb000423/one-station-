@@ -57,7 +57,7 @@
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
     fence: [['length', '길이 (m)', 0.5, 0.5, 100], ['height', '높이 (m)', 0.1, 0.5, 4], ['panel', '패널 폭 (m)', 0.1, 0.5, 3]],
     roof: [['length', '길이 (m, X)', 1, 6, 300], ['span', '폭 (m, Z)', 1, 6, 60], ['h', '처마 높이 (m, 0 = 천장)', 0.5, 0, 30], ['bay', '트러스 간격 (m)', 0.5, 3, 12], ['rise', '지붕 경사 높이 (m)', 0.1, 0, 4], ['sheet', '지붕판 보이기', 'check']],
-    bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2], ['worker', '앉은 작업자', 'check'], ['cycle', '작업 사이클 (s, 완료 버튼)', 1, 5, 600, p => p.worker], ['feeds', '완성품 구역 (안돈 호출)', 'place']],
+    bench: [['kind', '용도', 'select', [['assembly', '조립'], ['leak', '리크 테스트'], ['pack', '검사 · 포장'], ['dispense', '수동 도포 (디스펜서)']]], ['length', '길이 (m)', 0.1, 0.8, 4], ['depth', '깊이 (m)', 0.05, 0.5, 1.5], ['height', '작업 높이 (m)', 0.05, 0.6, 1.2], ['worker', '앉은 작업자', 'check'], ['cycle', '작업 사이클 (s, 완료 버튼)', 1, 5, 600, p => p.worker], ['feeds', '완성품 구역 (안돈 호출)', 'place'], ['side', 'AMR 상자 위치 (-1 왼쪽 · 0 없음 · 1 오른쪽)', 1, -1, 1, p => p.worker], ['phase', '사이클 시작 지연 (s)', 1, 0, 600, p => p.worker]],
     tote: [['kind', '종류', 'select', [['tote', '플라스틱 상자'], ['carton', '골판지 상자']]], ['length', '길이 (m)', 0.05, 0.1, 2], ['width', '폭 (m)', 0.05, 0.1, 2], ['height', '높이 (m)', 0.02, 0.05, 1.5], ['stack', '쌓은 수', 1, 1, 12]],
     door: [['width', '폭 (m)', 0.1, 0.6, 8], ['height', '높이 (m)', 0.1, 1.8, 8], ['thickness', '벽 두께 (m)', 0.05, 0.05, 1]],
     stairs: [['width', '폭 (m)', 0.1, 0.6, 5], ['run', '길이 (m)', 0.1, 0.5, 20], ['height', '높이 (m)', 0.1, 0.3, 15]],
@@ -140,7 +140,7 @@
   // AMR plans learn where each zone stands (load / unload hand-off animation, js/factory-unity-groups.js)
   function withZones(M) {
     if (M && M.amr && !M.__zones) { M.__zones = true; const at = key => { const o = doc.objects.find(o => o.type === 'zone' && (o.name === key || 'zone:' + o.id === key)); if (!o) return null;
-      const zp = o.params || {}, z = M.zones && M.zones[o.id]; return { x: o.x, z: o.z, n: zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1, item: zp.load, stock: t => (z ? z.stock(t) : 0) }; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
+      const zp = o.params || {}, z = M.zones && M.zones[o.id]; return { x: o.x, z: o.z, n: zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1, item: zp.load, h: zp.standH || 0, stock: t => (z ? z.stock(t) : 0) }; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
     return M;
   }
   function motion() {
@@ -647,7 +647,7 @@
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];
     if (k === 'line06' || k === 'e3_injection_cell') return ['equip', 'press'];
     if (/^ctrl\d$/.test(k) || k === 'line08' || k === 'line09') return ['equip', 'cabinet'];
-    if (/^(e3_egr_cooler|e3_insert_part|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
+    if (/^(e3_egr_cooler|e3_insert_part|e3_dispensed_sub|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
     if (/^(uw_shelf|uw_pallet|uw_sunoko|uw_pedestal|uw_plasticbox_|uw_cardboard_|e3_tote)/.test(k)) return ['equip', 'rack'];
     if (/^e3_hall_wall/.test(k)) return ['building', 'wall']; if (k === 'e3_hall_column') return ['building', 'column']; if (k === 'e3_hall_door_6m') return ['building', 'door'];
     if (/^e3_hall_(roof|gable)/.test(k)) return ['building', 'roof']; if (/^e3_fence/.test(k)) return ['building', 'fence'];
@@ -661,7 +661,7 @@
     building: [['wall', '벽', [['wall', '벽 (창문 · 길이 조절)']]], ['column', '기둥', [['column', 'H형강 기둥']]], ['door', '출입문 · 셔터', [['door', '셔터 출입문']]], ['roof', '지붕', [['roof', '지붕 트러스 (크기 조절)']]],
       ['fence', '펜스', [['fence', '안전 펜스 (길이 조절)']]], ['stairs', '계단', [['stairs', '계단', 'type']]], ['floor', '바닥 · 건물 모듈', []]],
     equip: [['conveyor', '컨베이어', [['conveyor:roller', '롤러 컨베이어 (직선)'], ['conveyor:belt', '벨트 컨베이어 (직선)'], ['conveyor:roller:curve', '롤러 컨베이어 곡선 90°', 'assets/models/thumbs/kit_conveyor_roller.webp'], ['conveyor:belt:uturn', '벨트 컨베이어 U턴', 'assets/models/thumbs/kit_conveyor_belt.webp']]],
-      ['cell', '작업 셀', []], ['bench', '작업대', [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']]], ['arm', '로봇 팔', []],
+      ['cell', '작업 셀', []], ['bench', '작업대', [['bench:dispense', '수동 도포 작업대'], ['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']]], ['arm', '로봇 팔', []],
       ['asrs', '자동창고 · 크레인', []], ['rack', '랙 · 상자', [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']]],
       ['vision', '검사 · 비전', []], ['press', '프레스 · 가공기', []], ['cabinet', '제어반 · 캐비닛', []], ['part', '부품 · 소품', []]],
     route: [['zone', '구역', [['zone', '구역 (적재 · 하역 · 보관 · 금지)', 'type']]], ['walkway', '보행로', [['walkway', '보행로', 'type']]], ['aisle', '통로선', []], ['route', '경로', [['route', 'AMR 경로', 'type'], ['walkroute', '작업자 경로', 'type']]]],

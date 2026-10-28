@@ -2,10 +2,10 @@
 cooler line, every part at real scale, with material flowing through it continuously:
 
   inbound dock  --AGV-->  AS/RS cell (two rack rows, stacker crane, I/O loop: totes circulate rack → pick station → rack)
-  -> bin picking robot -> vision gate  ->  Ni paste dispensing cell (DMC / weighing, needle, positioner)
-  -> NG chute  ->  belt transfer  ->  FR5 stacking cell (4 coolers per tote)  --AMR-->  finished-goods racks
-  south half: manual EGR assembly / leak test / inspection-packing benches on a roller line with operators  --forklift-->  shipping dock;
-  bracket line: 2-level pallet conveyor with an integrated servo press, a machining cell tended by an FR5 from an AMR tote
+  -> EGR auto line: pick -> Ni paste dispensing -> drying / sintering -> vision + NG -> insert moulding  --AMR-->
+  assembly parts supply -> manual assembly / leak test / inspection-packing benches (south)  --weighing AMR-->  assembled
+  --forklift-->  finished-goods racks  --forklift-->  shipping dock
+The brazed core is a semi-finished part: it only reaches the racks after assembly and the leak test.
 
 Building: clad walls with a window band, two sectional doors (inbound south-west, shipping south-east), H columns on a
 6 m grid, two 20 m roof spans with trusses, purlins, skylights and LED high-bays (js/factory-kit.js).
@@ -62,9 +62,9 @@ model('자동창고 일체형 셀', 'e3_asrs_cell', -23.4, AZ, r3(math.pi))
 # ---------------------------------------------------------------- EGR automatic line (north), one model on the AS/RS clock (e3_egr_auto_line, Line_Cycle 128 s):
 # picker at the AS/RS pick station → automatic Ni paste dispensing → drying / sintering oven → vision + NG → insert moulding → outfeed into
 # the tote on the AMR waiting at its end. The line's local origin sits 1.3 m east of the pick station (x −15.965); its model is centred
-# on its bounding box (x −1.7 … 14.545, z −2.65 … 1.035), hence the offsets.
+# on its bounding box (x −1.7 … 14.545, z −2.65 … 1.84), hence the offsets.
 LX0 = -15.965 + 1.3
-model('EGR 자동 라인 (도포 → 소성 → 검사 → 인서트 사출)', 'e3_egr_auto_line', LX0 + 6.4225, AZ - 0.8075)
+model('EGR 자동 라인 (도포 → 소성 → 검사 → 인서트 사출)', 'e3_egr_auto_line', LX0 + 6.4225, AZ - 0.405)
 OUT_X, OUT_Z = r3(LX0 + 14.7), r3(AZ + 0.6)   # where the moulded parts drop into the AMR's tote
 
 # ---------------------------------------------------------------- finished goods (east, north): pallet racks, reach truck
@@ -72,69 +72,84 @@ add('rack', '완제품 랙 A', 22, -17.9, 0, {'bays': 4, 'levels': 3, 'bayWidth'
 add('rack', '완제품 랙 B', 22, -14.4, 0, {'bays': 4, 'levels': 3, 'bayWidth': 2.7, 'depth': 1.1, 'levelHeight': 2.0, 'perSlot': 2, 'fill': 45, 'load': 'carton'})
 model('리치 지게차 (대기)', 'uw_reachlift', 29.0, -16.2, PI2)
 
-# ---------------------------------------------------------------- EGR assembly line (south): benches on a roller line, operators
-LZ = 13.0
-benches = []
-for k, (name, kind, x) in enumerate((('조립 작업대 1', 'assembly', -14.5), ('조립 작업대 2', 'assembly', -12.0), ('리크 테스트 1', 'leak', -9.5), ('리크 테스트 2', 'leak', -7.0), ('검사 · 포장', 'pack', -4.5))):
-    # seated operators on the aisle side (−Z after the turn); each presses the done button every cycle
-    benches.append(add('bench', name, x, LZ, math.pi, {'kind': kind, 'length': 1.6, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': 38 + 4 * k}))
-add('conveyor', '조립 라인 컨베이어', -8.5, LZ + 1.6, 0, {'shape': 'straight', 'kind': 'roller', 'length': 13, 'width': 0.6, 'height': 0.85, 'speed': 0.12, 'dir': 1, 'source': True, 'interval': 14, 'item': 0.44, 'sink': True})
-for k, x in enumerate((-15.5, -13.0, -10.5)):
-    add('rack', f'부품 랙 {k + 1}', x, LZ + 3.2, 0, {'bays': 1, 'levels': 3, 'bayWidth': 1.4, 'depth': 0.6, 'levelHeight': 0.45, 'perSlot': 2, 'fill': 80, 'load': 'tote'})
-model('완성품 팔레트', 'uw_sunoko', -0.6, LZ)
-ww = add('walkway', '조립 라인 작업 통로', -9.0, LZ - 2.0, 0, {'length': 12.0, 'width': 0.8, 'label': '조립 라인 작업 통로'})
-add('worker', '라인 반장', -9.0, LZ - 2.0, 0, {'walkway': ww['id'], 'speed': 0.8, 'dwell': 25})
-wr = add('walkroute', '도포 셀 점검 동선', 0, 0, 0, {'points': [[-9.5, -12.4], [-3.0, -12.4]]})
-add('worker', '도포 셀 담당', -9.5, -12.4, 0, {'walkway': wr['id'], 'speed': 0.9, 'dwell': 20})
-
+# ---------------------------------------------------------------- manual cells (south): two seated operators per cell, the AMR waiting between them
+# takes each finished part into the tote on its deck (8 per tote) and leaves when it is full. Benches face south (rot π), operators sit on
+# the lane side at z 11.22, the AMR parks between them at the same z.
+NL, SL = -9.0, 8.0                   # lanes: eastbound north, westbound south
+BZ, OPZ = 12.0, 11.22
+def cell(x0, kinds, cycle, names):
+    out = []
+    for (kind, dx, side, ph), nm in zip(((kinds[0], -1.1, -1, 0), (kinds[1], 1.1, 1, round(cycle / 2, 3))), names):
+        out.append(add('bench', nm, x0 + dx, BZ, math.pi, {'kind': kind, 'length': 1.2, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': cycle, 'side': side, 'phase': ph}))
+    return out
+# manual Ni paste dispensing: 64 s per substrate and operator, one part every 32 s into the AMR tote (the operators lay it in at 29.5 / 61.5 s)
+MX = -18.0
+man = cell(MX, ('dispense', 'dispense'), 64, ('수동 도포 작업대 1', '수동 도포 작업대 2'))
+# assembly / inspection-packing of the moulded parts: 6 good parts per 128 s from the auto line → 42.667 s per part and operator
+AX = -7.0; ACYC = round(128 / 3, 3)
+asm = cell(AX, ('assembly', 'pack'), ACYC, ('조립 작업대 (사출품)', '검사 · 포장 작업대'))
+add('rack', '수동 도포 기판 랙', MX, BZ + 1.4, 0, {'bays': 1, 'levels': 3, 'bayWidth': 2.4, 'depth': 0.6, 'levelHeight': 0.45, 'perSlot': 3, 'fill': 80, 'load': 'tote'})
 
 # ---------------------------------------------------------------- zones (stock kept: AMRs wait when a pickup is empty / a drop-off is full)
-NL, SL = -9.0, 8.0                   # lanes: eastbound north, westbound south
-zone('자재 입고', 'pickup', DOORS[0], 17.65, track=True, stock=3, cap=6, supply=30, load='uw_cardboard_a1')
-zone('자동창고 입고', 'dropoff', -17.6, NL - 2.65, track=True, stock=0, cap=4, consume=36, load='uw_cardboard_a1')
-# the auto line's outfeed: the AMR waits under the belt end while the moulded parts drop into its tote one by one (0.5 kg each); at 4 kg (8) it leaves.
-# The line drops a good part at 13.6, 45.6 and 109.6 s of every 128 s (part 3 of 4 is an NG)
-outz = zone('사출품 적재 (자동 라인)', 'pickup', OUT_X, OUT_Z, w=1.2, d=1.4, track=True, stock=0, cap=16, supplyAt=[13.6, 45.6, 109.6], supplyPeriod=128, unitKg=0.5, thresholdKg=4, load='e3_insert_part')
-outz['perm'] = {'amr': True}   # the AMR parks inside it, under the belt end
-zone('완제품 입고', 'dropoff', 16.4, NL - 2.65, track=True, stock=0, cap=6, consume=24, load='e3_tote_600x400')
-zone('조립 완료', 'pickup', -0.6, SL + 2.65, track=True, stock=1, cap=4, load='uw_cardboard_c1')  # filled by the weighing AMR
-# weighing zone beside the benches: the operators put finished coolers (2.5 kg) on the AMR waiting here; at 20 kg it leaves
-zone('조립품 적재 (무게 감지)', 'pickup', -9.5, SL + 1.9, w=2.4, d=1.2, track=True, stock=0, cap=16, supply=9, unitKg=2.5, thresholdKg=20, load='e3_egr_cooler')
-zone('출하 대기', 'dropoff', DOORS[1], 17.65, track=True, stock=0, cap=4, consume=70, load='uw_cardboard_c1')
-zone('조립 부품 공급', 'dropoff', -17.5, SL + 2.65, track=True, stock=1, cap=3, consume=90, load='e3_tote_600x400')
+# the auto line's outfeed: the AMR waits under the belt end while the moulded parts drop into its tote one by one; at 8 it leaves.
+# Good parts drop at these phases of the line's 128 s clock (auto part 3 and manual part 2 of every four are NG)
+outz = zone('사출품 적재 (자동 라인)', 'pickup', OUT_X, OUT_Z, w=1.2, d=1.4, track=True, stock=0, cap=16, supplyAt=[12.7, 28.7, 44.7, 92.7, 108.7, 124.7], supplyPeriod=128, unitKg=0.5, thresholdKg=4, load='e3_insert_part')
+outz['perm'] = {'amr': True}
+mz = zone('수동 도포 적재', 'pickup', MX, OPZ, w=0.9, d=1.2, track=True, stock=0, cap=16, supplyAt=[29.5, 61.5], supplyPeriod=64, unitKg=0.1, thresholdKg=0.8, load='e3_dispensed_sub')
+mz['perm'] = {'amr': True}
+az = zone('조립 완료 적재', 'pickup', AX, OPZ, w=0.9, d=1.2, track=True, stock=0, cap=16, supplyAt=[round(ACYC - 2.5, 3), round(ACYC / 2 - 2.5, 3)], supplyPeriod=ACYC, unitKg=0.5, thresholdKg=4, load='e3_insert_part')
+az['perm'] = {'amr': True}
+# roller stands at deck height (0.62 m): the AMR rolls the full tote on; the operator there takes the parts out one by one
+INF_X, INF_Z = r3(LX0 + 4.4), r3(AZ + 1.6)
+zone('소성로 투입대 (수동 도포품)', 'dropoff', INF_X, INF_Z, w=0.7, d=0.5, track=True, stock=1, cap=1, consume=256, standH=0.62, stand=False, load='e3_tote_dispensed')  # the line's stand; 8 parts, one every 32 s
+zone('조립 투입대 (사출품)', 'dropoff', AX - 2.3, 11.05, w=0.7, d=0.5, track=True, stock=1, cap=2, consume=round(8 * ACYC / 2, 1), standH=0.62, load='e3_tote_moulded')
+zone('완제품 입고대', 'dropoff', 16.4, NL - 1.95, w=1.4, d=0.6, track=True, stock=0, cap=2, consume=200, standH=0.62, load='e3_tote_moulded')  # the reach truck stores the totes in the FG racks
+# pallets: built at the FG area (palletising operator), forklift forks into the pockets 1.16 m ahead of its stop, carries it to the shutter
+zone('출하 팔레트', 'pickup', 19.6, r3(NL - 1.25 - 1.16), w=1.4, d=1.4, track=True, stock=1, cap=1, supply=300, load='uw_cardboard_c1')
+zone('출하 대기', 'dropoff', DOORS[1], r3(16.4 + 1.16), w=1.4, d=1.4, track=True, stock=0, cap=1, consume=70, load='uw_cardboard_c1')
+# parking spots next to each batch zone: the second AMR of a pair waits here (off the lanes) while the first is being filled
+PARK = {'사출품': (r3(OUT_X + 1.6), r3(NL - 2.3)), '수동 도포': (MX + 2.6, 10.2), '조립품': (AX + 2.6, 10.2)}
+for nm, (x, z) in PARK.items():
+    zone(nm + ' AMR 대기', 'storage', x, z, w=1.0, d=1.0)
+wr2 = add('walkroute', '팔레타이징 동선', 0, 0, 0, {'points': [[16.4, -10.2], [19.6, -10.2]]})
+add('worker', '팔레타이징 작업자', 16.4, -10.2, 0, {'walkway': wr2['id'], 'speed': 0.8, 'dwell': 25})
 
 # ---------------------------------------------------------------- AMR network and movers
 # the loop passes through every junction (dock spurs join the network only at route points)
-north = sorted({-17.6, 0.0, OUT_X, 11.64, 16.4}); south = sorted({-17.5, -9.5, -0.6, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers between the column lines
+north = sorted({INF_X, 0.0, OUT_X, PARK['사출품'][0], 11.64, 16.4, 19.6}); south = sorted({MX, MX + 2.6, AX, AX - 2.3, AX + 2.6, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers between the column lines
 route('순환 경로', [(-28, NL)] + [(x, NL) for x in north] + [(28, NL), (28, SL)] + [(x, SL) for x in south] + [(-28, SL), (-28, NL)], oneway=True)
 route('남행 연결로', [(11.64, NL), (11.64, SL)], oneway=True)   # crossovers between the lanes, midway between centre columns
 route('북행 연결로', [(0.0, SL), (0.0, NL)], oneway=True)
-for x in (-17.6, 16.4):
+for x in (16.4, 19.6):
     route('도킹', [(x, NL), (x, NL - 1.25)])
-route('도킹', [(OUT_X, NL), (OUT_X, OUT_Z)])   # into the space under the line's outfeed belt end
-for x in (-17.5, -9.5, -0.6):
-    route('도킹', [(x, SL), (x, SL + 1.25)])
-for x in DOORS:
-    route('셔터 통로', [(x, SL), (x, 16.4)])
+route('도킹', [(OUT_X, NL), (OUT_X, OUT_Z)])          # into the space under the line's outfeed belt end
+route('도킹', [(INF_X, NL), (INF_X, r3(INF_Z + 0.8))])  # up to the infeed stand
+for x in (MX, AX):
+    route('도킹', [(x, SL), (x, OPZ)])                 # between the two operators of a cell
+route('도킹', [(AX - 2.3, SL), (AX - 2.3, 10.4)])
+route('도킹', [(PARK['사출품'][0], NL), (PARK['사출품'][0], NL - 1.6)])
+for x in (MX + 2.6, AX + 2.6):
+    route('도킹', [(x, SL), (x, 9.6)])
+route('셔터 통로', [(DOORS[1], SL), (DOORS[1], 16.4)])
 ref = {o['name']: 'zone:' + o['id'] for o in objects if o['type'] == 'zone'}
 stop = lambda at, act, dwell=8: {'at': ref[at], 'act': act, 'dwell': dwell}
-add('amr', '입고 AGV', -26.0, SL, 0, {'model': 'e3_omron_agv', 'length': 1.3, 'width': 0.8, 'speed': 1.0, 'payload': 250, 'dwell': 8, 'load': 'uw_cardboard_a1',
-    'stops': [stop('자재 입고', 'load'), stop('자동창고 입고', 'unload')]})
-add('amr', '사출품 AMR 1', -2.0, NL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
-    'stops': [stop('사출품 적재 (자동 라인)', 'wait', 1), stop('사출품 적재 (자동 라인)', 'load', 4), stop('조립 부품 공급', 'unload')]})
-add('amr', '사출품 AMR 2', 12.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
-    'stops': [stop('사출품 적재 (자동 라인)', 'wait', 1), stop('사출품 적재 (자동 라인)', 'load', 4), stop('조립 부품 공급', 'unload')]})
-for bnch in benches: bnch['params']['feeds'] = ref['조립품 적재 (무게 감지)']
-add('amr', '무게 감지 AMR', -12.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.2, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
-    'stops': [stop('조립품 적재 (무게 감지)', 'wait', 1), stop('조립품 적재 (무게 감지)', 'load', 8), stop('조립 완료', 'unload')]})
-add('amr', '출하 지게차', 12.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.3, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
-    'stops': [stop('조립 완료', 'load'), stop('출하 대기', 'unload', 12)]})
+deck = lambda name, x, z, stops: add('amr', name, x, z, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.2, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400', 'stops': stops})
+for k, (x, z) in enumerate(((-2.0, NL), (12.0, SL))):
+    deck(f'사출품 AMR {k + 1}', x, z, [stop('사출품 AMR 대기', 'wait', 1), stop('사출품 적재 (자동 라인)', 'wait', 1), stop('사출품 적재 (자동 라인)', 'load', 4), stop('조립 투입대 (사출품)', 'unload', 6)])
+for k, (x, z) in enumerate(((-24.0, SL), (-26.0, NL))):
+    deck(f'수동 도포 AMR {k + 1}', x, z, [stop('수동 도포 AMR 대기', 'wait', 1), stop('수동 도포 적재', 'wait', 1), stop('수동 도포 적재', 'load', 4), stop('소성로 투입대 (수동 도포품)', 'unload', 6)])
+for k, (x, z) in enumerate(((-12.0, SL), (6.0, SL))):
+    deck(f'조립품 AMR {k + 1}', x, z, [stop('조립품 AMR 대기', 'wait', 1), stop('조립 완료 적재', 'wait', 1), stop('조립 완료 적재', 'load', 4), stop('완제품 입고대', 'unload', 6)])
+for bnch in man: bnch['params']['feeds'] = ref['수동 도포 적재']
+for bnch in asm: bnch['params']['feeds'] = ref['조립 완료 적재']
+add('amr', '출하 지게차', 20.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
+    'stops': [stop('출하 팔레트', 'load'), stop('출하 대기', 'unload', 12)]})
 
 doc = {'version': 2, 'factory': {'width': W, 'depth': D, 'height': H}, 'objects': objects}
 out = os.path.join(ROOT, 'assets/layouts/egr-factory.json')
 with open(out, 'w', encoding='utf-8') as f: json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 idx = os.path.join(ROOT, 'assets/layouts/index.json')
 with open(idx, encoding='utf-8') as f: examples = [e for e in json.load(f) if e['file'] != 'egr-factory.json']
-examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · 자재 입고 → 자동창고 일체형 셀 → 로봇 픽킹 → 비전 → Ni 페이스트 도포 → NG 판정 → 벨트 이송 → FR5 적재 → AMR 운반 → 완제품 랙 · 수작업 조립 라인 → 지게차 출하 · 2층 컨베이어 + 프레스 · AMR → 로봇 → 가공기 셀 · 인서트 사출 셀 → 조립 라인'})
+examples.insert(0, {'file': 'egr-factory.json', 'name': 'EGR 쿨러 공장 예시', 'note': '64×40 m 공장 · 자동창고 → 자동 도포 셀 / 수동 도포 작업대 (AMR) → 건조 · 소성로 → 비전 · NG → 인서트 사출 → AMR → 조립 · 검사 포장 (AMR) → 완제품 입고대 → 팔레트 → 지게차 출하'})
 with open(idx, 'w', encoding='utf-8') as f: json.dump(examples, f, ensure_ascii=False)
 print(out, len(objects), 'objects')

@@ -376,9 +376,10 @@
     // can an AMR be promised an item (load) / a place (unload) at this stop? promise it
     // a weighing zone (thresholdKg / unitKg) hands over a batch: the AMR waits until the weight on it reaches the threshold
     const batch = z => (z && z.p.thresholdKg > 0 && z.p.unitKg > 0 ? Math.max(1, Math.ceil(z.p.thresholdKg / z.p.unitKg)) : 1);
-    const canServe = st => { const z = zones.get(st.at); if (!z) return true; return st.act === 'load' ? z.stock - z.resOut >= batch(z) : st.act === 'unload' ? !z.cap || z.stock + z.resIn < z.cap : true; };
-    const promise = st => { const z = zones.get(st.at); if (z && st.act === 'load') z.resOut += batch(z); if (z && st.act === 'unload') z.resIn++; };
-    const short = st => { const z = zones.get(st.at); return `대기: ${st.name} ${st.act === 'load' ? (batch(z) > 1 ? '무게 미달' : '재고 없음') : '가득 참'}`; };
+    // a batch zone takes one AMR at a time: a second one waits at its last stop (off the lanes) until the first has loaded and left
+    const canServe = (st, a) => { const z = zones.get(st.at); if (!z) return true; if (st.act === 'wait' && batch(z) > 1 && z.holder && z.holder !== a) return false; return st.act === 'load' ? z.stock - z.resOut >= batch(z) : st.act === 'unload' ? !z.cap || z.stock + z.resIn < z.cap : true; };
+    const promise = (st, a) => { const z = zones.get(st.at); if (z && st.act === 'wait' && batch(z) > 1) z.holder = a; if (z && st.act === 'load') z.resOut += batch(z); if (z && st.act === 'unload') z.resIn++; };
+    const short = st => { const z = zones.get(st.at); return `대기: ${st.name} ${st.act === 'load' ? (batch(z) > 1 ? '무게 미달' : '재고 없음') : st.act === 'wait' ? '사용 중' : '가득 참'}`; };
     const tryHold = (a, res) => { if (!res.every(r => free(r, a.o.id))) return false; res.forEach(r => held.set(r, a.o.id)); return true; };
     const release = (a, r) => { if (held.get(r) === a.o.id) held.delete(r); };
     const holderOf = (a, res) => { for (const r of res) if (!free(r, a.o.id)) return held.get(r); return null; };
@@ -416,13 +417,13 @@
       for (const a of agents) {
         const L = a.leg;
         if (a.phase === 'enter') { // wait for the first stop, then move onto it; with nothing to load there yet, start at the last stop (as if just done) so the dock stays free
-          const k = canServe(a.stops[0]) ? 0 : a.stops.length - 1, nk = a.stops[k].node;
+          const k = canServe(a.stops[0], a) ? 0 : a.stops.length - 1, nk = a.stops[k].node;
           if (tryHold(a, ['n:' + nk])) { [a.x, a.z] = NP(nk); a.at = k; if (k) { a.phase = 'dwell'; a.timer = 0; a.done = true; } else a.phase = 'arrive'; }
           continue;
         }
         if (a.phase === 'arrive') { // at a stop (promised on the way here, or the first stop): work there
           const st = stopAt(a), z = zones.get(st.at);
-          if (!a.promised) { if (!canServe(st)) { a.label = short(st); continue; } promise(st); }
+          if (!a.promised) { if (!canServe(st, a)) { a.label = short(st); continue; } promise(st, a); }
           a.promised = false;
           if (z && st.act === 'load') { const n = batch(z); z.stock -= n; z.resOut -= n; }
           a.phase = 'dwell'; a.timer = st.dwell; a.label = `${ACT[st.act]} 중 (${st.name})`; continue;
@@ -431,13 +432,13 @@
           a.timer -= SIM_DT; if (a.timer > 0) continue;
           const st = stopAt(a), z = zones.get(st.at);
           if (!a.done) {
-            if (st.act === 'load') a.carry = true;
+            if (st.act === 'load') { a.carry = true; if (z && z.holder === a) z.holder = null; }
             if (st.act === 'unload') { if (a.carry || !z) a.trips++; a.carry = false; if (z) { z.stock++; z.resIn--; } }
           }
           a.done = true; // the work here is done; now wait (here) until the next stop can take this AMR
           const leg = a.legs[a.at], next = (a.at + 1) % a.stops.length, nst = a.stops[next];
-          if (!canServe(nst)) { a.label = short(nst); continue; }
-          promise(nst); a.promised = true; a.done = false;
+          if (!canServe(nst, a)) { a.label = short(nst); continue; }
+          promise(nst, a); a.promised = true; a.done = false;
           if (leg.length < 2) { a.at = next; a.phase = 'arrive'; continue; }
           startLeg(a, leg.slice(), a.pl.moveLabels[a.at], next);
           a.label = a.legLabel; continue;

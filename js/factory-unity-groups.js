@@ -308,7 +308,7 @@
     if (OWN[p.model]) { if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
     else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); loadOn(load, p.load); }
     if (p.model === 'e3_amr_deck_bot') { // tote on the deck that batch zones fill part by part (fillAt, ensureFill); hidden unless this AMR serves one
-      const fill = new THREE.Group(); fill.name = 'AMR_Fill'; fill.position.set(lx, ly, 0); fill.visible = false; g.add(fill);
+      const fill = new THREE.Group(); fill.name = 'AMR_Fill'; fill.position.set(lx, ly, 0); fill.userData.y = ly; fill.userData.x = lx; fill.visible = false; g.add(fill);
       for (let k = 0; k < FILL_MAX; k++) { const s = new THREE.Group(); s.name = 'Fill_Part_' + (k + 1); s.visible = false; fill.add(s); }
     }
     const mast = g.getObjectByName('Rig_mast_2'); if (mast) mast.userData.y = mast.position.y;
@@ -360,8 +360,8 @@
     const q = pl.pose(t), dx = z.x - q.x, dz = z.z - q.z, c = Math.cos(q.yaw), s = Math.sin(q.yaw);
     const lx = c * dx - s * dz, lz = s * dx + c * dz;   // zone centre in the AMR frame (yaw about +Y)
     const [ox, oy] = LOAD[p.model] || [0, 0.14], { f } = dwellPhase(pl, t), u = ease((f - 0.12) / 0.7);
-    const k = m[1] === '적재' ? u : 1 - u;               // 0 = at the zone, 1 = on the AMR
-    return { x: lx + (ox - lx) * k, z: lz * (1 - k), dy: (oy - 0.0) * (k - 1) + 0.25 * Math.sin(Math.PI * k), show: true };
+    const k = m[1] === '적재' ? u : 1 - u, h = z.h || 0; // 0 = at the zone (on the floor, or on its stand at h: a roller transfer, no lift), 1 = on the AMR
+    return { x: lx + (ox - lx) * k, z: lz * (1 - k), dy: (oy - h) * (k - 1) + (h > 0 ? 0.02 : 0.25) * Math.sin(Math.PI * k), show: true };
   }
   TY.amr.animate = (g, p, t, pl) => {
     const L = liftAt(p, pl, t), mast = g.getObjectByName('Rig_mast_2'), load = g.getObjectByName('AMR_Load');
@@ -374,27 +374,30 @@
     }
     const fill = g.getObjectByName('AMR_Fill'), n = fill && fillAt(p, pl, t);
     if (fill && n != null) { const bz = batchZone(p, pl); if (bz) ensureFill(fill, bz.item || 'e3_egr_cooler'); }
-    if (fill) { fill.visible = n != null; if (n != null) { if (load) load.visible = false; fill.children.forEach(c => { if (/^Fill_Part_/.test(c.name)) c.visible = +c.name.slice(10) <= n; }); } }
+    if (fill) { fill.visible = n != null; if (n != null) { if (load) load.visible = false; fill.children.forEach(c => { if (/^Fill_Part_/.test(c.name)) c.visible = +c.name.slice(10) <= n; });
+      const tr = transfer(p, pl, t); if (tr) fill.position.set(tr.x, fill.userData.y + L + tr.dy, tr.z); else fill.position.set(fill.userData.x, fill.userData.y + L, 0); } }
   };
   TY.amr.drives = (g, p, frames, spf, pl) => {
     if (!pl || !pl.ok || pl.still) return [];
     const out = [], mast = g.getObjectByName('Rig_mast_2'), load = g.getObjectByName('AMR_Load');
     const rec = (node, y) => { const y0 = y(0), s = new Array(frames); node.position.y = y0; for (let f = 0; f < frames; f++) s[f] = Math.round((y(f * spf) - y0) * 1000); out.push({ node, dir: 'LinearY', rev: false, series: s }); };
     if (mast && mast.userData.y != null) rec(mast, t => mast.userData.y + liftAt(p, pl, t));
-    if (load && load.userData.y != null) {
+    // a batch AMR's tote (AMR_Fill) replaces its carried load: the tote stays on the deck, its parts appear one by one, and it is the tote
+    // that is handed over at the unload stop
+    const fill = g.getObjectByName('AMR_Fill'), fillOn = !!(fill && fillAt(p, pl, 0) != null && ensureFill(fill, batchZone(p, pl).item || 'e3_egr_cooler'));
+    if (fillOn && load) rec(load, () => HIDE);
+    const mv = fillOn ? fill : load;
+    if (mv && mv.userData.y != null) {
       // the load exists while carried and while it is handed over; X / Z of the hand-off on wrappers (one drive per node)
-      rec(load, t => { const tr = transfer(p, pl, t); return tr ? load.userData.y + liftAt(p, pl, t) + tr.dy : pl.carry && !pl.carry(t) ? HIDE : load.userData.y + liftAt(p, pl, t); });
-      const x0 = load.position.x, tx = new THREE.Group(), tz = new THREE.Group(); tx.name = g.name + '_Load_TX'; tz.name = g.name + '_Load_TZ';
-      load.parent.add(tx); tx.add(tz); tz.add(load); load.position.x = 0; tx.position.x = x0;
+      if (fillOn) mv.visible = true;
+      rec(mv, t => { const tr = transfer(p, pl, t); return tr ? mv.userData.y + liftAt(p, pl, t) + tr.dy : !fillOn && pl.carry && !pl.carry(t) ? HIDE : mv.userData.y + liftAt(p, pl, t); });
+      const x0 = mv.position.x, tx = new THREE.Group(), tz = new THREE.Group(); tx.name = g.name + (fillOn ? '_Fill_TX' : '_Load_TX'); tz.name = g.name + (fillOn ? '_Fill_TZ' : '_Load_TZ');
+      mv.parent.add(tx); tx.add(tz); tz.add(mv); mv.position.x = 0; tx.position.x = x0;
       const sx = new Array(frames), sz = new Array(frames);
       for (let f = 0; f < frames; f++) { const tr = transfer(p, pl, f * spf); sx[f] = tr ? Math.round((tr.x - x0) * 1000) : 0; sz[f] = tr ? Math.round(tr.z * 1000) : 0; }
       if (sx.some(v => v)) out.push({ node: tx, dir: 'LinearX', rev: true, series: sx }); if (sz.some(v => v)) out.push({ node: tz, dir: 'LinearZ', rev: false, series: sz });
     }
-    const fill = g.getObjectByName('AMR_Fill');
-    if (fill && fillAt(p, pl, 0) != null && ensureFill(fill, batchZone(p, pl).item || 'e3_egr_cooler')) { // the batch tote replaces the carried load; each part parks below the floor until it is in the tote
-      if (load) { for (let i = out.length - 1; i >= 0; i--) if (out[i].node === load || /_Load_T[XZ]$/.test(out[i].node.name)) out.splice(i, 1); rec(load, () => HIDE); }
-      fill.visible = true; fill.children.forEach(c => { if (!/^Fill_Part_/.test(c.name)) return; const k = +c.name.slice(10); c.visible = true; rec(c, t => fillAt(p, pl, t) >= k ? c.userData.y : HIDE); });
-    }
+    if (fillOn) fill.children.forEach(c => { if (!/^Fill_Part_/.test(c.name)) return; const k = +c.name.slice(10); c.visible = true; rec(c, t => fillAt(p, pl, t) >= k ? c.userData.y : HIDE); });
     return out;
   };
   const workerBuild = TY.worker.build;
@@ -407,9 +410,20 @@
     if (p.prop) { const pm = A.get(p.prop); if (pm) { const pr = front(pm, 'Worker_Prop'); pr.position.x = 0.9; g.add(pr); } else A.load(p.prop).catch(() => {}); }
   };
   const zoneBuild = TY.zone.build;
+  let STAND_MAT = null;
   TY.zone.build = (g, p, f) => {
     zoneBuild(g, p, f);
     if (!p.track || (p.thresholdKg > 0 && p.unitKg > 0)) return; // a weighing zone's parts go into the tote on its AMR (fillAt)
+    if (p.standH > 0) { // a roller stand at deck height: the stock stands on it side by side (no pallets); the AMR rolls totes on / off
+      const n = Math.min(4, Math.max(1, p.cap || 1)), id = idOf(p.load || 'e3_tote_600x400'), m = A.get(id); if (!m) { A.load(id).catch(() => {}); return; }
+      if (p.stand !== false) { // roller stand (the line model brings its own where stand is false)
+        const mt = STAND_MAT || (STAND_MAT = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x66727f).convertSRGBToLinear(), metalness: 0.7, roughness: 0.4 }));
+        const W = n * 0.66, top = new THREE.Mesh(new THREE.BoxGeometry(W, 0.04, 0.46), mt); top.name = 'Zone_Stand'; top.position.y = p.standH - 0.02; g.add(top);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, p.standH - 0.04, 0.04), mt); l.name = 'Zone_Stand_Leg'; l.position.set(sx * (W / 2 - 0.03), (p.standH - 0.04) / 2, sz * 0.2); g.add(l); }
+      }
+      for (let k = 0; k < n; k++) { const h = new THREE.Group(); h.name = 'Zone_Pallet_' + k; h.visible = false; h.position.set((k - (n - 1) / 2) * 0.66, 0, 0); h.add(Object.assign(A.placed(A.get(id), 'Zone_Load'), {})); h.children[0].position.y += p.standH; g.add(h); }
+      return;
+    }
     const n = Math.min(6, Math.max(1, p.cap || 4)), cols = Math.max(1, Math.floor(p.w / 1.25)), rows = Math.ceil(n / cols), pal = A.get('uw_pallet');
     if (!pal) { A.load('uw_pallet').catch(() => {}); return; }
     for (let k = 0; k < n; k++) {
