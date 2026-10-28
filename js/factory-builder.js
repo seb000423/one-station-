@@ -51,6 +51,7 @@
   }
   // walkways and zones show their name on the floor
   const syncLabel = o => { if (LETTERED.includes(o.type)) { o.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); o.params.label = o.name; } };
+  const hasClip = p => { const U = window.FactoryUnity, c = U && U.CATALOG[(U.ALIAS || {})[p.model] || p.model]; return !!(c && c.clip); };
   const FIELDS = { // building element settings: key, label, step, min, max
     column: [['w', '가로 (m)', 0.1, 0.1, 3], ['d', '세로 (m)', 0.1, 0.1, 3], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
@@ -83,7 +84,7 @@
     palletloop: [['ends', '양 끝', 'select', [['square', '사각 (리프트 트랜스퍼)'], ['round', '타원 (곡선)']]], ['product', '제품', 'select', [['pedal', '브레이크 페달'], ['lego', '레고 + PCB'], ['box', '상자']]], ['length', '직선 길이 (m)', 0.5, 2, 60], ['width', '라인 간격 (m)', 0.1, 1, 6], ['pallets', '팔레트 수', 1, 1, 80], ['pitch', '정지 간격 (m)', 0.1, 0.4, 5], ['speed', '이동 속도 (m/s)', 0.05, 0.05, 2], ['dwell', '정지 시간 (s)', 0.5, 0, 300], ['height', '높이 (m)', 0.05, 0.5, 1.4]],
     asmstation: [['kind', '스테이션 종류', 'select', [['manual', '수동 투입 (작업자)'], ['press', '압입'], ['screw', '체결'], ['robot', '로봇 조립'], ['test', '기능 검사'], ['camera', '비전 검사']]], ['title', '표시 이름', 'text'], ['cycle', '사이클 (s, 팔레트 순환과 같게)', 0.5, 1, 600], ['dwell', '작업 시간 (s)', 0.5, 0, 600], ['reach', '컨베이어까지 (m)', 0.05, 0, 2], ['width', '폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.6, 4]],
     flowrack: [['levels', '단 수', 1, 1, 8], ['bins', '열 수', 1, 1, 12], ['width', '폭 (m)', 0.1, 0.6, 5], ['depth', '깊이 (m)', 0.1, 0.4, 3], ['height', '높이 (m)', 0.1, 1, 3]],
-    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : []), null, p => !p.items], ['scale', '배율 (1 = 실제 크기)', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
+    ufmodel: [['model', '모델', 'select', (window.FactoryUnity ? window.FactoryUnity.OPTIONS : []), null, p => !p.items], ['from', '투입 구역 (비면 멈춤)', 'place', null, null, p => hasClip(p)], ['feeds', '배출 구역 (차면 멈춤)', 'place', null, null, p => hasClip(p)], ['scale', '배율 (1 = 실제 크기)', 0.05, 0.1, 3], ['cycle', '로봇팔 동작 주기 (s)', 1, 4, 120, p => /arm|cell/.test(p.model)]],
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
@@ -116,6 +117,19 @@
   function syncActive() { const a = activeId && byId(activeId); if (a && !busy()) a.params = engineCellParams(); }
   // AMR / worker plans and the route graph; recomputed when the document changes
   let motionCache = null, motionKey = '';
+  // a cell model linked to zones (params.from: input zone, params.feeds: output zone) runs only while there is material in
+  // its input and room in its output: its clip time is the time it has been running (blocking / starving propagate)
+  const gates = new WeakMap();
+  function gateTime(o, M, t) {
+    const p = o.params || {}; if (!p.feeds && !p.from) return t;
+    const Z = M && M.zones, zf = p.feeds && Z && Z[p.feeds.replace(/^zone:/, '')], zi = p.from && Z && Z[p.from.replace(/^zone:/, '')]; if (!zf && !zi) return t;
+    let c = gates.get(M); if (!c) gates.set(M, c = new Map());
+    let g = c.get(o.id); if (!g) c.set(o.id, g = { acc: [0], dt: 0.25 });
+    const n = Math.floor(t / g.dt);
+    while (g.acc.length <= n + 1) { const k = g.acc.length - 1, tt = k * g.dt, run = (!zf || !zf.cap || zf.stock(tt) < zf.cap) && (!zi || zi.stock(tt) > 0); g.acc.push(g.acc[k] + (run ? g.dt : 0)); }
+    const f = t / g.dt - n; return g.acc[n] + (g.acc[n + 1] - g.acc[n]) * f;
+  }
+  window.__gateTime = gateTime;
   function motion() {
     const key = JSON.stringify(doc.objects.map(o => [o.id, o.type, o.x, o.z, o.rot, o.type === 'station' ? (o.params && o.params.inner) : o.params && o.params.items ? o.params.items.length : o.params])); // model groups: their item list never changes in the builder
     if (!motionCache || key !== motionKey) { motionCache = FM().plans(doc); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
@@ -756,7 +770,7 @@
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
       <div class="sep"></div>
-      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button>
+      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
       <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
     $('.view').appendChild(bar);
@@ -818,7 +832,7 @@
   }
 
   /* ---------- camera: views fitted to the factory, focus / follow a chosen object ---------- */
-  let camTween = null, lastView = null, followId = null;
+  let camTween = null, lastView = null, followId = null, insideIdx = 0, roofShown = null;
   function camTo(pos, target, dur = 0.8) {
     const s = S(); s.cfg.follow = false;
     s.controls.maxDistance = Math.max(s.controls.maxDistance, pos.distanceTo(target) * 1.6);
@@ -861,8 +875,13 @@
   function view(kind) {
     if (kind === 'follow' && followId) return stopFollow(); // 추적 is a toggle
     stopFollow(true); lastView = kind;
-    bar.querySelectorAll('[data-v=all],[data-v=front],[data-v=top]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
+    bar.querySelectorAll('[data-v=all],[data-v=front],[data-v=top],[data-v=inside]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
     if (kind === 'all' || kind === 'front' || kind === 'top') return fitFactory(kind);
+    if (kind === 'inside') { // eye level inside the hall, cycling through three spots along it
+      const { width: W, depth: D } = doc.factory, k = insideIdx++ % 3, V3 = THREE.Vector3;
+      const spots = [[new V3(-W * 0.42, 1.7, D * 0.12), new V3(-W * 0.1, 1.3, -D * 0.3)], [new V3(0, 2.2, D * 0.1), new V3(W * 0.2, 1.0, -D * 0.38)], [new V3(W * 0.42, 1.7, -D * 0.05), new V3(W * 0.05, 1.2, D * 0.32)]];
+      bar.querySelector('[data-v=inside]').classList.add('on'); return camTo(spots[k][0], spots[k][1], 1.0);
+    }
     const o = viewTarget(); if (!o) return note('먼저 볼 객체를 고르세요', true);
     focusObject(o.id);
     if (kind === 'follow') { followId = o.id; viewButtons(); note(`${o.name}을(를) 따라갑니다 — 추적을 다시 누르거나 Esc, 화면을 끌면 멈춥니다`); }
@@ -1107,7 +1126,7 @@
     for (const o of others) {
       const g = FE.build(o, doc.factory); building.push(g);
       const pl = o.type === 'amr' ? M.amr[o.id] : o.type === 'worker' ? M.worker[o.id] : null;
-      extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : null))); // movers' plans, zones' stock
+      extra.push(...FE.drives(o, g, frames, SPF, pl || (o.type === 'zone' && M.zones ? M.zones[o.id] : o.type === 'ufmodel' ? { warp: tt => gateTime(o, M, tt) } : null))); // movers' plans, zones' stock, gated cells
       if (pl && pl.ok && !pl.still) extra.push(...rigMotion(g, pl, frames, SPF));
     }
     // station cells' R1 / R2 range circles
@@ -1254,7 +1273,7 @@
       const M = motion(), t = clock;
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
-        if (o.type === 'conveyor' || o.type === 'robot' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, t);
+        if (o.type === 'conveyor' || o.type === 'robot' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, o.type === 'ufmodel' ? gateTime(o, M, t) : t);
         else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
           if (pl && pl.ok && !pl.still) { const q = pl.pose(t); g.position.set(q.x, 0, q.z); g.rotation.set(0, q.yaw, 0); }
@@ -1267,6 +1286,10 @@
       if (now - lastPanel > 250) updateLogistics(M, t);
       updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
       cameraTick(dt);
+      { // roof sheets show from inside / below the eave, and hide when the camera is above the roof (to look in)
+        const cy = S().camera.position.y, under = cy < doc.factory.height + 0.5;
+        if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = under; }); } } // also catches rebuilt roofs
+      }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

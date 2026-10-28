@@ -28,7 +28,7 @@
     belt: mat(0x2b2e33, { metalness: 0, roughness: 0.7 }), orange: mat(0xe0461d, { metalness: 0.25, roughness: 0.42 }), yellow: mat(0xeec539, { metalness: 0.2, roughness: 0.45 }),
     rackWhite: mat(0xe2e5e8, { metalness: 0.3, roughness: 0.45 }), steelCol: mat(0x8a949e, { metalness: 0.6, roughness: 0.45 }), steelLight: mat(0xa8b0b8, { metalness: 0.6, roughness: 0.45 }),
     frameDark: mat(0x3b4148, { metalness: 0.5, roughness: 0.45 }), concrete: mat(0xa9adb1, { metalness: 0, roughness: 0.85 }),
-    window: mat(0xcfe2f0, { metalness: 0.1, roughness: 0.05, emissive: 0xdde9f4, emissiveIntensity: 0.6 }),
+    window: mat(0xcfe2f0, { metalness: 0.1, roughness: 0.05, emissive: 0xdde9f4, emissiveIntensity: 0.25, transparent: true, opacity: 0.3, depthWrite: false }), // lets the sun through (no shadow)
     skylight: mat(0xe8f1f8, { metalness: 0, roughness: 0.2, emissive: 0xe8f1f8, emissiveIntensity: 0.8, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
     lamp: mat(0xffffff, { metalness: 0, roughness: 0.3, emissive: 0xffffff, emissiveIntensity: 2 }),
     wallCore: mat(0xd5d9dd, { metalness: 0.35, roughness: 0.5 }), tape: mat(0xd9c39a, { roughness: 0.6 }),

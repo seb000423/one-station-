@@ -126,7 +126,7 @@
   // Joints (quaternion tracks about their extras.anim axis) → RotationX/Y/Z; position tracks → LinearX/Y/Z per changing axis;
   // scale tracks (parts shown / hidden) → a wrapper under the node that drops 50 m down while the part is hidden.
   const REV = { LinearX: true, LinearY: false, LinearZ: false, RotationX: false, RotationY: true, RotationZ: true }; // as js/station-export.js: positive along +X/+Y/+Z
-  function clipDrives(g, frames, spf) {
+  function clipDrives(g, frames, spf, warp) { // warp: sim time → clip time (a cell gated by its zones, js/factory-builder.js)
     const u = g.children.find(c => c.name === 'UF_Model'), mixer = u && u.userData.clipMixer, clip = u && u.userData.clip; if (!mixer || !clip) return [];
     const W = window.FactoryAssets, out = [], probes = [];
     for (const tr of clip.tracks) {
@@ -136,7 +136,7 @@
       else if (prop === 'scale') { const vis = W.jointWrap(node, name + '_Vis'); probes.push({ node: vis, dir: 'LinearY', get: () => (node.scale.x < 0.01 ? -50000 : 0), scaleOf: node }); }
     }
     const series = probes.map(() => new Array(frames)), v0 = [];
-    for (let f = 0; f < frames; f++) { mixer.setTime(f * spf); probes.forEach((p, i) => { let v = p.get(); if (f === 0) v0[i] = v; let d = v - v0[i]; if (p.deg) { const prev = f ? series[i][f - 1] : 0; while (d - prev > 180) d -= 360; while (d - prev < -180) d += 360; } series[i][f] = Math.round(d * 100) / 100; }); }
+    for (let f = 0; f < frames; f++) { mixer.setTime(warp ? warp(f * spf) : f * spf); probes.forEach((p, i) => { let v = p.get(); if (f === 0) v0[i] = v; let d = v - v0[i]; if (p.deg) { const prev = f ? series[i][f - 1] : 0; while (d - prev > 180) d -= 360; while (d - prev < -180) d += 360; } series[i][f] = Math.round(d * 100) / 100; }); }
     mixer.setTime(0);
     probes.forEach(p => { if (p.scaleOf) p.scaleOf.scale.setScalar(1); });  // exported shown; the _Vis drive hides it from frame 0 where needed
     probes.forEach((p, i) => { if (p.scaleOf) series[i] = series[i].map(d => d + (v0[i] < 0 ? -50000 : 0)); });
@@ -174,12 +174,12 @@
       ufmodel.animate(g, p, 0);
     },
     animate: (g, p, t) => { for (const [, w] of ARM_JOINTS) { const j = g.getObjectByName(w); if (j) j.rotation[j.userData.axis] = armPose(p, t, w); } clipTime(g, t); },
-    drives: (g, p, frames, spf) => ARM_JOINTS.map(([, w]) => {
+    drives: (g, p, frames, spf, plan) => ARM_JOINTS.map(([, w]) => {
       const j = g.getObjectByName(w); if (!j) return null;
       const series = new Array(frames), deg = 180 / Math.PI;
       for (let f = 0; f < frames; f++) series[f] = Math.round((armPose(p, f * spf, w) - armPose(p, 0, w)) * deg * 100) / 100;
       return { node: j, dir: 'Rotation' + j.userData.axis.toUpperCase(), rev: false, series };
-    }).filter(Boolean).concat(clipDrives(g, frames, spf)),
+    }).filter(Boolean).concat(clipDrives(g, frames, spf, plan && plan.warp)),
     footprint: p => { const c = entry(p), s = Math.max(0.1, p.scale || 1); return [c.size[0] * s, c.size[2] * s]; },
     cycle: p => (entry(p).clipLen || (entry(p).parts.some(x => x[0] === 'uf_arm') ? Math.max(4, p.cycle) : 0))
   };

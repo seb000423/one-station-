@@ -480,13 +480,14 @@ const fill2 = new THREE.DirectionalLight(0xfff1dc, 0); fill2.position.set(4, 3, 
 // floor (4096 px for large factories), an even top light and fills from both sides
 function fitLights(f) {
   const W = f.width, D = f.depth, M = Math.max(W, D);
-  sun.position.set(W * 0.18, Math.max(8, M * 0.85, (f.height || 6) * 2), D * 0.28); sun.target.position.set(0, 0, 0);
+  // a low afternoon sun from the south-east: through the window bands and skylights it draws light patches on the floor
+  sun.position.set(W * 0.5, Math.max(8, M * 0.62, (f.height || 6) * 2), D * 0.75); sun.target.position.set(0, 0, 0); sun.color.set(0xfff0d8);
   const half = M / 2 + 1.5, size = M > 12 ? 4096 : 2048;
   Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 0.5, far: sun.position.length() + M });
   sun.shadow.camera.updateProjectionMatrix();
   if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.set(size, size); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   sun.shadow.normalBias = 0.02 + M * 0.002;
-  sun.intensity = 1.15; hemi.intensity = 0.85; fill.intensity = 0.45; fill2.intensity = 0.35;
+  sun.intensity = 1.6; hemi.intensity = 0.7; fill.intensity = 0.35; fill2.intensity = 0.25;
   fill.position.set(-W * 0.4, 4, -D * 0.4); fill2.position.set(W * 0.4, 4, D * 0.4);
   window.__lightsFitted = true;
 }

@@ -282,7 +282,7 @@
     if (p.flow) { animateFlow(g, p, t); if (p.pack) animatePack(g, p, t); }
     FU.clipTime(g, t);
   };
-  T.drives = (g, p, frames, spf) => (p.items ? armDrives(g, p, frames, spf) : armDrives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : [], p.flow && p.pack ? packDrives(g, p, frames, spf) : [], FU.clipDrives(g, frames, spf)));
+  T.drives = (g, p, frames, spf, plan) => (p.items ? armDrives(g, p, frames, spf) : armDrives(g, p, frames, spf).concat(p.flow ? flowDrives(g, p, frames, spf) : [], p.flow && p.pack ? packDrives(g, p, frames, spf) : [], FU.clipDrives(g, frames, spf, plan && plan.warp)));
   T.footprint = p => (p.items && p.items.length ? extent(p) : footprint(p));
   const cycle = T.cycle; T.cycle = p => (p.items ? 0 : p.flow ? Math.max(cycle(p), flowLen(p) / (p.flow.speed || 0.3), p.pack ? packT(p) * Math.max(1, p.pack.n || 8) : 0) : cycle(p));
 
