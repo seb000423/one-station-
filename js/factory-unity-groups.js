@@ -295,6 +295,16 @@
   const TY = FE.TYPES, LOAD = { uw_forklift: [1.16, 0.14], uw_palletrobot: [0, 0.14], e3_amr_deck_bot: [0, 0.62], e3_omron_agv: [0, 1.15] }; // load x, y in the AMR frame
   const OWN = { e3_amr_deck_bot: true, e3_omron_agv: true }; // EGR line v3 AMRs: modelled front +X, carry their load without a pallet
   const front = (m, name) => { const turn = new THREE.Group(); turn.add(m); m.rotation.y = Math.PI / 2; return A.placed(turn, name); };
+  // a pallet load of small boxes (≤ 620 × 420 mm, e.g. 600 × 400 packing cartons or KLT totes): pinwheel of 4 per layer on a T11 pallet, `layers` high
+  function palletStack(parent, kind, layers = 3, y0 = 0.13) {
+    const id = idOf(kind), m = A.get(id); if (!m) { A.load(id).catch(() => {}); return null; } // null: still loading (the builder rebuilds)
+    const b = new THREE.Box3().setFromObject(m), L = b.max.x - b.min.x, W = b.max.z - b.min.z, H = b.max.y - b.min.y; if (Math.max(L, W) > 0.62) return false;
+    const P = [[-0.2, -0.3, 0], [0.3, -0.2, 1], [0.2, 0.3, 0], [-0.3, 0.2, 1]]; // centres of a 1.0 × 1.0 pinwheel (box long side along X, or turned)
+    for (let l = 0; l < layers; l++) P.forEach(([x, z, turn], k) => { const h = A.placed(A.get(id), 'Load_Box_' + (l * 4 + k + 1)); h.position.set(l % 2 ? -x : x, y0 + l * H, l % 2 ? -z : z); h.rotation.y = turn ? Math.PI / 2 : 0; parent.add(h); });
+    return true;
+  }
+  const unitOf = p => p.unit || (p.thresholdKg > 0 && p.unitKg > 0 ? 'part' : p.standH > 0 ? 'tote' : 'pallet'); // zone handling unit
+  const vehicleUnit = model => (/forklift|reachlift|palletrobot/.test(model || '') ? 'pallet' : 'tote');
   function loadOn(parent, kind, y0 = 0.13) { // a pallet's load
     if (kind === 'tray') { stackSlots('product', 8).forEach(([x, y, z], k) => { const m = A.get(idOf('product')); if (!m) { A.load(idOf('product')).catch(() => {}); return; } const h = A.placed(m, 'Load_Tray_' + (k + 1)); h.position.set(x, y0 - 0.13 + y, z); parent.add(h); }); return; }
     const id = idOf(kind || 'uw_cardboard_a1'), m = A.get(id); if (m) { const b = A.placed(m, 'Load_Carton'); b.position.y = y0; parent.add(b); } else A.load(id).catch(() => {});
@@ -306,7 +316,7 @@
     g.add(OWN[p.model] ? A.placed(m, 'AMR_Model') : front(m, 'AMR_Model'));
     const load = new THREE.Group(); load.name = 'AMR_Load'; const [lx, ly] = LOAD[p.model]; load.position.set(lx, ly, 0); load.userData.y = ly; g.add(load);
     if (OWN[p.model]) { if (p.load && p.model === 'e3_amr_deck_bot') loadOn(load, p.load, 0); }
-    else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); loadOn(load, p.load); }
+    else { const pal = A.get('uw_pallet'); if (pal) load.add(A.placed(pal, 'AMR_Pallet')); else A.load('uw_pallet').catch(() => {}); if (palletStack(load, p.load, p.layers || 3) === false) loadOn(load, p.load); }
     if (p.model === 'e3_amr_deck_bot') { // tote on the deck that batch zones fill part by part (fillAt, ensureFill); hidden unless this AMR serves one
       const fill = new THREE.Group(); fill.name = 'AMR_Fill'; fill.position.set(lx, ly, 0); fill.userData.y = ly; fill.userData.x = lx; fill.visible = false; g.add(fill);
       for (let k = 0; k < FILL_MAX; k++) { const s = new THREE.Group(); s.name = 'Fill_Part_' + (k + 1); s.visible = false; fill.add(s); }
@@ -414,6 +424,7 @@
   TY.zone.build = (g, p, f) => {
     zoneBuild(g, p, f);
     if (!p.track || (p.thresholdKg > 0 && p.unitKg > 0)) return; // a weighing zone's parts go into the tote on its AMR (fillAt)
+    if (unitOf(p) === 'tote' && !(p.standH > 0)) p = Object.assign({}, p, { standH: 0.62 });
     if (p.standH > 0) { // a roller stand at deck height: the stock stands on it side by side (no pallets); the AMR rolls totes on / off
       const n = Math.min(4, Math.max(1, p.cap || 1)), id = idOf(p.load || 'e3_tote_600x400'), m = A.get(id); if (!m) { A.load(id).catch(() => {}); return; }
       if (p.stand !== false) { // roller stand (the line model brings its own where stand is false)
@@ -429,7 +440,7 @@
     for (let k = 0; k < n; k++) {
       const h = new THREE.Group(); h.name = 'Zone_Pallet_' + k; h.visible = false;
       h.position.set(((k % cols) - (cols - 1) / 2) * 1.25, 0, ((Math.floor(k / cols)) - (rows - 1) / 2) * 1.25);
-      h.add(A.placed(A.get('uw_pallet'), 'Zone_Pallet')); loadOn(h, p.load); g.add(h);
+      h.add(A.placed(A.get('uw_pallet'), 'Zone_Pallet')); if (palletStack(h, p.load, p.layers || 3) === false) loadOn(h, p.load); g.add(h);
     }
   };
   TY.zone.drives = (g, p, frames, spf, z) => {

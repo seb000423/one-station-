@@ -105,8 +105,8 @@ zone('소성로 투입대 (수동 도포품)', 'dropoff', INF_X, INF_Z, w=0.7, d
 zone('조립 투입대 (사출품)', 'dropoff', AX - 2.3, 11.05, w=0.7, d=0.5, track=True, stock=1, cap=2, consume=round(8 * ACYC / 2, 1), standH=0.62, load='e3_tote_moulded')
 zone('완제품 입고대', 'dropoff', 16.4, NL - 1.95, w=1.4, d=0.6, track=True, stock=0, cap=2, consume=200, standH=0.62, load='e3_tote_moulded')  # the reach truck stores the totes in the FG racks
 # pallets: built at the FG area (palletising operator), forklift forks into the pockets 1.16 m ahead of its stop, carries it to the shutter
-zone('출하 팔레트', 'pickup', 19.6, r3(NL - 1.25 - 1.16), w=1.4, d=1.4, track=True, stock=1, cap=1, supply=300, load='uw_cardboard_c1')
-zone('출하 대기', 'dropoff', DOORS[1], r3(16.4 + 1.16), w=1.4, d=1.4, track=True, stock=0, cap=1, consume=70, load='uw_cardboard_c1')
+zone('출하 팔레트', 'pickup', 19.6, r3(NL - 1.25 - 1.16), w=1.4, d=1.4, track=True, stock=1, cap=1, supply=300, unit='pallet', layers=3, load='e3_pack_box')
+zone('출하 대기', 'dropoff', DOORS[1], r3(16.4 + 1.16), w=1.4, d=1.4, track=True, stock=0, cap=1, consume=70, unit='pallet', layers=3, load='e3_pack_box')
 # parking spots next to each batch zone: the second AMR of a pair waits here (off the lanes) while the first is being filled
 PARK = {'사출품': (r3(OUT_X + 1.6), r3(NL - 2.3)), '수동 도포': (MX + 2.6, 10.2), '조립품': (AX + 2.6, 10.2)}
 for nm, (x, z) in PARK.items():
@@ -142,7 +142,7 @@ for k, (x, z) in enumerate(((-12.0, SL), (6.0, SL))):
     deck(f'조립품 AMR {k + 1}', x, z, [stop('조립품 AMR 대기', 'wait', 1), stop('조립 완료 적재', 'wait', 1), stop('조립 완료 적재', 'load', 4), stop('완제품 입고대', 'unload', 6)])
 for bnch in man: bnch['params']['feeds'] = ref['수동 도포 적재']
 for bnch in asm: bnch['params']['feeds'] = ref['조립 완료 적재']
-add('amr', '출하 지게차', 20.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'uw_cardboard_c1',
+add('amr', '출하 지게차', 20.0, SL, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'e3_pack_box', 'layers': 3,
     'stops': [stop('출하 팔레트', 'load'), stop('출하 대기', 'unload', 12)]})
 
 doc = {'version': 2, 'factory': {'width': W, 'depth': D, 'height': H}, 'objects': objects}

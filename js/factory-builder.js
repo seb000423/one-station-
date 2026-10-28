@@ -65,7 +65,7 @@
     zone: [['kind', '구역 종류', 'select', [['pickup', '적재 (픽업)'], ['dropoff', '하역'], ['storage', '보관'], ['keepout', '금지 (작업 구역)'], ['none', '일반']]], ['w', '가로 (m)', 0.5, 0.5, 100], ['d', '세로 (m)', 0.5, 0.5, 100], ['color', '색 (비우면 종류 색)', 'color'],
       ['track', '재고 관리 (수량 세기)', 'check'], ['stock', '초기 재고 (개)', 1, 0, 999, p => p.track], ['cap', '최대 적재 (개, 0 = 무제한)', 1, 0, 999, p => p.track],
       ['supply', '자동 입고 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track], ['consume', '자동 소비 간격 (s, 0 = 없음)', 1, 0, 3600, p => p.track],
-      ['unitKg', '개당 무게 (kg, 무게 감지)', 0.1, 0, 500, p => p.track], ['thresholdKg', 'AMR 출발 무게 (kg, 0 = 1개마다)', 0.5, 0, 2000, p => p.track && p.unitKg > 0]],
+      ['unit', '취급 단위', 'select', [['', '자동'], ['pallet', '팔레트 (지게차)'], ['tote', '상자 (롤러 스탠드 · AMR)'], ['part', '부품 (AMR 상자에 하나씩)']]], ['standH', '스탠드 높이 (m, 상자 단위)', 0.01, 0, 1.5], ['layers', '팔레트 적재 단수', 1, 1, 6], ['unitKg', '개당 무게 (kg, 무게 감지)', 0.1, 0, 500, p => p.track], ['thresholdKg', 'AMR 출발 무게 (kg, 0 = 1개마다)', 0.5, 0, 2000, p => p.track && p.unitKg > 0]],
     conveyor: [['shape', '모양', 'select', [['straight', '직선'], ['curve', '90° 곡선 (L자)'], ['uturn', '180° U턴']]], ['turn', '꺾는 방향', 'select', [['left', '왼쪽'], ['right', '오른쪽']], null, p => p.shape !== 'straight'],
       ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
       ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
@@ -1557,7 +1557,12 @@
     }
     if (!panelToo) return false;
     const cnt = $('#fbSafetyCount'); if (cnt) cnt.textContent = list.length ? '⚠ ' + list.length : '';
-    const box = $('#fbSafety'); if (box) box.innerHTML = list.length ? list.map(w => `<span class="ng">⚠ ${esc(w.text)}</span>`).join('') : '<span class="ok">위험 없음</span>';
+    // handling units: a forklift / pallet robot serves pallet zones, a roller-deck AMR serves tote and part zones
+    const unitOf = p => p.unit || (p.thresholdKg > 0 && p.unitKg > 0 ? 'part' : p.standH > 0 ? 'tote' : 'pallet'), UNIT = { pallet: '팔레트', tote: '상자', part: '부품' };
+    const units = []; for (const o of doc.objects) if (o.type === 'amr') { const vu = /forklift|reachlift|palletrobot/.test((o.params || {}).model || '') ? 'pallet' : 'tote';
+      for (const st of (o.params || {}).stops || []) { const z = st.at && byId(String(st.at).replace(/^zone:/, '')); if (!z || z.type !== 'zone' || !(z.params || {}).track) continue; const zu = unitOf(z.params);
+        if ((vu === 'pallet') !== (zu === 'pallet')) units.push(`${o.name}(${UNIT[vu]} 운반) ↔ ${z.name}(${UNIT[zu]} 단위): 취급 단위가 맞지 않습니다`); } }
+    const box = $('#fbSafety'); if (box) box.innerHTML = list.length || units.length ? list.map(w => `<span class="ng">⚠ ${esc(w.text)}</span>`).join('') + units.map(u => `<span class="ng">⚠ ${esc(u)}</span>`).join('') : '<span class="ok">위험 없음</span>';
     const ws = $('#fbWorkerSafety'), sel = selectedId && byId(selectedId);
     if (ws && sel && sel.type === 'worker') { const mine = list.filter(w => w.worker.id === sel.id); ws.innerHTML = mine.length ? mine.map(w => `<span style="color:var(--ng)">⚠ ${esc(w.circle.name)} 가동범위 안</span>`).join('<br>') : '<span style="color:var(--ok)">안전 — 가동범위 밖</span>'; }
     return true;

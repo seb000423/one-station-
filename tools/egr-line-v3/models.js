@@ -204,15 +204,18 @@ function asrsRail(len = 4) { // one floor-rail segment and the matching top guid
 }
 
 // ---------------------------------------------------------------- the EGR cooler (workpiece) and a 600 × 400 tote
-function egrCoolerGeo(n) {
+function egrCoolerGeo(n) { // Gamma 1.6 T-GDI EGR cooler: stainless core 180 × 70 × 90 mm, gas flanges at both ends, coolant pipes, bracket; overall 280 × 130 × 150
   const m = materials();
-  box(n, m.stainless, 0.34, 0.09, 0.11, 0, 0.065, 0);                 // core shell
+  box(n, m.stainless, 0.18, 0.07, 0.09, 0, 0.045, 0);                  // core case
+  for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, m.steel, 0.004, 0.074, 0.094, x, 0.045, 0); // case beads
   for (const sx of [-1, 1]) {
-    box(n, m.stainless, 0.012, 0.13, 0.15, sx * 0.176, 0.065, 0);     // flanges
-    cyl(n, m.stainless, 0.03, 0.05, sx * 0.13, 0.13, 0.03, 'y', 16);  // coolant ports
-    cyl(n, m.aluDark, 0.022, 0.03, sx * 0.205, 0.065, 0, 'x', 16);
+    box(n, m.stainless, 0.02, 0.06, 0.07, sx * 0.1, 0.045, 0);          // gas tank (cone)
+    box(n, m.stainless, 0.01, 0.09, 0.15, sx * 0.135, 0.045, 0);        // gas flange
+    for (const sy of [-1, 1]) cyl(n, m.aluDark, 0.006, 0.012, sx * 0.135, 0.045 + sy * 0.035, sy * 0.06, 'x', 8); // flange bolt holes
+    cyl(n, m.stainless, 0.011, 0.06, sx * 0.05, 0.105, 0.03, 'y', 14);   // coolant pipes up
+    cyl(n, m.stainless, 0.011, 0.04, sx * 0.05, 0.128, 0.05, 'z', 14);
   }
-  for (let x = -0.12; x <= 0.121; x += 0.06) box(n, m.steel, 0.006, 0.094, 0.114, x, 0.065, 0); // ribs
+  box(n, m.steel, 0.12, 0.004, 0.03, 0, 0.008, -0.055);                // mounting bracket
 }
 function egrCooler() { const root = G('EGR_Cooler'); egrCoolerGeo(root); return finalize(root); }
 function tote() { // 600 (X) × 400 (Z) × 280 mm stacking tote
@@ -1045,8 +1048,14 @@ function toteWith(name, item, n, cols, h) { // a 600 × 400 tote holding n parts
   return finalize(root);
 }
 
+function packBox() { // 600 × 400 × 300 mm packing carton for 8 coolers (dividers inside), taped, labelled
+  const m = materials(), root = G('Pack_Box_600x400'), c = std('carton_brown', 0xc49a63, 0, 0.9), tape = std('carton_tape', 0xd9c39a, 0, 0.6);
+  box(root, c, 0.6, 0.3, 0.4, 0, 0.15, 0); box(root, tape, 0.6, 0.004, 0.06, 0, 0.301, 0); box(root, m.sheet, 0.12, 0.08, 0.002, 0.18, 0.18, 0.201);
+  return finalize(root);
+}
+
 export const MODELS = {
-  insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
+  pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,
