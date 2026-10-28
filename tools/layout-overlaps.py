@@ -1,9 +1,9 @@
-"""Footprint overlap check for a ONE BUILDER layout: python tools/layout-overlaps.py [assets/layouts/egr-factory.json]
+"""Footprint overlap check for a ONE BUILDER layout: python tools/layout-overlaps.py [assets/layouts/egr-weld-module.json]
 Rotated rectangles (separating axis test) for equipment (ufmodel by catalog size, bench, rack, column, kpi, wall) and for the zones AMRs stop
 in; prints every pair that intersects by more than 2 cm, except a zone with its own AMR access over nothing."""
 import json, math, re, sys, os
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
-doc = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'assets/layouts/egr-factory.json'), encoding='utf-8'))
+doc = json.load(open(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'assets/layouts/egr-weld-module.json'), encoding='utf-8'))
 cat = {}
 for m in re.finditer(r"(\w+): \{ label: '([^']*)'[^}]*?size: \[([\d.]+), ([\d.]+), ([\d.]+)\]", open(os.path.join(ROOT, 'js/factory-unity.js'), encoding='utf-8').read()):
     cat[m.group(1)] = (float(m.group(3)), float(m.group(5)))
