@@ -432,7 +432,7 @@
     }
     if (!p.track || (p.thresholdKg > 0 && p.unitKg > 0)) return; // a weighing zone's parts go into the tote on its AMR (fillAt)
     if (unitOf(p) === 'tote' && !(p.standH > 0)) p = Object.assign({}, p, { standH: 0.62 });
-    if (p.standH > 0) { // a roller stand at deck height: the stock stands on it side by side (no pallets); the AMR rolls totes on / off
+    if (p.standH > 0 && unitOf(p) !== 'pallet') { // a roller stand at deck height: the stock stands on it side by side (no pallets); the AMR rolls totes on / off
       const n = Math.min(4, Math.max(1, p.cap || 1)), id = idOf(p.load || 'e3_tote_600x400'), m = A.get(id); if (!m) { A.load(id).catch(() => {}); return; }
       if (p.stand !== false) { // roller stand (the line model brings its own where stand is false)
         const mt = STAND_MAT || (STAND_MAT = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x66727f).convertSRGBToLinear(), metalness: 0.7, roughness: 0.4 }));
@@ -446,7 +446,7 @@
     if (!pal) { A.load('uw_pallet').catch(() => {}); return; }
     for (let k = 0; k < n; k++) {
       const h = new THREE.Group(); h.name = 'Zone_Pallet_' + k; h.visible = false;
-      h.position.set(((k % cols) - (cols - 1) / 2) * 1.25, 0, ((Math.floor(k / cols)) - (rows - 1) / 2) * 1.25);
+      h.position.set(((k % cols) - (cols - 1) / 2) * 1.25, p.standH || 0, ((Math.floor(k / cols)) - (rows - 1) / 2) * 1.25); // standH: a rack bay's deck
       h.add(A.placed(A.get('uw_pallet'), 'Zone_Pallet')); if (palletStack(h, p.load, p.layers || 3) === false) loadOn(h, p.load); g.add(h);
     }
   };

@@ -117,7 +117,11 @@ zone('포장 투입대 (EGR 쿨러)', 'dropoff', PX - 1.2, 11.05, w=0.7, d=0.5, 
 # the shipping pallet is built beside the packing bench: a carton per 8 coolers, 2 layers of 4 (64 coolers); the forklift's forks enter it 1.16 m ahead of its stop
 PALX, PALZ = PX + 1.35, 11.4
 zone('출하 팔레트 적재', 'pickup', PALX, PALZ, w=1.4, d=1.4, track=True, stock=40, cap=64, supplyAt=[round(PER - 2.5, 3)], supplyPeriod=PER, unitKg=1.5, thresholdKg=96, unit='pallet', perBox=8, layers=2, load='e3_pack_box')
-zone('완제품 랙 입고', 'storage', 19.6, r3(NL - 1.25 - 1.16), w=1.4, d=1.4, track=True, stock=1, cap=1, unit='pallet', layers=2, load='e3_pack_box')
+# finished goods: a pallet rack facing the lane; the packing forklift puts each pallet into the middle bay on the bottom deck (0.21 m), the
+# shipping forklift takes it out again
+FGX, FGZ = 14.0, -11.3
+add('rack', '완제품 팔레트 랙', FGX, FGZ, 0, {'bays': 3, 'levels': 2, 'bayWidth': 1.4, 'depth': 1.2, 'levelHeight': 1.8, 'perSlot': 1, 'fill': 0, 'load': 'none'})
+zone('완제품 랙 (가운데 칸)', 'storage', FGX, FGZ, w=1.3, d=1.1, track=True, stock=1, cap=1, unit='pallet', standH=0.21, layers=2, load='e3_pack_box')
 zone('출하 대기', 'dropoff', DOORS[1], r3(16.4 + 1.16), w=1.4, d=1.4, track=True, stock=0, cap=1, consume=70, unit='pallet', layers=2, load='e3_pack_box')
 OXA, OXB = LINES['A']['out'][0], LINES['B']['out'][0]
 PARK = {'코어 A': (5.6, -15.0), '코어 B': (0.6, -8.9), '조립품': (AX + 2.6, 10.2), '포장 지게차': (9.4, 11.6)}
@@ -125,11 +129,11 @@ for nm, (x, z) in PARK.items():
     zone(nm + (' 대기' if '지게차' in nm else ' AMR 대기'), 'storage', x, z, w=1.4 if '지게차' in nm else 1.0, d=1.4 if '지게차' in nm else 1.0)
 
 # ---------------------------------------------------------------- AMR network and movers
-north = sorted({0.0, 0.6, OXB, 3.2, 4.4, 11.64, 19.6}); south = sorted({AX, AX - 2.3, AX + 2.6, PX - 1.2, PALX, 9.4, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers
+north = sorted({0.0, 0.6, OXB, 3.2, 4.4, 11.64, FGX}); south = sorted({AX, AX - 2.3, AX + 2.6, PX - 1.2, PALX, 9.4, 0.0, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers
 route('순환 경로', [(-28, NL)] + [(x, NL) for x in north] + [(28, NL), (28, SL)] + [(x, SL) for x in south] + [(-28, SL), (-28, NL)], oneway=True)
 route('남행 연결로', [(11.64, NL), (11.64, SL)], oneway=True)
 route('북행 연결로', [(0.0, SL), (0.0, NL)], oneway=True)
-route('도킹', [(19.6, NL), (19.6, NL - 1.25)])
+route('도킹', [(FGX, NL), (FGX, r3(FGZ + 1.16))])            # forks into the rack bay
 route('도킹', [(OXB, NL), (OXB, AZB)])                     # under line B's outfeed belt end
 route('도킹', [(0.6, NL), (0.6, -8.9)])                     # line B's second core AMR waits here
 # line A's outfeed is reached by a one-way loop east of the lines: in between them, through the outfeed, out along the north wall
@@ -153,8 +157,8 @@ for k, (x, z) in enumerate(((-12.0, SL), (6.0, SL))):
 for bnch in asm: bnch['params']['feeds'] = ref['조립 · 리크 완료 적재']
 pack['params']['feeds'] = ref['출하 팔레트 적재']
 fork = lambda name, x, z, stops: add('amr', name, x, z, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'e3_pack_box', 'layers': 2, 'stops': stops})
-fork('포장 지게차', 8.0, SL, [stop('포장 지게차 대기', 'wait', 1), stop('출하 팔레트 적재', 'load'), stop('완제품 랙 입고', 'unload')])
-fork('출하 지게차', 20.0, SL, [stop('완제품 랙 입고', 'load'), stop('출하 대기', 'unload', 12)])
+fork('포장 지게차', 8.0, SL, [stop('포장 지게차 대기', 'wait', 1), stop('출하 팔레트 적재', 'load'), stop('완제품 랙 (가운데 칸)', 'unload')])
+fork('출하 지게차', 20.0, SL, [stop('완제품 랙 (가운데 칸)', 'load'), stop('출하 대기', 'unload', 12)])
 
 doc = {'version': 2, 'factory': {'width': W, 'depth': D, 'height': H}, 'objects': objects}
 out = os.path.join(ROOT, 'assets/layouts/egr-factory.json')
