@@ -298,8 +298,11 @@
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       const face = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }); face.name = 'KPI_Face';
       box(g, 'KPI_Frame', W + 0.08, Hb + 0.08, 0.05, K.black, 0, Y + Hb / 2, 0);
-      for (const [z, ry] of [[0.026, 0], [-0.026, Math.PI]]) { const m = add(g, 'KPI_Screen', new THREE.PlaneGeometry(W, Hb), face, 0, Y + Hb / 2, z); m.rotation.y = ry; }
-      for (const sx of [-1, 1]) { if (p.hang) { add(g, 'KPI_Cable', cylGeo(0.006, 0.006, Math.max(0.1, p.hang - Y - Hb), 6), K.black, sx * (W / 2 - 0.2), (p.hang + Y + Hb) / 2, 0); continue; } // hung from the roof steel at p.hang
+      add(g, 'KPI_Screen', new THREE.PlaneGeometry(W, Hb), face, 0, Y + Hb / 2, 0.026);                       // one face, towards the aisle (+Z); the back is the steel case
+      for (const sx of [-1, 1]) { if (p.hang) { // fixed to the roof truss: square-tube hangers with angle brackets at the truss and at the board
+          const x = sx * (W / 2 - 0.3), L = Math.max(0.1, p.hang - Y - Hb); box(g, 'KPI_Hanger', 0.06, L, 0.06, K.steelCol, x, Y + Hb + L / 2, -0.06);
+          for (const yy of [Y + Hb + 0.05, p.hang - 0.05]) { box(g, 'KPI_Bracket', 0.16, 0.1, 0.006, K.steelCol, x, yy, -0.03); box(g, 'KPI_Bracket', 0.16, 0.006, 0.1, K.steelCol, x, yy + 0.05, -0.08); }
+          box(g, 'KPI_Truss_Clamp', 0.3, 0.08, 0.2, K.steelCol, x, p.hang + 0.04, -0.06); continue; }
         box(g, 'KPI_Post', 0.08, Y, 0.08, K.black, sx * (W / 2 - 0.2), Y / 2, 0); box(g, 'KPI_Foot', 0.4, 0.02, 0.4, K.black, sx * (W / 2 - 0.2), 0.01, 0); }
     },
     footprint: p => [p.w, 0.4]

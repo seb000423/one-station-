@@ -710,7 +710,7 @@ function pressLine() {
 // fetches the next. Four slots rotate, so every rack slot visibly empties and fills; nothing appears or vanishes anywhere else.
 function asrsCell(o = {}) {
   const m = materials(), root = G('ASRS_Cell'), body = G('ASRS_Cell_Body', root, -4.2, 0, 0);
-  const P = 32, T = 4 * P, RZ = 0.95, LV = [1.5, 3.0, 4.5, 6.0], TIO = 1.25, R = 0.45, XC = -3.3;
+  const P = o.pitch || 32, KITS = o.kits || 8, C = KITS * P, T = 2 * C, RZ = 0.95, LV = [1.5, 3.0, 4.5, 6.0], TIO = 1.25, R = 0.45, XC = -3.3;
   const slotX = (b, p) => 2.35 + 2.7 * b + [-0.99, -0.33, 0.33, 0.99][p];
   const bay0 = rackBay('01'); // one bay, cloned: the clones share geometry, so the GLB carries it once; only the number plate differs
   for (const side of [-1, 1]) for (let b = 0; b < 4; b++) { const num = String(b + 1 + (side > 0 ? 0 : 4)).padStart(2, '0'), r = bay0.clone(); r.traverse(o => { if (o.isMesh && o.material.name === 'bay_sign_01') o.material = signMat(num); }); r.position.set(2.35 + 2.7 * b, 0, side * RZ); r.rotation.y = side > 0 ? Math.PI : 0; body.add(r); }
@@ -737,7 +737,8 @@ function asrsCell(o = {}) {
   for (const sx of [-1, 1]) prof(io, [XC + sx * 0.45, 2.3, -0.45], [XC + sx * 0.45, 2.3, 0.45], 0.045);
   for (const sz of [-1, 1]) prof(io, [XC - 0.45, 2.3, sz * 0.45], [XC + 0.45, 2.3, sz * 0.45], 0.045);
   box(io, m.yellow, 0.92, 0.04, 0.04, XC, 2.33, 0); cyl(io, m.lampG, 0.03, 0.08, XC + 0.45, 2.45, 0.45, 'y', 12); cyl(io, m.yellow, 0.03, 0.08, XC + 0.45, 2.53, 0.45, 'y', 12);
-  box(io, m.black, 0.06, 0.36, 0.46, XC - 0.5, 1.55, 0.6); box(io, m.screen, 0.02, 0.3, 0.4, XC - 0.47, 1.55, 0.6);
+  prof(io, [XC - 0.5, 0.06, 0.62], [XC - 0.5, 1.4, 0.62], 0.045); const hm = G('Pick_HMI', io, XC - 0.5, 1.55, 0.62); hm.rotation.y = Math.PI / 2; box(hm, m.black, 0.46, 0.34, 0.05, 0, 0, 0); box(hm, m.screen, 0.4, 0.28, 0.004, 0, 0, 0.027); // HMI on a post, facing the pick station
+
   // stored totes (merged) in every slot except the four that rotate and a few gaps
   const SL = [[1, 1, 1, 1], [-1, 3, 0, 2], [1, 3, 3, 0], [-1, 0, 2, 3]]; // side, bay, position, level
   const st = G('Stored_Totes', body);
@@ -748,35 +749,37 @@ function asrsCell(o = {}) {
   }
   const slots = SL.map(([side, b, p, l], j) => { const n = G('Slot_Tote_' + (j + 1), body, slotX(b, p), LV[l] + 0.065, side * (RZ - 0.05)); n.add(tote()); return { n, side, x: slotX(b, p), y: LV[l] + 0.065 }; });
   const carried = G('Carried_Tote', crane.getObjectByName('Crane_Fork2'), 0.82, 0.26, 0); carried.add(tote());
-  const ceramic = std('ceramic_substrate', 0xece8de, 0.0, 0.55);
-  const loops = ['A', 'B'].map(k => { const x = G('Loop_' + k + '_X', body, 0, TIO, -RZ), z = G('Loop_' + k + '_Z', x); const v = G('Loop_' + k + '_Tote', z); v.add(tote());
-    for (let i = 0; i < 4; i++) { const sb = G('Loop_' + k + '_Sub_' + (i + 1), v); box(sb, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); for (let q = 1; q < 6; q++) box(sb, materials().steel, 0.182, 0.001, 0.092, 0, 0.016 + i * 0.032 + q * 0.005, 0); } return k; }); // 4 stacks of stainless plate blanks (one core kit each); the line's picker takes the top one
-  // keys
-  const car = s => s + 0.03 - 0.26 - 1.0, dn = s => s - 0.03 - 0.26 - 1.0, cx = [], cy = [], fz = [], cv = [[0, true]], sv = slots.map(() => []);
-  for (let k = 0; k < 4; k++) {
-    const s = P * k, A = slots[k], B = slots[(k + 1) % 4];
-    cx.push([s, 0], [s + 5.2, 0], [s + 11, A.x], [s + 13.6, A.x], [s + 19, B.x], [s + 21.6, B.x], [s + 28, 0]);
-    cy.push([s, car(TIO)], [s + 1.2, car(TIO)], [s + 1.6, dn(TIO)], [s + 3.8, dn(TIO)], [s + 4.2, car(TIO)], [s + 5.2, car(TIO)], [s + 11, car(A.y)], [s + 12.2, car(A.y)], [s + 12.6, dn(A.y)], [s + 13.6, dn(A.y)], [s + 19, dn(B.y)], [s + 20.2, dn(B.y)], [s + 20.6, car(B.y)], [s + 21.6, car(B.y)], [s + 28, car(TIO)]);
-    fz.push([s, 0], [s + 1.2, -R], [s + 1.6, -R], [s + 2.6, 0], [s + 3.8, R], [s + 4.2, R], [s + 5.2, 0], [s + 11, 0], [s + 12.2, A.side * R], [s + 12.6, A.side * R], [s + 13.6, 0], [s + 19, 0], [s + 20.2, B.side * R], [s + 20.6, B.side * R], [s + 21.6, 0]);
-    cv.push([s + 1.4, false], [s + 4.0, true], [s + 12.4, false], [s + 20.4, true]);
-    sv[k].push([s + 12.4, true]); sv[(k + 1) % 4].push([s + 20.4, false]);
+  // One tote at a time at the pick station, flowing one way: the crane takes a full tote (8 plate-blank kits) out of the rack and sets it on
+  // the outfeed, it waits in the queue (x −2.5) until the tote before it leaves the pick station, rolls in (transfer, pick position at XC),
+  // stays for its 8 picks (the line's picker takes the top kit every P s), then rolls on to the infeed as an empty tote; the crane takes
+  // it back into the rack. Tote c serves the line's picks 8c … 8c + 7 (at P j + 16). Two tote nodes alternate; clip 2 × 8 P.
+  const totes = ['A', 'B'].map(k => { const x = G('Tote_' + k + '_X', body, 0, TIO, -RZ), z = G('Tote_' + k + '_Z', x); const v = G('Tote_' + k, z); v.add(tote());
+    for (let i = 0; i < KITS; i++) { const sb = G('Tote_' + k + '_Kit_' + (i + 1), v); box(sb, m.stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); for (let q = 1; q < 6; q++) box(sb, m.steel, 0.182, 0.001, 0.092, 0, 0.016 + i * 0.032 + q * 0.005, 0); } return k; });
+  const car = s => s + 0.03 - 0.26 - 1.0, dn = s => s - 0.03 - 0.26 - 1.0, ch = {}, add = (n, c, l) => { (ch[n + '|' + c] || (ch[n + '|' + c] = [])).push(...l); };
+  const SLT = [slots[0], slots[1]], R_ = R;
+  for (let c = -2; c < 4; c++) {
+    const q = P * (KITS * c + KITS - 1) + 16, R = SLT[((c + 1) % 2 + 2) % 2], S = SLT[(c % 2 + 2) % 2]; // q: tote c's last pick; R: where tote c + 1 waits; S: where tote c goes back
+    // crane: fetch tote c + 1 and set it on the outfeed; later take the empty tote c off the infeed and store it
+    add('ASRS_Crane', 'x', [[q - 37, 0], [q - 31, R.x], [q - 28.6, R.x], [q - 22.6, 0], [q + 14.1, 0], [q + 20, S.x], [q + 22.6, S.x], [q + 28.6, 0]]);
+    add('Crane_Carriage', 'y', [[q - 37, car(TIO)], [q - 31, dn(R.y)], [q - 30, dn(R.y)], [q - 29.6, car(R.y)], [q - 28.6, car(R.y)], [q - 22.6, car(TIO)], [q - 21.8, car(TIO)], [q - 21.4, dn(TIO)], [q - 20, dn(TIO)],
+      [q + 11.5, dn(TIO)], [q + 12.7, dn(TIO)], [q + 13.1, car(TIO)], [q + 14.1, car(TIO)], [q + 20, car(S.y)], [q + 21.2, car(S.y)], [q + 21.6, dn(S.y)], [q + 22.6, dn(S.y)], [q + 28.6, car(TIO)]]);
+    const fz = [[q - 31, 0], [q - 30, R.side * R_], [q - 29.6, R.side * R_], [q - 28.6, 0], [q - 22.6, 0], [q - 21.8, -R_], [q - 21.4, -R_], [q - 20.6, 0], [q + 11.5, 0], [q + 12.7, R_], [q + 13.1, R_], [q + 14.1, 0], [q + 20, 0], [q + 21.2, S.side * R_], [q + 21.6, S.side * R_], [q + 22.6, 0]];
+    add('Crane_Fork', 'z', fz); add('Crane_Fork2', 'z', fz);
+    add('Carried_Tote', 'vis', [[q - 29.6, true], [q - 21.4, false], [q + 13.0, true], [q + 21.4, false]]);
+    add('Slot_Tote_' + (SLT.indexOf(R) + 1), 'vis', [[q - 29.6, false]]); add('Slot_Tote_' + (SLT.indexOf(S) + 1), 'vis', [[q + 21.4, true]]);
+    // tote c + 1: outfeed → queue → pick position (rolls in when tote c has left) → 8 picks → infeed → crane
+    const tk = 'Tote_' + (((c + 1) % 2 + 2) % 2 === 0 ? 'A' : 'B'), s0 = q - 21.4, e = q + 3, q2 = q + KITS * P;
+    add(tk, 'vis', [[s0, true], [q2 + 13.0, false]]);
+    add(tk + '_X', 'x', [[s0, 0], [s0 + 8, -2.5], [e, -2.5], [e + 2, XC], [q2 + 5, XC], [q2 + 11, 0], [q2 + 13.2, 0]]);
+    add(tk + '_Z', 'z', [[s0, 0], [e + 2, 0], [e + 5, RZ], [q2 + 3, RZ], [q2 + 5, 2 * RZ], [q2 + 13.1, 2 * RZ], [q2 + 13.3, 0]]);
+    for (let i = 1; i <= KITS; i++) add(tk + '_Kit_' + i, 'vis', [[s0 - 0.1, true], [q + P * (KITS - i + 1), false]]); // pick k (at q + P (k + 1)) takes the top kit, KITS − k
   }
-  const close = a => [...a, [T, a[0][1]]];
-  const keys = [['ASRS_Crane', 'x', close(cx)], ['Crane_Carriage', 'y', close(cy)], ['Crane_Fork', 'z', close(fz)], ['Crane_Fork2', 'z', close(fz)], ['Carried_Tote', 'vis', cv]];
-  sv.forEach((v, j) => { v.sort((a, b) => a[0] - b[0]); keys.push(['Slot_Tote_' + (j + 1), 'vis', [[0, !v[0][1]], ...v]]); });
-  // loop totes: tote A rides the loop after periods 0 and 2, tote B after 1 and 3; path relative to the outfeed drop point
-  const PATH = [[0, 0, 0], [2.6, 0, 0], [8.5, XC, 0], [10.5, XC, RZ], [22.5, XC, RZ], [24.5, XC, 2 * RZ], [31, 0, 2 * RZ], [2 * P - 0.2, 0, 2 * RZ], [2 * P, 0, 0]]; // 12 s at the pick station (the EGR auto line picks at 32k + 16)
-  loops.forEach((k, i) => {
-    const xs = [], zs = [], vs = [];
-    for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P + 1.4; for (const [u, x, z] of PATH) { xs.push([s + u, x]); zs.push([s + u, z]); } vs.push([s, true], [s + P + 2.6, false]); }
-    const clip = a => { a = a.filter(([t]) => t >= 0 && t <= T); return a; };
-    const v = clip(vs).sort((a, b) => a[0] - b[0]);
-    keys.push(['Loop_' + k + '_X', 'x', clip(xs)], ['Loop_' + k + '_Z', 'z', clip(zs)], ['Loop_' + k + '_Tote', 'vis', [[0, i === 1], ...v]]);
-    if (o.picks && !o.picks.includes(k)) return; // this tote's stacks are not picked (a line taking a kit every other visit)
-    const sub = []; for (const s0 of [-2 * P, 0, 2 * P]) { const s = s0 + i * P; sub.push([s + 16, false], [s + 1.4 + 2 * P - 0.1, true]); } // top substrate: picked at 16, the next tote out has its own
-    const sv4 = sub.filter(([t]) => t > 0 && t < T).sort((a, b) => a[0] - b[0]); keys.push(['Loop_' + k + '_Sub_4', 'vis', [[0, !sv4[0][1]], ...sv4]]);
-  });
-  return cycleClip(finalize(root), 'ASRS_Cycle', T, keys);
+  const ser = (a, rest) => { a = a.slice().sort((p, q) => p[0] - q[0]); const f = t => { let k = -1; while (k + 1 < a.length && a[k + 1][0] <= t) k++; if (k < 0) return rest; if (k === a.length - 1) return a[k][1]; const [t0, v0] = a[k], [t1, v1] = a[k + 1], u = Math.min(1, Math.max(0, (t - t0) / (t1 - t0))); return v0 + (v1 - v0) * u * u * (3 - 2 * u); };
+    return [[0, f(0)], ...a.filter(([t]) => t > 0 && t < T), [T, f(T)]]; };
+  const vis = (a, v0) => { a = a.slice().sort((p, q) => p[0] - q[0]); let v = v0; for (const [t, vv] of a) if (t <= 0) v = vv; return [[0, v], ...a.filter(([t]) => t > 0 && t < T)]; };
+  const keys = [];
+  for (const [key, evs] of Object.entries(ch)) { const [n, c] = key.split('|'); keys.push(c === 'vis' ? [n, 'vis', vis(evs, /^Slot/.test(n))] : [n, c, ser(evs, c === 'y' && n === 'Crane_Carriage' ? car(TIO) : 0)]); }
+  return cycleClip(finalize(root), 'ASRS_Cycle', T, keys, 5 * 32 / P);
 }
 
 // ---------------------------------------------------------------- 11. insert injection moulding cell (machine 4.1 × 1.2 × 2.0 m; with feeder, robot and outfeed 4.5 × 2.9 × 2.5 m)
@@ -1103,10 +1106,12 @@ function egrCoreLine(o = {}) {
   const ram = G('Press_Ram', root); box(ram, m.aluDark, 0.36, 0.5, 0.7, 1.2, 2.0, 0); box(ram, m.steel, 0.22, 0.08, 0.14, 1.2, 1.71, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) { box(root, m.yellow, 0.035, 1.3, 0.035, 1.2 + sx * 0.36, BT + 0.65, sz * 0.34); }
   // 3. core stacking table + operator (x 2.8, south side): plate bins and the clamping jigs at hand
-  box(root, m.esdTop || m.aluDark, 0.9, 0.03, 0.5, 2.5, 0.9, 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [2.5 + sx * 0.42, 0.06, 0.95 + sz * 0.22], [2.5 + sx * 0.42, 0.885, 0.95 + sz * 0.22], 0.04);
-  for (let k = 0; k < 3; k++) { box(root, m.orange, 0.2, 0.1, 0.16, 2.2 + k * 0.25, 0.965, 1.08); box(root, m.stainless, 0.18, 0.03, 0.12, 2.2 + k * 0.25, 1.0, 1.08); }
-  for (let k = 0; k < 3; k++) box(root, clampM, 0.24, 0.02, 0.12, 2.75, 0.925 + k * 0.022, 0.82);
-  const st = worker('Op_Stack', 2.8, 0.72, Math.PI);
+  // table beside the operator (x 1.95): plate bins and the clamping jigs at hand; the operator stands at the belt (x 2.85, z 0.75)
+  box(root, m.aluDark, 0.9, 0.03, 0.5, 1.95, 0.9, 1.0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [1.95 + sx * 0.42, 0.06, 1.0 + sz * 0.22], [1.95 + sx * 0.42, 0.885, 1.0 + sz * 0.22], 0.04);
+  for (let k = 0; k < 3; k++) { box(root, m.orange, 0.2, 0.1, 0.16, 1.7 + k * 0.25, 0.965, 1.12); box(root, m.stainless, 0.18, 0.03, 0.12, 1.7 + k * 0.25, 1.0, 1.12); } // formed-plate bins
+  for (let k = 0; k < 3; k++) box(root, clampM, 0.24, 0.02, 0.12, 2.2, 0.925 + k * 0.022, 0.86);                                        // clamping jigs
+  const st = worker('Op_Stack', 2.85, 0.75, Math.PI);
+  prof(root, [1.55, 0.92, 1.2], [1.55, 1.62, 1.2], 0.04); const wi = G('Stack_Monitor', root, 1.75, 1.62, 1.2); wi.rotation.y = -0.6; box(wi, m.black, 0.42, 0.28, 0.04, 0, 0, 0); box(wi, m.screen, 0.37, 0.23, 0.004, 0, 0, 0.022); // work instructions, turned to the operator
   // 4. Ni paste dispensing (x 4.6, the belt stops there)
   belt(3.3, 5.9, 0, false); belt(5.9, 6.55);
   if (!o.manual) {
@@ -1122,8 +1127,10 @@ function egrCoreLine(o = {}) {
     box(dc, m.black, 0.1, 0.12, 0.1, C, 1.98, -0.35); const ring = G('Align_Light', dc); cyl(ring, m.light, 0.06, 0.01, C, 1.85, -0.35, 'y', 24);
     box(dc, m.syringe, 0.18, 0.3, 0.18, C - 0.8, 2.28, 0.4); box(dc, m.paste, 0.14, 0.1, 0.14, C - 0.8, 2.2, 0.4);
     cyl(dc, m.black, 0.012, 0.25, C + 0.85, 2.25, 0.5, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(dc, mt, 0.03, 0.06, C + 0.85, 2.4 + k * 0.065, 0.5, 'y', 14);
-    box(dc, m.black, 0.06, 0.32, 0.42, C + 0.95, 1.5, 0.75); box(dc, m.screen, 0.004, 0.26, 0.36, C + 0.98, 1.5, 0.75);
-    box(dc, m.screen, 0.5, 0.3, 0.02, C, 2.45, 0.66); box(dc, m.black, 0.54, 0.34, 0.01, C, 2.45, 0.65); // ONE STATION status display
+    // HMI on a swing arm from the front-right post, facing the operator side (+Z), 1.55 m
+    box(dc, m.aluDark, 0.05, 0.05, 0.3, C + 0.98, 1.55, 0.78); box(dc, m.aluDark, 0.3, 0.05, 0.05, C + 0.84, 1.55, 0.93); box(dc, m.black, 0.42, 0.32, 0.05, C + 0.62, 1.55, 0.96); box(dc, m.screen, 0.36, 0.26, 0.004, C + 0.62, 1.55, 0.987);
+    // ONE STATION status display on a bracket on top of the enclosure, tilted towards the aisle
+    for (const sx of [-1, 1]) box(dc, m.aluDark, 0.04, 0.24, 0.04, C + sx * 0.2, 2.25, 0.5); const sd = G('Status_Display', dc, C, 2.42, 0.55); sd.rotation.x = -0.25; box(sd, m.black, 0.56, 0.34, 0.04, 0, 0, 0); box(sd, m.screen, 0.5, 0.28, 0.004, 0, 0, 0.022);
   } else { // operator at a stop with a handheld dispenser: controller + paste syringe on a side table, foot switch
     box(root, m.aluDark, 0.6, 0.03, 0.45, 4.0, 0.9, 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [4.0 + sx * 0.27, 0.06, 0.95 + sz * 0.19], [4.0 + sx * 0.27, 0.885, 0.95 + sz * 0.19], 0.04);
     box(root, m.sheet, 0.26, 0.12, 0.24, 4.0, 0.975, 0.95); box(root, m.screen, 0.12, 0.05, 0.002, 4.0, 1.0, 1.071); box(root, m.black, 0.22, 0.05, 0.28, 4.6, 0.025, 0.95);
@@ -1138,9 +1145,12 @@ function egrCoreLine(o = {}) {
     for (const sx of [-1, 1]) box(gy, m.black, 0.012, 0.09, 0.12, sx * 0.105, 1.66, 0); return gy; };
   const ly = gantry('Loader', 6.4, 8.0), ul = gantry('Unloader', 12.6 - 0.525, 13.6);
   { const lp = G('Loader_Part', ly, 0, 1.6, 0); core(lp, m.stainless); clamps(lp); pasteLines(lp); const up = G('Unloader_Part', ul, 0, 1.6, 0); core(up, brazed); clamps(up); }
-  rollers(6.65, 8.1, 0); rollers(12.1, 13.15, 0); rollers(7.0, 13.0, 1.25); rollers(0.2, 1.05, 7.375, false); rollers(0.2, 1.05, 12.6, false); // loader / unload tables, return line, cross transfers
-  for (const [x0, x1, z] of [[6.65, 8.1, 0], [12.1, 13.15, 0], [7.0, 13.0, 1.25]]) for (const sz of [-1, 1]) box(root, m.alu, x1 - x0, 0.1, 0.035, (x0 + x1) / 2, BT - 0.06, z + sz * 0.3);
-  for (const [x, z] of [[6.75, 0], [8.0, 0], [12.2, 0], [13.05, 0], [7.1, 1.25], [9.0, 1.25], [11.0, 1.25], [12.9, 1.25]]) for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * 0.3], [x, BT - 0.11, z + sz * 0.3], 0.04); foot(root, x, z + sz * 0.3); }
+  // roller sections, end to end: loader table (belt end 6.55 → front door 8.45), unload table (rear door 11.75 → inspection belt 13.4),
+  // return line (z 1.25) and the cross transfers between them, each in its frame on legs
+  rollers(6.56, 8.45, 0); rollers(11.75, 13.39, 0); rollers(7.0, 13.0, 1.25); rollers(0.3, 0.95, 7.375, false); rollers(0.3, 0.95, 12.6, false);
+  for (const [x0, x1, z] of [[6.56, 8.45, 0], [11.75, 13.39, 0], [7.0, 13.0, 1.25]]) for (const sz of [-1, 1]) box(root, m.alu, x1 - x0, 0.1, 0.035, (x0 + x1) / 2, BT - 0.06, z + sz * 0.3);
+  for (const x of [7.375, 12.6]) for (const sx of [-1, 1]) box(root, m.alu, 0.035, 0.1, 0.65, x + sx * 0.3, BT - 0.06, 0.625);
+  for (const [x, z] of [[6.7, 0], [8.3, 0], [11.9, 0], [13.25, 0], [7.1, 1.25], [9.0, 1.25], [11.0, 1.25], [12.9, 1.25]]) for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * 0.3], [x, BT - 0.11, z + sz * 0.3], 0.04); foot(root, x, z + sz * 0.3); }
   const trays = [0, 1].map(i => { const tx = G('Tray_' + i + '_X', root, 7.375, BT, 0), tz = G('Tray_' + i + '_Z', tx), t = G('Tray_' + i, tz);
     box(t, m.steel, 1.4, 0.03, 0.5, 0, 0.015, 0); for (const sx of [-0.7, 0.7]) box(t, m.steel, 0.03, 0.06, 0.5, sx, 0.03, 0); for (let s = 0; s < 4; s++) box(t, clampM, 0.26, 0.012, 0.14, -0.525 + 0.35 * s, 0.036, 0); return t; });
   void trays;
@@ -1166,6 +1176,7 @@ function egrCoreLine(o = {}) {
   for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(ngb, [x, 0, z], [x, 0.31, z], 0.03, m.frameDark);
   box(ngb, m.ngLabel, 0.3, 0.12, 0.004, 0, 0.52, -0.207);
 
+  const oo = worker('Op_Out', 16.3, 0.78, Math.PI); { const hp = G('Op_Out_Part', oo._Arm_R, -0.06, -0.78, 0.05); core(hp, brazed); } // outfeed operator: belt end → AMR tote
   // ---- keys
   const ease = u => u * u * (3 - 2 * u), ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
   const ser = (evs, rest) => { evs = evs.slice().sort((a, b) => a[0] - b[0]);
@@ -1186,7 +1197,8 @@ function egrCoreLine(o = {}) {
     const k = ((j % 8) + 8) % 8, PN = 'Core_' + (k + 1), b = P * j + 16, ng = k === NG;
     // picker: top blank stack in the AS/RS tote → belt
     add('Picker_X', 'x', [[b - 2, 0], [b - 1, -1.3], [b + 0.8, -1.3], [b + 2.8, 0]]);
-    add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.714 - 1.366)], [b, -(1.714 - 1.366)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.714 - BT)], [b + 3.8, -(1.714 - BT)], [b + 4.6, 0]]);
+    const KT = P === 64 ? 4 : 8, yb = 1.266 + (KT - 1 - (((j % KT) + KT) % KT)) * 0.032; // the AS/RS tote at the pick station holds 8 kits; pick j takes the top one (see asrsCell)
+    add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.714 - yb)], [b, -(1.714 - yb)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.714 - BT)], [b + 3.8, -(1.714 - BT)], [b + 4.6, 0]]);
     add('Picker_Part', 'vis', [[b, true], [b + 3.8, false]]);
     add('Press_Ram', 'y', [[b + 8.4, 0], [b + 9.2, -0.62], [b + 9.6, -0.62], [b + 10.4, 0]]);
     add('Op_Stack_Arm_L', 'rx', [[b + 12.6, -0.15], [b + 13.4, -0.9], [b + 14.2, -0.5], [b + 15.0, -0.9], [b + 16.2, -0.5], [b + 17.0, -0.9], [b + 18.5, -0.4], [b + 19.4, -0.9], [b + 21.6, -0.9], [b + 22.4, -0.15]]);
@@ -1222,7 +1234,11 @@ function egrCoreLine(o = {}) {
     let end;
     add('Vision_Flash', 'vis', [[u + 5.4, true], [u + 5.7, false]]);
     if (ng) { xs.push([u + 7.3, 14.9]); zs.push([u + 7.6, 0], [u + 8.4, -0.55]); ys.push([u + 8.4, 0], [u + 9, -0.47]); add('NG_Pusher', 'z', [[u + 7.5, 0], [u + 8.4, -0.48], [u + 9.2, 0]]); end = u + 9.2; }
-    else { xs.push([u + 12.8, 16.45], [u + 13.4, 16.85]); ys.push([u + 12.8, 0], [u + 13.4, -0.2]); end = u + 13.6; }
+    else { xs.push([u + 12.8, 16.45]); end = u + 13.2;   // at the belt end the operator lifts it, turns and lays it into the AMR tote (u + 14.6)
+      add('Op_Out_Turn', 'ry', [[u + 12.6, 0], [u + 13.4, 0], [u + 14.2, -0.75], [u + 14.8, -0.75], [u + 15.6, 0]]);
+      add('Op_Out_Arm_R', 'rx', [[u + 12.4, -0.15], [u + 13.0, -0.9], [u + 13.3, -0.9], [u + 13.8, -0.55], [u + 14.3, -0.9], [u + 14.7, -0.9], [u + 15.4, -0.15]]);
+      add('Op_Out_Arm_L', 'rx', [[u + 12.4, -0.15], [u + 13.0, -0.8], [u + 14.7, -0.8], [u + 15.4, -0.15]]);
+      add('Op_Out_Part', 'vis', [[u + 13.2, true], [u + 14.6, false]]); }
     add(PN, 'vis', [[b + 3.8, true], [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
     add(PN + '_X', 'x', xs); add(PN + '_Y', 'y', ys); add(PN + '_Z', 'z', zs);
   }
@@ -1234,7 +1250,7 @@ function egrCoreLine(o = {}) {
   const keys = [];
   for (const [key, evs] of Object.entries(ch)) {
     const [node, c] = key.split('|');
-    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Vision_Flash|Align_Light|Furnace_Glow)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) ? false : true)]);
+    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Op_Out_Part|Vision_Flash|Align_Light|Furnace_Glow)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) ? false : true)]);
     else keys.push([node, c, ser(evs, /_Arm_/.test(node) ? -0.15 : 0)]);
   }
   return cycleClip(finalize(root), 'Core_Cycle', TT, keys, 5 * 32 / P); // the slower line samples less often (same file size)
@@ -1252,7 +1268,7 @@ function toteGrid(name, item, L, W, H) { // tote holding 8 parts in a grid (2 al
 }
 
 export const MODELS = {
-  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ picks: ['A'] }), pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
+  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true, pitch: 64 }), asrs_cell_a: () => asrsCell({ pitch: 64, kits: 4 }), /* line A: a tote of 4 kits per 256 s */ pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,

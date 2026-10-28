@@ -69,12 +69,24 @@ def good_drops(P, DT):   # phases of the line clip (8 P s) at which a good braze
     for j in range(-9, 9):
         if j % 8 == 5: continue
         b = P * j + 16; a = b + 32 + DT; F = F0 + 4 * P * math.ceil((a - F0 + 1e-6) / (4 * P)); slot = 3 - round((F - 2 - a) / P)
-        out.add(round((F + 106 + 6 * slot + 13.4) % (8 * P), 1))
+        out.add(round((F + 106 + 6 * slot + 14.6) % (8 * P), 1))   # the outfeed operator lays it into the tote
     return sorted(out)
 for k, L in LINES.items():
     model(f'자동창고 일체형 셀 {k}', L['asrs'], -23.4, L['z'], r3(math.pi))
     model(L['name'], L['model'], LX0 + 7.45, L['z'] - 0.685)
-    L['out'] = (r3(LX0 + 16.85), L['z']); L['good'] = good_drops(L['P'], L['DT'])
+    L['out'] = (r3(LX0 + 16.95), L['z']); L['good'] = good_drops(L['P'], L['DT'])   # out: just past the belt end (16.6), the outfeed operator turns to it
+
+# ---------------------------------------------------------------- station names on the floor (zones without stock; their labels read right in ONE MONITOR too)
+def station(name, x, z, w=1.2, d=0.4): zone(name, 'storage', x, z, w=w, d=d)
+for k, L in LINES.items():
+    zs = L['z'] + 1.45
+    station(f'피킹 스테이션 ({k})', -15.965, r3(L['z'] + 1.45), w=1.0)
+    station(f'프레스 성형 ({k})', LX0 + 1.2, r3(zs), w=1.0)
+    station(f'코어 적층 · 작업자 ({k})', LX0 + 2.7, r3(zs), w=1.6)
+    station('수동 도포 · 작업자 (A)' if k == 'A' else 'ONE STATION 자동 도포 (B)', LX0 + 4.6, r3(zs), w=1.8)
+    station(f'진공 브레이징로 ({k})', LX0 + 10.1, r3(zs), w=1.8)
+    station(f'브레이징 후 검사 · NG ({k})', LX0 + 14.4, r3(zs), w=1.6)
+    station(f'배출 · AMR 적재 ({k})', LX0 + 16.0, r3(zs + 0.05), w=1.2)
 
 # ---------------------------------------------------------------- KPI boards hung over each line's dispensing station (assumed values until the field numbers come in)
 def uph(L): return round(3600 / L['P'] * 7 / 8)
@@ -101,14 +113,16 @@ def cell(x0, kinds, cycle, names):
     return out
 AX = -7.0; ACYC = round(2 * PER, 3)                    # two stations, each assembles and leak-tests one cooler per 48.8 s
 asm = cell(AX, ('assembly', 'leak'), ACYC, ('조립 (플랜지 · 파이프 · 브래킷)', '리크 테스트 (가스 · 냉각수)'))
+for nm, x in (('조립 스테이션', AX - 1.1), ('리크 테스트 스테이션', AX + 1.1)): zone(nm, 'storage', x, BZ + 0.75, w=1.2, d=0.4)
 PX = 4.0                                              # DMC marking, final inspection, packing: the operator lays each cooler into the carton on the pallet beside the bench
+zone('DMC · 최종 검사 · 포장 스테이션', 'storage', PX, BZ + 0.75, w=1.4, d=0.4)
 pack = add('bench', 'DMC 각인 · 최종 검사 · 포장', PX, BZ, math.pi, {'kind': 'pack', 'length': 1.2, 'depth': 0.8, 'height': 0.9, 'worker': True, 'cycle': PER, 'side': -1, 'phase': 0})
 
 # ---------------------------------------------------------------- zones (stock kept: AMRs wait when a pickup is empty / a drop-off is full)
 # the AMR leaves with the 7 good cores of two furnace batches (one 256 s cycle) and always right before a 110 s gap, so the next AMR is in place
 # before the next core drops (the run starts with 2 cores of the previous batch in the tote)
 for k, L in LINES.items():   # the AMR leaves with the 7 good cores of one clip (two furnace batches), right before the long gap; 2 cores of the previous run are in it at start
-    cz = zone(f'브레이징 코어 적재 (라인 {k})', 'pickup', *L['out'], w=1.2, d=1.4, track=True, stock=2, cap=16, supplyAt=L['good'], supplyPeriod=8 * L['P'], unitKg=0.9, thresholdKg=6.3, unit='part', load='e3_brazed_core')
+    cz = zone(f'브레이징 코어 적재 (라인 {k})', 'pickup', *L['out'], w=0.8, d=1.2, track=True, stock=2, cap=16, supplyAt=L['good'], supplyPeriod=8 * L['P'], unitKg=0.9, thresholdKg=6.3, unit='part', load='e3_brazed_core')
     cz['perm'] = {'amr': True}
 az = zone('조립 · 리크 완료 적재', 'pickup', AX, OPZ, w=0.9, d=1.2, track=True, stock=0, cap=16, supplyAt=[round(ACYC - 2.5, 3), round(ACYC / 2 - 2.5, 3)], supplyPeriod=ACYC, unitKg=1.5, thresholdKg=12, unit='part', load='e3_egr_cooler')
 az['perm'] = {'amr': True}
