@@ -139,7 +139,8 @@
   }
   // AMR plans learn where each zone stands (load / unload hand-off animation, js/factory-unity-groups.js)
   function withZones(M) {
-    if (M && M.amr && !M.__zones) { M.__zones = true; const at = name => { const o = doc.objects.find(o => o.type === 'zone' && o.name === name); return o ? { x: o.x, z: o.z } : null; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
+    if (M && M.amr && !M.__zones) { M.__zones = true; const at = key => { const o = doc.objects.find(o => o.type === 'zone' && (o.name === key || 'zone:' + o.id === key)); if (!o) return null;
+      const zp = o.params || {}, z = M.zones && M.zones[o.id]; return { x: o.x, z: o.z, n: zp.thresholdKg > 0 && zp.unitKg > 0 ? Math.ceil(zp.thresholdKg / zp.unitKg) : 1, stock: t => (z ? z.stock(t) : 0) }; }; for (const pl of Object.values(M.amr)) if (pl) pl.zoneAt = at; }
     return M;
   }
   function motion() {
@@ -1510,7 +1511,7 @@
     for (const o of doc.objects) if (o.type === 'zone') {
       const g = views.get(o.id); if (!g) continue; const z = Z[o.id], old = g.getObjectByName('Zone_Stock');
       if (old) g.remove(old); // stock is shown on the zone's screen-space card (labelTick)
-      const n = z ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it
+      const zp = o.params || {}, n = z && !(zp.thresholdKg > 0 && zp.unitKg > 0) ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it (a weighing zone's parts go into the tote on its AMR instead)
     }
     const box = $('#fbLogi'); if (!box) return;
     const amrs = doc.objects.filter(o => o.type === 'amr'), zs = doc.objects.filter(o => Z[o.id]);

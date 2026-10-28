@@ -102,7 +102,8 @@ add('fence', '프레스 안전 펜스', 12.0, 13.9, 0, {'length': 8.4, 'height':
 NL, SL = -9.0, 8.0                   # lanes: eastbound north, westbound south
 zone('자재 입고', 'pickup', DOORS[0], 17.65, track=True, stock=3, cap=6, supply=30, load='uw_cardboard_a1')
 zone('자동창고 입고', 'dropoff', -17.6, NL - 2.65, track=True, stock=0, cap=4, consume=36, load='uw_cardboard_a1')
-zone('적재 완료 (FR5)', 'pickup', 5.4, NL - 2.65, track=True, stock=0, cap=4, supply=70, load='e3_tote_600x400')  # a full tote (8 coolers) about every 70 s
+# the FR5 cell's outfeed: the AMR waits here while the coolers go into the tote on its deck one by one (2.5 kg each); at 15 kg (6) it leaves
+zone('적재 완료 (FR5)', 'pickup', 5.4, NL - 2.65, track=True, stock=0, cap=12, supply=11, unitKg=2.5, thresholdKg=15, load='e3_egr_cooler')
 zone('완제품 입고', 'dropoff', 16.4, NL - 2.65, track=True, stock=0, cap=6, consume=24, load='e3_tote_600x400')
 zone('조립 완료', 'pickup', -0.6, SL + 2.65, track=True, stock=1, cap=4, load='uw_cardboard_c1')  # filled by the weighing AMR
 # weighing zone beside the benches: the operators put finished coolers (2.5 kg) on the AMR waiting here; at 20 kg it leaves
@@ -133,9 +134,9 @@ stop = lambda at, act, dwell=8: {'at': ref[at], 'act': act, 'dwell': dwell}
 add('amr', '입고 AGV', -26.0, SL, 0, {'model': 'e3_omron_agv', 'length': 1.3, 'width': 0.8, 'speed': 1.0, 'payload': 250, 'dwell': 8, 'load': 'uw_cardboard_a1',
     'stops': [stop('자재 입고', 'load'), stop('자동창고 입고', 'unload')]})
 add('amr', '완제품 AMR 2', -2.0, NL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
-    'stops': [stop('적재 완료 (FR5)', 'load'), stop('완제품 입고', 'unload')]})
+    'stops': [stop('적재 완료 (FR5)', 'wait', 1), stop('적재 완료 (FR5)', 'load', 6), stop('완제품 입고', 'unload')]})
 add('amr', '완제품 AMR', 12.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
-    'stops': [stop('적재 완료 (FR5)', 'load'), stop('완제품 입고', 'unload')]})
+    'stops': [stop('적재 완료 (FR5)', 'wait', 1), stop('적재 완료 (FR5)', 'load', 6), stop('완제품 입고', 'unload')]})
 add('amr', '소재 공급 AMR', -24.0, NL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
     'stops': [stop('소재 출고 (가공용)', 'load'), stop('가공 소재 공급', 'unload')]})
 add('amr', '부품 공급 AMR', 9.0, SL, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.3, 'payload': 120, 'dwell': 6, 'load': 'e3_tote_600x400',
