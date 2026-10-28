@@ -260,13 +260,21 @@
     const s = p.side, sw = u < T - 5 ? 0 : u < T - 3.5 ? (u - (T - 5)) / 1.5 : u < T - 2.5 ? 1 : u < T - 1.2 ? 1 - (u - (T - 2.5)) / 1.3 : 0, e = sw * sw * (3 - 2 * sw);
     const work = u >= 2 && u < T - 5, f = work ? (u - 2) / (T - 7) : 0, arm = -0.35 + (work ? w : 0) - e * 0.45, other = -0.35 + (work ? -w * 0.8 : 0);
     return { l: s > 0 ? other : arm, r: s > 0 ? arm : other, ry: s > 0 ? -e * 1.25 : 0, lry: s < 0 ? e * 1.25 : 0, turn: -s * e * 0.55, press: 0,
-      part: u >= 2 && u < T - 5, hand: u >= T - 5 && u < T - 2.5, stripes: p.kind === 'dispense' ? (u >= T - 5 ? 3 : work ? Math.floor(f * 3.2) : 0) : 0 };
+      part: u >= 2 && u < T - 5, hand: u >= T - 5 && u < T - 2.5, stripes: p.kind === 'dispense' || p.kind === 'assembly' ? (u >= T - 5 ? 3 : work ? Math.floor(f * 3.2) : 0) : 3 };
   }
   // the part on a side-output bench: dispense → ceramic substrate (+ three paste stripes named pre + k); assembly / pack → the moulded part
   function benchPartLook(n, kind, pre) {
+    if (kind !== 'dispense') { coolerLook(n, kind, pre); return; }
     box(n, 'Bench_Part_Plate', 0.2, 0.012, 0.14, K.ceramic, 0, 0.006, 0);
     if (kind === 'dispense') [-0.06, 0, 0.06].forEach((x, i) => { const s = new THREE.Group(); s.name = pre ? pre + (i + 1) : 'Hand_Paste'; n.add(s); box(s, 'Bench_Paste', 0.014, 0.004, 0.1, K.paste, x, 0.014, 0); });
-    else { box(n, 'Bench_Part_Body', 0.24, 0.02, 0.18, K.black, 0, -0.004, 0); for (const sz of [-1, 1]) box(n, 'Bench_Part_Rib', 0.24, 0.026, 0.02, K.black, 0, 0.012, sz * 0.08); for (const x of [-0.06, 0, 0.06]) box(n, 'Bench_Part_Ni', 0.012, 0.003, 0.1, K.steel, x, 0.0135, 0); }
+  }
+  // EGR cooler on a bench: brazed core (assembly starts from it; flanges and pipes go on in three steps named pre + k), or the whole cooler
+  function coolerLook(n, kind, pre) {
+    const core = new THREE.Group(); core.name = 'Bench_Core'; n.add(core); box(core, 'Bench_Core_Case', 0.18, 0.07, 0.09, K.steel, 0, 0.035, 0); for (const sx of [-1, 1]) box(core, 'Bench_Core_Tank', 0.02, 0.06, 0.07, K.steel, sx * 0.1, 0.035, 0);
+    const step = k => { if (kind !== 'assembly' || !pre) return n; const s = new THREE.Group(); s.name = pre + k; n.add(s); return s; };
+    const f1 = step(1), f2 = step(2), pp = step(3);
+    box(f1, 'Bench_Flange', 0.01, 0.09, 0.15, K.steel, -0.135, 0.045, 0); box(f2, 'Bench_Flange', 0.01, 0.09, 0.15, K.steel, 0.135, 0.045, 0);
+    for (const sx of [-1, 1]) { add(pp, 'Bench_Pipe', cylGeo(0.011, 0.011, 0.06, 10), K.steel, sx * 0.05, 0.1, 0.03); }
   }
 
   // ---------------------------------------------------------------- safety fence (black mesh panels, posts every panel)

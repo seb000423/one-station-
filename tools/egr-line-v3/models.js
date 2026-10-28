@@ -750,7 +750,7 @@ function asrsCell() {
   const carried = G('Carried_Tote', crane.getObjectByName('Crane_Fork2'), 0.82, 0.26, 0); carried.add(tote());
   const ceramic = std('ceramic_substrate', 0xece8de, 0.0, 0.55);
   const loops = ['A', 'B'].map(k => { const x = G('Loop_' + k + '_X', body, 0, TIO, -RZ), z = G('Loop_' + k + '_Z', x); const v = G('Loop_' + k + '_Tote', z); v.add(tote());
-    for (let i = 0; i < 4; i++) box(G('Loop_' + k + '_Sub_' + (i + 1), v), ceramic, 0.2, 0.012, 0.14, 0, 0.026 + i * 0.014, 0); return k; }); // a stack of 4 substrates; the line's picker takes the top one
+    for (let i = 0; i < 4; i++) { const sb = G('Loop_' + k + '_Sub_' + (i + 1), v); box(sb, materials().stainless, 0.18, 0.03, 0.09, 0, 0.031 + i * 0.032, 0); for (let q = 1; q < 6; q++) box(sb, materials().steel, 0.182, 0.001, 0.092, 0, 0.016 + i * 0.032 + q * 0.005, 0); } return k; }); // 4 stacks of stainless plate blanks (one core kit each); the line's picker takes the top one
   // keys
   const car = s => s + 0.03 - 0.26 - 1.0, dn = s => s - 0.03 - 0.26 - 1.0, cx = [], cy = [], fz = [], cv = [[0, true]], sv = slots.map(() => []);
   for (let k = 0; k < 4; k++) {
@@ -1054,8 +1054,202 @@ function packBox() { // 600 × 400 × 300 mm packing carton for 8 coolers (divid
   return finalize(root);
 }
 
+// ---------------------------------------------------------------- 14. EGR cooler core line (real process; along +X, 17.5 × 4.4 m): picker at the AS/RS pick station (x −1.3)
+// → servo press (plate forming, x 1.2) → core stacking by an operator into a clamping jig (x 2.8) → Ni paste dispensing (x 4.6: the
+// automatic cell, or an operator with a handheld dispenser when o.manual) → loader gantry onto the brazing tray (x 7.4) → vacuum brazing
+// furnace (batch of 4 cores, two trays alternating, x 8.6 … 11.6) → unloader (x 12.6) → post-braze vision + NG (x 14.4 / 14.9) → outfeed
+// into the tote on the AMR waiting at x 16.95. One kit every 32 s on the AS/RS clock; one furnace batch every 128 s; clip 256 s
+// (the two trays). Every core is one object from the AS/RS tote to the AMR: blank stack → formed plates → stacked core in its jig →
+// paste on the seams → brazed core (jig off at the unloader). Core 6 of 8 fails the post-braze check.
+const CORE_T = 256, CORE_FIRST = 126; // furnace loads at 126 + 128 n
+function egrCoreLine(o = {}) {
+  const m = materials(), root = G(o.manual ? 'EGR_Core_Line_Manual' : 'EGR_Core_Line_Auto'), BT = 0.855, BW = 0.5;
+  const brazed = std('brazed_stainless', 0xa49580, 0.9, 0.36), clampM = std('jig_clamp', 0x2a2d31, 0.5, 0.45), glow = std('furnace_glow', 0xff7a1a, 0.0, 0.6, { emissive: 0xff5a00, emissiveIntensity: 2.4 });
+  // part looks (origin at the part's bottom centre)
+  const blank = n => { box(n, m.stainless, 0.18, 0.03, 0.09, 0, 0.015, 0); for (let k = 1; k < 6; k++) box(n, m.steel, 0.182, 0.001, 0.092, 0, k * 0.005, 0); };
+  const formed = n => { box(n, m.stainless, 0.18, 0.05, 0.09, 0, 0.025, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, m.steel, 0.004, 0.052, 0.092, x, 0.025, 0); };
+  const core = (n, mt) => { box(n, mt, 0.18, 0.07, 0.09, 0, 0.035, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, mt === brazed ? brazed : m.steel, 0.004, 0.074, 0.094, x, 0.035, 0); for (const sx of [-1, 1]) box(n, mt, 0.02, 0.06, 0.07, sx * 0.1, 0.035, 0); };
+  const clamps = n => { for (const sx of [-1, 1]) { box(n, clampM, 0.02, 0.09, 0.11, sx * 0.06, 0.04, 0); box(n, m.yellow, 0.022, 0.012, 0.112, sx * 0.06, 0.08, 0); } box(n, clampM, 0.24, 0.012, 0.12, 0, 0.004, 0); };
+  const pasteLines = (n, pre) => [-0.0625, 0, 0.0625].forEach((x, i) => box(pre ? G(pre + (i + 1), n) : n, m.paste, 0.006, 0.004, 0.092, x, 0.072, 0));
+  const belt = (x0, x1, z = 0, legs = true) => { const L = x1 - x0, c = (x0 + x1) / 2;
+    for (const sz of [-1, 1]) box(root, m.alu, L, 0.1, 0.035, c, BT - 0.055, z + sz * (BW / 2 + 0.03));
+    box(root, m.belt, L - 0.02, 0.01, BW, c, BT - 0.005, z);
+    if (legs) for (let k = 0, n = Math.max(1, Math.ceil(L / 1.4)); k <= n; k++) { const x = x0 + 0.08 + (L - 0.16) * k / n; for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * (BW / 2 + 0.03)], [x, BT - 0.11, z + sz * (BW / 2 + 0.03)], 0.04); foot(root, x, z + sz * (BW / 2 + 0.03)); } }
+  };
+  const rollers = (x0, x1, z, along = true) => { const L = along ? x1 - x0 : 0; const n = Math.round((along ? L : Math.abs(x1 - x0)) / 0.15);
+    for (let k = 0; k < n; k++) { const u = (k + 0.5) / n; if (along) cyl(root, m.steel, 0.025, 0.56, x0 + L * u, BT - 0.025, z, 'z', 10); else cyl(root, m.steel, 0.025, 0.56, z, BT - 0.025, x0 + (x1 - x0) * u, 'x', 10); }
+  };
+  const worker = (name, x, z, faceY) => { // standing operator, 1.75 m: node name + '_Turn' (ry), + '_Arm_L/R' (rx); returns the right arm
+    const op = G(name, root, x, 0, z); op.rotation.y = faceY; const turn = G(name + '_Turn', op);
+    for (const sx of [-0.1, 0.1]) { box(turn, m.frameDark, 0.13, 0.82, 0.15, sx, 0.41, 0); box(turn, m.black, 0.12, 0.07, 0.26, sx, 0.035, 0.05); }
+    box(turn, m.frameDark, 0.36, 0.56, 0.22, 0, 1.12, 0); box(turn, m.yellow, 0.372, 0.3, 0.232, 0, 1.2, 0);
+    cyl(turn, m.light, 0.095, 0.22, 0, 1.55, 0, 'y', 16); cyl(turn, m.sheet, 0.115, 0.08, 0, 1.67, 0, 'y', 16);
+    const arms = {}; for (const [n, sx] of [['_Arm_L', -0.22], ['_Arm_R', 0.22]]) { const a = G(name + n, turn, sx, 1.36, 0); a.rotation.x = -0.15; box(a, m.frameDark, 0.09, 0.36, 0.09, 0, -0.18, 0); box(a, m.light, 0.075, 0.36, 0.075, 0, -0.54, 0); arms[n] = a; }
+    return arms;
+  };
+  // 1. picker over the AS/RS pick station (x −1.3) and the line start (x 0)
+  for (const sz of [-1, 1]) prof(root, [0.55, 0.06, sz * 0.32], [0.55, 2.15, sz * 0.32], 0.06, m.frameDark);
+  box(root, m.yellow, 0.1, 0.1, 0.74, 0.55, 2.2, 0); box(root, m.yellow, 2.3, 0.12, 0.12, -0.55, 2.2, 0); box(root, m.black, 2.2, 0.03, 0.13, -0.55, 2.27, 0);
+  const px = G('Picker_X', root), py = G('Picker_Y', px); box(px, m.aluDark, 0.22, 0.2, 0.2, 0, 2.2, 0); box(px, m.black, 0.1, 0.1, 0.1, 0, 2.36, 0);
+  box(py, m.alu, 0.05, 0.6, 0.05, 0, 2.05, 0); box(py, m.aluDark, 0.16, 0.02, 0.12, 0, 1.755, 0);
+  blank(G('Picker_Part', py, 0, 1.744 - 0.03, 0));
+  belt(-0.15, 3.3);
+  // 2. servo press (x 1.2): columns either side of the belt, crown, ram with the forming die
+  for (const sz of [-1, 1]) { box(root, m.black, 0.28, 2.3, 0.2, 1.2, 1.15, sz * 0.5); box(root, m.yellow, 0.282, 0.06, 0.202, 1.2, 0.9, sz * 0.5); }
+  box(root, m.orange, 0.5, 0.42, 1.22, 1.2, 2.5, 0); box(root, m.black, 0.32, 0.28, 0.32, 1.2, 2.85, 0); box(root, m.aluDark, 0.42, 0.12, 0.62, 1.2, BT - 0.17, 0);
+  const ram = G('Press_Ram', root); box(ram, m.aluDark, 0.36, 0.5, 0.7, 1.2, 2.0, 0); box(ram, m.steel, 0.22, 0.08, 0.14, 1.2, 1.71, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { box(root, m.yellow, 0.035, 1.3, 0.035, 1.2 + sx * 0.36, BT + 0.65, sz * 0.34); }
+  // 3. core stacking table + operator (x 2.8, south side): plate bins and the clamping jigs at hand
+  box(root, m.esdTop || m.aluDark, 0.9, 0.03, 0.5, 2.5, 0.9, 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [2.5 + sx * 0.42, 0.06, 0.95 + sz * 0.22], [2.5 + sx * 0.42, 0.885, 0.95 + sz * 0.22], 0.04);
+  for (let k = 0; k < 3; k++) { box(root, m.orange, 0.2, 0.1, 0.16, 2.2 + k * 0.25, 0.965, 1.08); box(root, m.stainless, 0.18, 0.03, 0.12, 2.2 + k * 0.25, 1.0, 1.08); }
+  for (let k = 0; k < 3; k++) box(root, clampM, 0.24, 0.02, 0.12, 2.75, 0.925 + k * 0.022, 0.82);
+  const st = worker('Op_Stack', 2.8, 0.72, Math.PI);
+  // 4. Ni paste dispensing (x 4.6, the belt stops there)
+  belt(3.3, 5.9, 0, false); belt(5.9, 6.55);
+  if (!o.manual) {
+    const dc = G('Auto_Dispense', root), C = 4.6;
+    box(dc, m.sheet, 2.0, 0.7, 1.3, C, 0.4, 0); box(dc, m.black, 2.02, 0.05, 1.32, C, 0.03, 0); box(dc, m.yellow, 2.01, 0.05, 0.004, C, 0.68, 0.652);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(dc, [C + sx * 0.98, 0.75, sz * 0.63], [C + sx * 0.98, 2.1, sz * 0.63], 0.045, m.frameDark);
+    for (const sz of [-1, 1]) prof(dc, [C - 0.98, 2.1, sz * 0.63], [C + 0.98, 2.1, sz * 0.63], 0.045, m.frameDark); for (const sx of [-1, 1]) prof(dc, [C + sx * 0.98, 2.1, -0.63], [C + sx * 0.98, 2.1, 0.63], 0.045, m.frameDark);
+    for (const sz of [-1, 1]) box(dc, m.glass, 1.9, 1.3, 0.008, C, 1.43, sz * 0.63); for (const sx of [-1, 1]) { box(dc, m.glass, 0.008, 1.0, 1.2, C + sx * 0.98, 1.6, 0); box(dc, m.black, 0.012, 0.25, 0.62, C + sx * 0.98, 0.98, 0); }
+    box(dc, m.sheet, 1.96, 0.02, 1.26, C, 2.12, 0); for (const sz of [-1, 1]) box(dc, m.aluDark, 1.8, 0.08, 0.08, C, 1.85, sz * 0.5);
+    const dx = G('Disp_X', dc), dz = G('Disp_Z', dx); box(dx, m.aluDark, 0.12, 0.1, 1.08, C, 1.79, 0); box(dz, m.yellow, 0.16, 0.22, 0.12, C, 1.7, 0);
+    const dn = G('Disp_Needle', dz); box(dn, m.aluDark, 0.06, 0.4, 0.06, C, 1.4, 0); cyl(dn, m.syringe, 0.022, 0.16, C + 0.06, 1.42, 0, 'y', 16); cyl(dn, m.paste, 0.016, 0.06, C + 0.06, 1.53, 0, 'y', 12);
+    cyl(dn, m.steel, 0.006, 0.12, C, 1.14, 0, 'y', 8); cyl(dn, m.stainless, 0.0015, 0.03, C, 1.065, 0, 'y', 6);
+    box(dc, m.black, 0.1, 0.12, 0.1, C, 1.98, -0.35); const ring = G('Align_Light', dc); cyl(ring, m.light, 0.06, 0.01, C, 1.85, -0.35, 'y', 24);
+    box(dc, m.syringe, 0.18, 0.3, 0.18, C - 0.8, 2.28, 0.4); box(dc, m.paste, 0.14, 0.1, 0.14, C - 0.8, 2.2, 0.4);
+    cyl(dc, m.black, 0.012, 0.25, C + 0.85, 2.25, 0.5, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(dc, mt, 0.03, 0.06, C + 0.85, 2.4 + k * 0.065, 0.5, 'y', 14);
+    box(dc, m.black, 0.06, 0.32, 0.42, C + 0.95, 1.5, 0.75); box(dc, m.screen, 0.004, 0.26, 0.36, C + 0.98, 1.5, 0.75);
+    box(dc, m.screen, 0.5, 0.3, 0.02, C, 2.45, 0.66); box(dc, m.black, 0.54, 0.34, 0.01, C, 2.45, 0.65); // ONE STATION status display
+  } else { // operator at a stop with a handheld dispenser: controller + paste syringe on a side table, foot switch
+    box(root, m.aluDark, 0.6, 0.03, 0.45, 4.0, 0.9, 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [4.0 + sx * 0.27, 0.06, 0.95 + sz * 0.19], [4.0 + sx * 0.27, 0.885, 0.95 + sz * 0.19], 0.04);
+    box(root, m.sheet, 0.26, 0.12, 0.24, 4.0, 0.975, 0.95); box(root, m.screen, 0.12, 0.05, 0.002, 4.0, 1.0, 1.071); box(root, m.black, 0.22, 0.05, 0.28, 4.6, 0.025, 0.95);
+    const dw = worker('Op_Disp', 4.6, 0.72, Math.PI); const syr = G('Op_Disp_Syringe', dw._Arm_R, 0, -0.74, 0.02); cyl(syr, m.syringe, 0.012, 0.14, 0, 0, 0, 'y', 10); cyl(syr, m.steel, 0.002, 0.04, 0, -0.08, 0, 'y', 6);
+    cyl(root, m.black, 0.006, 1.2, 4.3, 0.5, 0.95, 'x', 6);
+  }
+  box(root, m.yellow, 0.03, 0.06, BW, 6.56, BT + 0.03, 0);                                      // end stop at the loader pick point
+  // 5. loader gantry (x 6.4 → tray slots), brazing trays (two), vacuum brazing furnace (x 8.6 … 11.6), unloader (x 12.6 → 13.6)
+  const gantry = (name, x0, x1) => { for (const sx of [x0 - 0.2, x1 + 0.2]) for (const sz of [-1, 1]) prof(root, [sx, 0.06, sz * 0.42], [sx, 2.15, sz * 0.42], 0.06, m.frameDark);
+    for (const sz of [-1, 1]) box(root, m.yellow, x1 - x0 + 0.5, 0.1, 0.1, (x0 + x1) / 2, 2.2, sz * 0.42); box(root, m.yellow, 0.1, 0.1, 0.94, x0 - 0.2, 2.2, 0); box(root, m.yellow, 0.1, 0.1, 0.94, x1 + 0.2, 2.2, 0);
+    const gx = G(name + '_X', root, x0, 0, 0), gy = G(name + '_Y', gx); box(gx, m.aluDark, 0.2, 0.18, 0.94, 0, 2.2, 0); box(gy, m.alu, 0.05, 0.6, 0.05, 0, 2.0, 0); box(gy, m.aluDark, 0.22, 0.03, 0.14, 0, 1.72, 0);
+    for (const sx of [-1, 1]) box(gy, m.black, 0.012, 0.09, 0.12, sx * 0.105, 1.66, 0); return gy; };
+  const ly = gantry('Loader', 6.4, 8.0), ul = gantry('Unloader', 12.6 - 0.525, 13.6);
+  { const lp = G('Loader_Part', ly, 0, 1.6, 0); core(lp, m.stainless); clamps(lp); pasteLines(lp); const up = G('Unloader_Part', ul, 0, 1.6, 0); core(up, brazed); clamps(up); }
+  rollers(6.65, 8.1, 0); rollers(12.1, 13.15, 0); rollers(7.0, 13.0, 1.25); rollers(0.2, 1.05, 7.375, false); rollers(0.2, 1.05, 12.6, false); // loader / unload tables, return line, cross transfers
+  for (const [x0, x1, z] of [[6.65, 8.1, 0], [12.1, 13.15, 0], [7.0, 13.0, 1.25]]) for (const sz of [-1, 1]) box(root, m.alu, x1 - x0, 0.1, 0.035, (x0 + x1) / 2, BT - 0.06, z + sz * 0.3);
+  for (const [x, z] of [[6.75, 0], [8.0, 0], [12.2, 0], [13.05, 0], [7.1, 1.25], [9.0, 1.25], [11.0, 1.25], [12.9, 1.25]]) for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * 0.3], [x, BT - 0.11, z + sz * 0.3], 0.04); foot(root, x, z + sz * 0.3); }
+  const trays = [0, 1].map(i => { const tx = G('Tray_' + i + '_X', root, 7.375, BT, 0), tz = G('Tray_' + i + '_Z', tx), t = G('Tray_' + i, tz);
+    box(t, m.steel, 1.4, 0.03, 0.5, 0, 0.015, 0); for (const sx of [-0.7, 0.7]) box(t, m.steel, 0.03, 0.06, 0.5, sx, 0.03, 0); for (let s = 0; s < 4; s++) box(t, clampM, 0.26, 0.012, 0.14, -0.525 + 0.35 * s, 0.036, 0); return t; });
+  void trays;
+  const fu = G('Vacuum_Furnace', root), FX = 10.1, FY = 1.15, FR = 0.85;
+  { const shell = std('furnace_shell', 0xd0d4d8, 0.4, 0.45, { side: THREE.DoubleSide }), g = new THREE.CylinderGeometry(FR, FR, 3.0, 48, 1, true); g.rotateZ(Math.PI / 2); bin(fu, shell, xf(g, FX, FY, 0)); }
+  for (const x of [8.75, 9.5, 10.1, 10.7, 11.45]) { const g = new THREE.TorusGeometry(FR + 0.02, 0.035, 8, 48); g.rotateY(Math.PI / 2); bin(fu, m.steel, xf(g, x, FY, 0)); }
+  for (const x of [9.0, 11.2]) { box(fu, m.black, 0.25, 0.32, 1.4, x, 0.16, 0); box(fu, m.black, 0.25, 0.08, 1.6, x, 0.36, 0); }
+  box(fu, m.steel, 1.3, 0.04, 0.4, FX, BT - 0.03, 0); for (const x of [8.9, 11.3]) box(fu, m.steel, 0.25, 0.04, 0.5, x, BT - 0.03, 0); // inner hearth rails
+  for (const sx of [8.5, 11.7]) { box(fu, m.aluDark, 0.2, 0.15, 3.75, sx, 2.15, -1.025); for (const sz of [-2.9, 0.85]) box(fu, m.aluDark, 0.12, 2.1, 0.12, sx, 1.05, sz); } // door rails + posts (doors slide to −Z)
+  const door = (name, x) => { const d = G(name, fu); const g = new THREE.CylinderGeometry(FR + 0.08, FR + 0.08, 0.14, 48); g.rotateZ(Math.PI / 2); bin(d, m.sheet, xf(g, x, FY, 0)); const r = new THREE.TorusGeometry(FR - 0.15, 0.04, 8, 40); r.rotateY(Math.PI / 2); bin(d, m.steel, xf(r, x + (x < FX ? -0.08 : 0.08), FY, 0)); box(d, m.black, 0.2, 0.25, 0.2, x, FY + FR + 0.12, 0); };
+  door('Door_F', 8.52); door('Door_R', 11.68);
+  for (const x of [9.4, 10.1, 10.8]) { const g = new THREE.CylinderGeometry(0.09, 0.09, 0.06, 20); g.rotateX(Math.PI / 2); bin(fu, m.black, xf(g, x, FY + 0.3, FR - 0.02)); const gl = G('Furnace_Glow_' + x.toFixed(1).replace('.', '_'), fu); const h = new THREE.CircleGeometry(0.07, 20); bin(gl, glow, xf(h, x, FY + 0.3, FR + 0.015)); }
+  box(fu, m.sheet, 1.6, 1.1, 0.8, 9.6, 0.55, -1.75); box(fu, m.black, 1.62, 0.06, 0.82, 9.6, 1.12, -1.75); cyl(fu, m.steel, 0.12, 1.1, 9.3, 1.55, -1.3, 'z', 16); cyl(fu, m.steel, 0.2, 0.5, 10.3, 1.4, -1.75, 'y', 20); // vacuum pump skid + manifold
+  box(fu, m.sheet, 0.7, 2.0, 0.5, 12.7, 1.0, -1.6); box(fu, m.screen, 0.4, 0.3, 0.005, 12.7, 1.5, -1.347); for (const [k, mt] of [[0, m.lampR], [1, m.lampA], [2, m.lampG]]) cyl(fu, mt, 0.03, 0.06, 12.95, 2.1 + k * 0.065, -1.6, 'y', 14);
+  // 6. post-braze inspection belt: vision gate (x 14.4), NG pusher + bin (x 14.9), outfeed end (x 16.55) over the AMR tote
+  belt(13.4, 16.6);
+  for (const sz of [-1, 1]) prof(root, [14.4, 0.06, sz * 0.42], [14.4, 1.75, sz * 0.42], 0.05, m.frameDark);
+  box(root, m.frameDark, 0.08, 0.08, 0.92, 14.4, 1.75, 0); box(root, m.black, 0.1, 0.14, 0.1, 14.4, 1.62, 0); cyl(root, m.light, 0.07, 0.012, 14.4, 1.53, 0, 'y', 24);
+  const flash = G('Vision_Flash', root); cyl(flash, m.light, 0.12, 0.004, 14.4, 0.9, 0, 'y', 24);
+  const ngp = G('NG_Pusher', root); box(ngp, m.aluDark, 0.2, 0.08, 0.02, 14.9, BT + 0.045, BW / 2 - 0.02); cyl(ngp, m.steel, 0.01, 0.35, 14.9, BT + 0.045, BW / 2 + 0.16, 'z', 8);
+  cyl(root, m.alu, 0.03, 0.3, 14.9, BT + 0.045, BW / 2 + 0.47, 'z', 16);
+  const ngb = G('NG_Bin', root, 14.9, 0, -0.62); box(ngb, m.red, 0.5, 0.02, 0.4, 0, 0.32, 0); for (const s of [-1, 1]) { box(ngb, m.red, 0.5, 0.3, 0.012, 0, 0.47, s * 0.2); box(ngb, m.red, 0.012, 0.3, 0.4, s * 0.25, 0.47, 0); }
+  for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(ngb, [x, 0, z], [x, 0.31, z], 0.03, m.frameDark);
+  box(ngb, m.ngLabel, 0.3, 0.12, 0.004, 0, 0.52, -0.207);
+
+  // ---- keys
+  const ease = u => u * u * (3 - 2 * u), ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
+  const ser = (evs, rest) => { evs = evs.slice().sort((a, b) => a[0] - b[0]);
+    const f = t => { let k = -1; while (k + 1 < evs.length && evs[k + 1][0] <= t) k++; if (k < 0) return rest; if (k === evs.length - 1) return evs[k][1]; const [t0, v0] = evs[k], [t1, v1] = evs[k + 1]; return v0 + (v1 - v0) * ease(t1 > t0 ? (t - t0) / (t1 - t0) : 1); };
+    return [[0, f(0)], ...evs.filter(e => e[0] > 0 && e[0] < CORE_T), [CORE_T, f(CORE_T)]]; };
+  const vis = (evs, v0) => { evs = evs.slice().sort((a, b) => a[0] - b[0]); let s = v0; for (const [t, v] of evs) if (t <= 0) s = v; return [[0, s], ...evs.filter(e => e[0] > 0 && e[0] < CORE_T)]; };
+  // trays: furnace cycle n starts at F = 126 + 128 n with tray n mod 2; the tray waits at the loader from F − 116, in the furnace F … F + 102,
+  // at the unload table F + 106 … F + 125, back on the return line, at the loader again at F + 140 (= the cycle after next − 116)
+  const trayKeys = F => ({ x: [[F - 116, 7.375], [F, 7.375], [F + 4, FX], [F + 102, FX], [F + 106, 12.6], [F + 125, 12.6], [F + 127, 12.6], [F + 136, 7.375]], z: [[F + 125, 0], [F + 127, 1.25], [F + 136, 1.25], [F + 139, 0]] });
+  for (let n = -3; n < 4; n++) {
+    const F = CORE_FIRST + 128 * n, tk = trayKeys(F), i = ((n % 2) + 2) % 2;
+    add('Tray_' + i + '_X', 'x', tk.x.map(([t, v]) => [t, v - 7.375])); add('Tray_' + i + '_Z', 'z', tk.z);
+    add('Door_F', 'z', [[F - 1.5, 0], [F - 0.3, -1.9], [F + 4.4, -1.9], [F + 6, 0]]); add('Door_R', 'z', [[F + 100, 0], [F + 101.6, -1.9], [F + 106.4, -1.9], [F + 108, 0]]);
+    for (const x of ['9_4', '10_1', '10_8']) add('Furnace_Glow_' + x, 'vis', [[F + 8, true], [F + 96, false]]);
+  }
+  const NG = 5, slotOff = s => -0.525 + 0.35 * s;
+  for (let j = -9; j < 9; j++) {
+    const k = ((j % 8) + 8) % 8, P = 'Core_' + (k + 1), b = 32 * j + 16, ng = k === NG;
+    // picker: top blank stack in the AS/RS tote → belt
+    add('Picker_X', 'x', [[b - 2, 0], [b - 1, -1.3], [b + 0.8, -1.3], [b + 2.8, 0]]);
+    add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.714 - 1.366)], [b, -(1.714 - 1.366)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.714 - BT)], [b + 3.8, -(1.714 - BT)], [b + 4.6, 0]]);
+    add('Picker_Part', 'vis', [[b, true], [b + 3.8, false]]);
+    add('Press_Ram', 'y', [[b + 8.4, 0], [b + 9.2, -0.62], [b + 9.6, -0.62], [b + 10.4, 0]]);
+    add('Op_Stack_Arm_L', 'rx', [[b + 12.6, -0.15], [b + 13.4, -0.9], [b + 14.2, -0.5], [b + 15.0, -0.9], [b + 16.2, -0.5], [b + 17.0, -0.9], [b + 18.5, -0.4], [b + 19.4, -0.9], [b + 21.6, -0.9], [b + 22.4, -0.15]]);
+    add('Op_Stack_Arm_R', 'rx', [[b + 12.6, -0.15], [b + 13.6, -0.6], [b + 14.4, -0.95], [b + 15.6, -0.6], [b + 16.6, -0.95], [b + 18.0, -0.5], [b + 19.0, -0.95], [b + 21.6, -0.95], [b + 22.4, -0.15]]);
+    add('Op_Stack_Turn', 'ry', [[b + 13, 0], [b + 13.8, -0.5], [b + 14.6, 0], [b + 15.6, -0.5], [b + 16.4, 0], [b + 18.6, 0.5], [b + 19.4, 0]]);
+    // the core: belt → press → stacking → dispensing → loader pick point
+    const xs = [[b + 3.8, 0], [b + 4, 0], [b + 8, 1.2], [b + 10.6, 1.2], [b + 13, 2.8], [b + 22.6, 2.8], [b + 28, 4.6], [b + 41, 4.6], [b + 42.4, 6.4]];
+    add(P + '_Blank', 'vis', [[b + 3.8, true], [b + 9.3, false]]); add(P + '_Formed', 'vis', [[b + 3.8, false], [b + 9.3, true], [b + 17, false]]);
+    add(P + '_Core', 'vis', [[b + 3.8, false], [b + 17, true]]); add(P + '_Clamp', 'vis', [[b + 3.8, false], [b + 21, true]]);
+    const D = b + 29; [1, 2, 3].forEach(s => add(P + '_Paste_' + s, 'vis', [[b + 3.8, false], [D + 3.7 * s, true]]));
+    if (!o.manual) {
+      add('Align_Light', 'vis', [[D, true], [D + 0.4, false]]);
+      add('Disp_X', 'x', [[D + 0.5, 0], [D + 1, -0.0625], [D + 4.2, -0.0625], [D + 4.7, 0], [D + 7.9, 0], [D + 8.4, 0.0625], [D + 11.6, 0.0625], [D + 12, 0]]);
+      add('Disp_Z', 'z', [[D + 0.5, 0], [D + 1, -0.046], [D + 1.5, -0.046], [D + 3.7, 0.046], [D + 4.7, 0.046], [D + 7.4, -0.046], [D + 8.4, -0.046], [D + 11.1, 0.046], [D + 12, 0]]);
+      add('Disp_Needle', 'y', [[D + 1, 0], [D + 1.5, -0.12], [D + 11.1, -0.12], [D + 11.6, 0]]);
+    } else {
+      add('Op_Disp_Arm_R', 'rx', [[D, -0.15], [D + 1, -0.95], [D + 3.7, -1.05], [D + 4.5, -0.9], [D + 7.4, -1.05], [D + 8.2, -0.9], [D + 11.1, -1.05], [D + 12, -0.15]]);
+      add('Op_Disp_Arm_L', 'rx', [[D, -0.15], [D + 1, -0.8], [D + 11.1, -0.8], [D + 12, -0.15]]);
+      add('Op_Disp_Turn', 'ry', [[D + 1, 0], [D + 3.7, 0.12], [D + 4.5, -0.05], [D + 7.4, 0.08], [D + 8.2, -0.08], [D + 11.1, 0.05], [D + 12, 0]]);
+    }
+    // loader → tray slot; the furnace batch; unloader → inspection belt
+    const a = b + 44, F = CORE_FIRST + 128 * Math.ceil((a - CORE_FIRST + 1e-6) / 128), slot = 3 - Math.round((F - 2 - a) / 32), tk = trayKeys(F), u = F + 106 + 6 * slot, sx = slotOff(slot);
+    add('Loader_X', 'x', [[a - 2.2, 0], [a - 1.4, 0], [a + 0.2, 7.375 + sx - 6.4], [a + 1.2, 7.375 + sx - 6.4], [a + 2.6, 0]]);
+    add('Loader_Y', 'y', [[a - 2.2, 0], [a - 1.8, -(1.6 - BT)], [a - 1.6, -(1.6 - BT)], [a - 1.3, 0], [a + 0.2, 0], [a + 0.6, -(1.6 - BT - 0.04)], [a + 0.8, -(1.6 - BT - 0.04)], [a + 1.2, 0]]);
+    add('Loader_Part', 'vis', [[a - 1.6, true], [a + 0.8, false]]);
+    add('Unloader_X', 'x', [[u - 2.2, 0], [u - 0.8, sx + 0.525], [u, sx + 0.525], [u + 1.2, 13.6 - 12.075], [u + 2, 13.6 - 12.075], [u + 3.2, 0]]);
+    add('Unloader_Y', 'y', [[u - 0.6, 0], [u - 0.3, -(1.6 - BT - 0.04)], [u, -(1.6 - BT - 0.04)], [u + 0.4, 0], [u + 1.2, 0], [u + 1.6, -(1.6 - BT)], [u + 1.9, -(1.6 - BT)], [u + 2.4, 0]]);
+    add('Unloader_Part', 'vis', [[u, true], [u + 1.9, false]]);
+    for (const [t, v] of tk.x) if (t > a + 0.8 && t < u) xs.push([t, v + sx]); xs.push([a - 1.6, 6.4], [a + 0.8, 7.375 + sx], [u, 12.6 + sx], [u + 1.9, 13.6]);
+    const ys = [[b + 3.8, 0], [a - 1.6, 0], [a + 0.8, 0.04], [u, 0.04], [u + 1.9, 0]], zs = [[b + 3.8, 0]];
+    add(P + '_Paste', 'vis', [[b + 3.8, true], [F + 50, false]]); add(P + '_CoreS', 'vis', [[b + 3.8, true], [F + 50, false]]); add(P + '_Brazed', 'vis', [[b + 3.8, false], [F + 50, true]]);
+    add(P + '_Clamp2', 'vis', [[b + 3.8, true], [u + 1.9, false]]);
+    let end;
+    add('Vision_Flash', 'vis', [[u + 5.4, true], [u + 5.7, false]]);
+    if (ng) { xs.push([u + 7.3, 14.9]); zs.push([u + 7.6, 0], [u + 8.4, -0.55]); ys.push([u + 8.4, 0], [u + 9, -0.47]); add('NG_Pusher', 'z', [[u + 7.5, 0], [u + 8.4, -0.48], [u + 9.2, 0]]); end = u + 9.2; }
+    else { xs.push([u + 12.8, 16.45], [u + 13.4, 16.85]); ys.push([u + 12.8, 0], [u + 13.4, -0.2]); end = u + 13.6; }
+    add(P, 'vis', [[b + 3.8, true], [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
+    add(P + '_X', 'x', xs); add(P + '_Y', 'y', ys); add(P + '_Z', 'z', zs);
+  }
+  for (let k = 0; k < 8; k++) { // core nodes: X > Y > Z > looks
+    const P = 'Core_' + (k + 1), x = G(P + '_X', root, 0, BT, 0), y = G(P + '_Y', x), z = G(P + '_Z', y), n = G(P, z);
+    blank(G(P + '_Blank', n)); formed(G(P + '_Formed', n)); const c = G(P + '_Core', n); core(G(P + '_CoreS', c), m.stainless); core(G(P + '_Brazed', c), brazed);
+    const cl = G(P + '_Clamp', n); clamps(G(P + '_Clamp2', cl)); pasteLines(G(P + '_Paste', n), P + '_Paste_');
+  }
+  const keys = [];
+  for (const [key, evs] of Object.entries(ch)) {
+    const [node, c] = key.split('|');
+    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Vision_Flash|Align_Light|Furnace_Glow)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) ? false : true)]);
+    else keys.push([node, c, ser(evs, /_Arm_/.test(node) ? -0.15 : 0)]);
+  }
+  return cycleClip(finalize(root), 'Core_Cycle', CORE_T, keys, 5);
+}
+
+function brazedCore() { // vacuum-brazed core (semi-finished): stainless core 180 × 70 × 90 with both gas tanks, brazing tint
+  const m = materials(), root = G('Brazed_Core'), mt = std('brazed_stainless', 0xa49580, 0.9, 0.36);
+  box(root, mt, 0.18, 0.07, 0.09, 0, 0.035, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(root, mt, 0.004, 0.074, 0.094, x, 0.035, 0); for (const sx of [-1, 1]) box(root, mt, 0.02, 0.06, 0.07, sx * 0.1, 0.035, 0);
+  void m; return finalize(root);
+}
+function toteGrid(name, item, L, W, H) { // tote holding 8 parts in a grid (2 along X, rows along Z, layers), the way they are packed with dividers
+  const root = G(name); root.add(tote()); const nx = 2, nz = Math.max(1, Math.min(4, Math.floor(0.38 / W))), per = nx * nz;
+  for (let k = 0; k < 8; k++) { const p = item(), l = Math.floor(k / per), r = k % per; p.position.set(((r % nx) - 0.5) * 0.29, 0.02 + l * (H + 0.004), ((Math.floor(r / nx)) - (nz - 1) / 2) * (0.38 / nz)); root.add(p); }
+  return finalize(root);
+}
+
 export const MODELS = {
-  pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
+  brazed_core: brazedCore, tote_brazed: () => toteGrid('Tote_Brazed_Cores', brazedCore, 0.22, 0.09, 0.074), tote_coolers: () => toteGrid('Tote_Coolers', egrCooler, 0.28, 0.15, 0.139), egr_core_line: () => egrCoreLine(), egr_core_line_manual: () => egrCoreLine({ manual: true }), pack_box: packBox, insert_part: insertPart, dispensed_sub: dispensedSub, tote_dispensed: () => toteWith('Tote_Dispensed', dispensedSub, 8, 3, 0.03), tote_moulded: () => toteWith('Tote_Moulded', insertPart, 8, 2, 0.066), asrs_cell: asrsCell, injection_cell: injectionCell, egr_auto_line: egrAutoLine,
   asrs_crane: asrsCraneAnimated, asrs_rail_4m: () => asrsRail(4), dispense_cell: dispenseCellAnimated, vision_gantry: visionGantry, amr_deck_bot: amrDeckBot, press_line_2level: pressLine,
   ng_chute: ngChute, amr_roller_deck: amrRollerDeck, conveyor_stopper: stopperAnimated,
   fence_panel_1m: () => fencePanel(1.0), fence_panel_2m: () => fencePanel(2.0), tote_600x400: tote, egr_cooler: egrCooler,

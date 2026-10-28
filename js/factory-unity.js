@@ -70,6 +70,11 @@
     // flowAxis 'x' = conveys along local X (js/factory-unity-groups.js flow); clip = a baked animation played from the sim clock
     e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, cat: 'EGR 라인', size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle', clipLen: 26.8 },
     e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
+    e3_egr_core_line: { label: 'EGR 코어 라인 B (프레스 → 코어 적층 → ONE STATION 자동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.99, 4.55], parts: [['e3_egr_core_line', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 256 },
+    e3_egr_core_line_manual: { label: 'EGR 코어 라인 A (프레스 → 코어 적층 → 작업자 수동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.99, 4.55], parts: [['e3_egr_core_line_manual', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 256 },
+    e3_brazed_core: { label: '브레이징 코어 (반제품)', group: E3, cat: '부품 · 소품', size: [0.22, 0.07, 0.09], parts: [['e3_brazed_core', 0, 0, 0]] },
+    e3_tote_brazed: { label: '부품 상자 (브레이징 코어 8)', group: E3, cat: '물류', size: [0.61, 0.27, 0.42], parts: [['e3_tote_brazed', 0, 0, 0]] },
+    e3_tote_coolers: { label: '부품 상자 (EGR 쿨러 8)', group: E3, cat: '물류', size: [0.61, 0.29, 0.42], parts: [['e3_tote_coolers', 0, 0, 0]] },
     e3_egr_auto_line: { label: 'EGR 자동 라인 (자동 도포 → 건조·소성 → 검사 → 인서트 사출)', group: E3, cat: 'EGR 라인', size: [16.25, 3.25, 4.49], parts: [['e3_egr_auto_line', 0, 0, 0]], clip: 'Line_Cycle', clipLen: 128 },
     e3_dispensed_sub: { label: 'Ni 페이스트 도포 기판', group: E3, cat: '부품 · 소품', size: [0.2, 0.02, 0.14], parts: [['e3_dispensed_sub', 0, 0, 0]] },
     e3_tote_dispensed: { label: '부품 상자 (도포 기판 8)', group: E3, cat: '물류', size: [0.61, 0.27, 0.42], parts: [['e3_tote_dispensed', 0, 0, 0]] },
@@ -139,12 +144,13 @@
   // Joints (quaternion tracks about their extras.anim axis) → RotationX/Y/Z; position tracks → LinearX/Y/Z per changing axis;
   // scale tracks (parts shown / hidden) → a wrapper under the node that drops 50 m down while the part is hidden.
   const REV = { LinearX: true, LinearY: false, LinearZ: false, RotationX: false, RotationY: true, RotationZ: true }; // as js/station-export.js: positive along +X/+Y/+Z
+  const quatAxis = v => { const r = [0, 1, 2].map(k => { let lo = Infinity, hi = -Infinity; for (let i = k; i < v.length; i += 4) { lo = Math.min(lo, v[i]); hi = Math.max(hi, v[i]); } return hi - lo; }); return 'xyz'[r.indexOf(Math.max(...r))]; };
   function clipDrives(g, frames, spf, warp) { // warp: sim time → clip time (a cell gated by its zones, js/factory-builder.js)
     const u = g.children.find(c => c.name === 'UF_Model'), mixer = u && u.userData.clipMixer, clip = u && u.userData.clip; if (!mixer || !clip) return [];
     const W = window.FactoryAssets, out = [], probes = [];
     for (const tr of clip.tracks) {
       const [name, prop] = tr.name.split('.'), node = u.getObjectByName(name); if (!node) continue;
-      if (prop === 'quaternion') { const ax = (node.userData.anim && node.userData.anim.axis) || 'z'; probes.push({ node, dir: 'Rotation' + ax.toUpperCase(), get: () => { const q = node.quaternion; return 2 * Math.atan2(q[ax], q.w) * 180 / Math.PI; }, deg: true }); }
+      if (prop === 'quaternion') { const ax = (node.userData.anim && node.userData.anim.axis) || quatAxis(tr.values); /* no anim metadata (operators' arms, turns): the axis that moves */ probes.push({ node, dir: 'Rotation' + ax.toUpperCase(), get: () => { const q = node.quaternion; return 2 * Math.atan2(q[ax], q.w) * 180 / Math.PI; }, deg: true }); }
       else if (prop === 'position') for (const ax of ['x', 'y', 'z']) probes.push({ node, dir: 'Linear' + ax.toUpperCase(), get: () => node.position[ax] * 1000 });
       else if (prop === 'scale') { const vis = W.jointWrap(node, name + '_Vis'); probes.push({ node: vis, dir: 'LinearY', get: () => (node.scale.x < 0.01 ? -50000 : 0), scaleOf: node }); }
     }

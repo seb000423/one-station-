@@ -641,13 +641,13 @@
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
-    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
+    if (/^e3_(dispense_cell|fr5_stacking_cell|fr5_tending_cell|egr_auto_line|egr_core_line|egr_core_line_manual)$/.test(k) || k === 'cell07' || k === 'line07') return ['equip', 'cell'];
     if (/^e3_fr\d+$/.test(k) || k === 'arm') return ['equip', 'arm'];
     if (/^e3_(asrs_|rack_bay|bay_sign)/.test(k)) return ['equip', 'asrs'];
     if (k === 'e3_vision_gantry') return ['equip', 'vision'];
     if (k === 'line06' || k === 'e3_injection_cell') return ['equip', 'press'];
     if (/^ctrl\d$/.test(k) || k === 'line08' || k === 'line09') return ['equip', 'cabinet'];
-    if (/^(e3_egr_cooler|e3_insert_part|e3_dispensed_sub|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
+    if (/^(e3_egr_cooler|e3_insert_part|e3_dispensed_sub|e3_brazed_core|product|uf_tablet|uw_tablet)$/.test(k)) return ['equip', 'part'];
     if (/^(uw_shelf|uw_pallet|uw_sunoko|uw_pedestal|uw_plasticbox_|uw_cardboard_|e3_tote)/.test(k)) return ['equip', 'rack'];
     if (/^e3_hall_wall/.test(k)) return ['building', 'wall']; if (k === 'e3_hall_column') return ['building', 'column']; if (k === 'e3_hall_door_6m') return ['building', 'door'];
     if (/^e3_hall_(roof|gable)/.test(k)) return ['building', 'roof']; if (/^e3_fence/.test(k)) return ['building', 'fence'];
@@ -1513,7 +1513,7 @@
     for (const o of doc.objects) if (o.type === 'zone') {
       const g = views.get(o.id); if (!g) continue; const z = Z[o.id], old = g.getObjectByName('Zone_Stock');
       if (old) g.remove(old); // stock is shown on the zone's screen-space card (labelTick)
-      const zp = o.params || {}, n = z && !(zp.thresholdKg > 0 && zp.unitKg > 0) ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it (a weighing zone's parts go into the tote on its AMR instead)
+      const zp = o.params || {}, n = !z ? 0 : zp.unit === 'pallet' && zp.perBox > 0 ? Math.ceil(z.stock(t) / zp.perBox) : !(zp.thresholdKg > 0 && zp.unitKg > 0) ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it (a weighing zone's parts go into the tote on its AMR instead)
     }
     const box = $('#fbLogi'); if (!box) return;
     const amrs = doc.objects.filter(o => o.type === 'amr'), zs = doc.objects.filter(o => Z[o.id]);

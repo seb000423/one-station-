@@ -332,10 +332,12 @@
     if (fill.userData.ok) return true;
     const tm = A.get('e3_tote_600x400'), probe = A.get(idOf(item)); if (!tm || !probe) { A.load('e3_tote_600x400').catch(() => {}); A.load(idOf(item)).catch(() => {}); return false; }
     fill.add(A.placed(tm, 'Fill_Tote'));
-    const b = new THREE.Box3().setFromObject(probe), w = Math.min(b.max.x - b.min.x, b.max.z - b.min.z), h = b.max.y - b.min.y, cols = Math.max(1, Math.floor(0.56 / (w + 0.01))), pitch = 0.56 / cols;
-    fill.children.forEach(c => { const m = /^Fill_Part_(\d+)$/.exec(c.name); if (!m) return; const k = +m[1] - 1;
-      c.position.set((k % cols - (cols - 1) / 2) * pitch, 0.025 + Math.floor(k / cols) * (h + 0.006), 0); c.userData.y = c.position.y;
-      const md = A.placed(A.get(idOf(item)), 'Fill_Part_Model'); if (b.max.x - b.min.x > b.max.z - b.min.z) md.rotation.y = Math.PI / 2; c.add(md); });
+    // grid in the 560 × 380 mm inside of the tote: long side along X, rows along Z, then layers (8 coolers = 2 × 2 × 2)
+    const b = new THREE.Box3().setFromObject(probe), bx = b.max.x - b.min.x, bz = b.max.z - b.min.z, turn = bz > bx, L = Math.max(bx, bz), W = Math.min(bx, bz), h = b.max.y - b.min.y;
+    const nx = Math.max(1, Math.floor(0.56 / (L + 0.005))), nz = Math.max(1, Math.floor(0.38 / (W + 0.005))), per = nx * nz;
+    fill.children.forEach(c => { const m = /^Fill_Part_(\d+)$/.exec(c.name); if (!m) return; const k = +m[1] - 1, r = k % per;
+      c.position.set((r % nx - (nx - 1) / 2) * (0.56 / nx), 0.025 + Math.floor(k / per) * (h + 0.004), (Math.floor(r / nx) - (nz - 1) / 2) * (0.38 / nz)); c.userData.y = c.position.y;
+      const md = A.placed(A.get(idOf(item)), 'Fill_Part_Model'); if (turn) md.rotation.y = Math.PI / 2; c.add(md); });
     return (fill.userData.ok = true);
   }
   function fillAt(p, pl, t) {
@@ -423,6 +425,11 @@
   let STAND_MAT = null;
   TY.zone.build = (g, p, f) => {
     zoneBuild(g, p, f);
+    if (p.track && p.unit === 'pallet' && p.perBox > 0) { // a pallet being built: the pallet stands there, a carton per perBox parts (Zone_Pallet_k = carton k)
+      const pal = A.get('uw_pallet'), bm = A.get(idOf(p.load || 'e3_pack_box')); if (!pal || !bm) { A.load('uw_pallet').catch(() => {}); A.load(idOf(p.load || 'e3_pack_box')).catch(() => {}); return; }
+      g.add(A.placed(pal, 'Zone_Base_Pallet')); const tmp = new THREE.Group(); palletStack(tmp, p.load || 'e3_pack_box', p.layers || 3);
+      tmp.children.slice().forEach((c, k) => { const h = new THREE.Group(); h.name = 'Zone_Pallet_' + k; h.visible = false; h.add(c); g.add(h); }); return;
+    }
     if (!p.track || (p.thresholdKg > 0 && p.unitKg > 0)) return; // a weighing zone's parts go into the tote on its AMR (fillAt)
     if (unitOf(p) === 'tote' && !(p.standH > 0)) p = Object.assign({}, p, { standH: 0.62 });
     if (p.standH > 0) { // a roller stand at deck height: the stock stands on it side by side (no pallets); the AMR rolls totes on / off
@@ -446,7 +453,7 @@
   TY.zone.drives = (g, p, frames, spf, z) => {
     if (!z || !z.stock) return [];
     return g.children.filter(h => /^Zone_Pallet_\d+$/.test(h.name)).map(h => {
-      const k = +h.name.split('_')[2], y = t => (z.stock(t) > k ? 0 : HIDE), y0 = y(0), s = new Array(frames);
+      const k = +h.name.split('_')[2], per = p.unit === 'pallet' && p.perBox > 0 ? p.perBox : 1, y = t => (Math.ceil(z.stock(t) / per) > k ? 0 : HIDE), y0 = y(0), s = new Array(frames);
       h.visible = true; h.position.y = y0; for (let f = 0; f < frames; f++) s[f] = Math.round((y(f * spf) - y0) * 1000);
       return { node: h, dir: 'LinearY', rev: false, series: s };
     });
