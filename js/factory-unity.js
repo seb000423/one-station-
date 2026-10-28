@@ -17,7 +17,7 @@
 
   // id → { label, size: [x, y, z] m, parts: [[asset id, x, y, z]] }  (parts share the GLB origin; the Unity
   // prefab offsets are mirrored in X because the GLBs come out of Blender's FBX import, not Unity's)
-  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인', E3 = 'EGR 라인'; // sources; the palette and object list group by cat // group names shown in the 모델 tab
+  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인', E3 = 'EGR 라인', EW = 'EGR 용접 모듈 라인'; // sources; the palette and object list group by cat // group names shown in the 모델 tab
   const CATALOG = {
     line01: { label: '캐비닛 벨트 유닛', group: UF, cat: '공장 설비', size: [0.93, 1.26, 0.90], parts: [['uf_line01', 0, 0, 0]] },
     line02: { label: '소형 벨트 유닛', group: UF, cat: '공장 설비', size: [0.69, 0.89, 0.69], parts: [['uf_line02', 0, 0, 0]] },
@@ -126,11 +126,18 @@
     e3_hall_column: { label: '공장 기둥 8 m', group: E3, cat: '건물', size: [0.5, 8.03, 0.9], parts: [['e3_hall_column', 0, 0, 0]] },
     e3_hall_roof_6m: { label: '지붕 트러스 6 m (채광창 · 조명)', group: E3, cat: '건물', size: [6.01, 2.78, 24.3], parts: [['e3_hall_roof_6m', 0, 0, 0]], keepY: true },
     e3_floor_6m: { label: '바닥 6 m', group: E3, cat: '건물', size: [6.0, 0.01, 6.0], parts: [['e3_floor_6m', 0, 0, 0]] },
-    e3_floor_6m_aisle: { label: '바닥 6 m (통로선)', group: E3, cat: '건물', size: [6.0, 0.01, 6.0], parts: [['e3_floor_6m_aisle', 0, 0, 0]] }
+    e3_floor_6m_aisle: { label: '바닥 6 m (통로선)', group: E3, cat: '건물', size: [6.0, 0.01, 6.0], parts: [['e3_floor_6m_aisle', 0, 0, 0]] },
+    // EGR cooler automatic welding module line (assets/models/egr-weld-module/, keys ew_*): the five cells of the real line's CAD, one GLB
+    // each at CAD size. The GLBs keep the CAD axes (Z up → Y up): the line runs along local −Z, the leak test cell along local +X.
+    ew_cell_paste: { label: '코어 Assy 투입 · 페이스트 도포 셀 (2레인 · 핸들링 로봇 · 비전 · 중량 검사)', group: EW, cat: 'EGR 라인', size: [4.89, 1.96, 1.92], parts: [['ew_cell_paste', 0, 0, 0]] },
+    ew_cell_tank: { label: '엔드 탱크 조립 셀 (셔틀 · 탱크 프레스 ×2 · 비전 · 스캔 레이저 용접)', group: EW, cat: 'EGR 라인', size: [4.59, 2.14, 4.67], parts: [['ew_cell_tank', 0, 0, 0]] },
+    ew_cell_weld: { label: '쿨러 택 용접 셀 (지그 트랜스퍼 · 플랜지 공급 · MIG 로봇 4대 · 수동 MIG)', group: EW, cat: 'EGR 라인', size: [5.08, 2.18, 6.31], parts: [['ew_cell_weld', 0, 0, 0]] },
+    ew_cell_cf: { label: 'C/F 검사 · 외부 도포 · 수동 검사 · 배출 셀', group: EW, cat: 'EGR 라인', size: [4.20, 1.93, 6.69], parts: [['ew_cell_cf', 0, 0, 0]] },
+    ew_cell_leak: { label: '리크 테스트 셀 (바코드 · 턴테이블 · 외관 검사 · 로봇 리크 지그 · 레이저 마킹 · 가스켓 조립 · OK/NG)', group: EW, cat: 'EGR 라인', size: [6.90, 1.72, 2.21], parts: [['ew_cell_leak', 0, 0, 0]] }
   };
   // palette tiles: one per catalog entry (모델 tab), images rendered by tools/render-thumbs.cjs. Only the Asset Store
   // and EGR line v3 groups are offered; the EGR workstations stay in the catalog so saved layouts that use them still open.
-  const GROUPS = [E3, UF, UW]; // sources offered in the palette
+  const GROUPS = [E3, EW, UF, UW]; // sources offered in the palette
   const CATS = ['EGR 라인', '로봇', '물류', '건물', '공장 설비', '부품 · 소품', '사람']; // palette sections / object-list groups, in order
   const ALIAS = { e3_rack_bay_10m: 'e3_rack_bay' }; // renamed keys in saved layouts
   const thumb = k => 'assets/models/thumbs/' + k + '.webp';
