@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Page driven by tools/egr-line-v3/build.mjs: builds one model from models.js, exports it as GLB and renders a preview. -->
+<html><head><meta charset="utf-8">
+<script type="importmap">{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }</script>
+</head><body style="margin:0;background:#0b1322">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MODELS } from './models.js';
+
+const W = 1280, H = 800;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+const env = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+
+const b64 = buf => { let s = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+
+window.buildOne = async (name) => {
+  const model = MODELS[name]();
+  let tris = 0, meshes = 0; const nodes = [];
+  model.traverse(o => {
+    if (o.isMesh) { meshes++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; }
+    else if (o.userData.anim) nodes.push(o.name + ' ' + o.userData.anim.type + ' ' + o.userData.anim.axis);
+  });
+  const glb = await new GLTFExporter().parseAsync(model, { binary: true });
+
+  // preview: dark navy backdrop, warm sun-like key light from the upper left, shadow catcher on the floor
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1322); scene.environment = env; scene.environmentIntensity = 0.55;
+  scene.add(model);
+  const bb = new THREE.Box3().setFromObject(model), size = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
+  const r = Math.max(size.x, size.y, size.z);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(r * 1.6, 64), new THREE.MeshStandardMaterial({ color: 0x1a2436, roughness: 0.9 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 3.2); sun.position.set(c.x - r * 1.2, c.y + r * 2.0, c.z + r * 1.0); sun.target.position.copy(c);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); const sc = sun.shadow.camera; sc.left = sc.bottom = -r * 1.3; sc.right = sc.top = r * 1.3; sc.near = 0.01; sc.far = r * 6;
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.01;
+  scene.add(sun, sun.target, new THREE.HemisphereLight(0x9fb6d6, 0x1a2436, 0.6));
+  const cam = new THREE.PerspectiveCamera(35, W / H, r * 0.01, r * 20);
+  const sph = bb.getBoundingSphere(new THREE.Sphere()), dist = sph.radius / Math.sin(THREE.MathUtils.degToRad(35 / 2)) * 1.02;
+  cam.position.copy(c).add(new THREE.Vector3(1.0, 0.62, 1.25).normalize().multiplyScalar(dist)); cam.lookAt(c);
+  renderer.render(scene, cam);
+  const png = renderer.domElement.toDataURL('image/png').split(',')[1];
+  return { glb: b64(glb), png, tris, meshes, nodes, size: size.toArray().map(v => +v.toFixed(3)) };
+};
+window.ready = Object.keys(MODELS);
+</script></body></html>
