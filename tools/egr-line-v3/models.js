@@ -1087,15 +1087,16 @@ function packBox() { // 600 × 400 × 300 mm packing carton for 8 coolers (divid
 const CORE_T = 256, CORE_FIRST = 126; // furnace loads at 126 + 128 n
 function egrCoreLine(o = {}) {
   // P: seconds between kits (32 on the AS/RS clock; 64 = every other tote visit); DT: dispensing time at the stop (auto 12 s, manual 40 s)
-  const P = o.pitch || 32, DT = o.manual ? 40 : 12, TT = 8 * P, A0 = 60 + (DT - 12), F0 = A0 + 2 + 2 * P;
-  const m = materials(), root = G(o.manual ? 'EGR_Core_Line_Manual' : 'EGR_Core_Line_Auto'), BT = 0.855, BW = 0.5;
+  const P = o.pitch || 32, DT = o.manual ? 40 : 22, TT = 8 * P, A0 = 60 + (DT - 12), F0 = A0 + 2 + 2 * P;
+  const m = materials(), root = G(o.manual ? 'EGR_Core_Line_Manual' : 'EGR_Core_Line_Auto'), BT = 0.855, BW = 0.5; let robotRef = null;
   const brazed = std('brazed_stainless', 0xa49580, 0.9, 0.36), clampM = std('jig_clamp', 0x2a2d31, 0.5, 0.45), glow = std('furnace_glow', 0xff7a1a, 0.0, 0.6, { emissive: 0xff5a00, emissiveIntensity: 2.4 });
   // part looks (origin at the part's bottom centre)
   const blank = n => { box(n, m.stainless, 0.18, 0.03, 0.09, 0, 0.015, 0); for (let k = 1; k < 6; k++) box(n, m.steel, 0.182, 0.001, 0.092, 0, k * 0.005, 0); };
   const formed = n => { box(n, m.stainless, 0.18, 0.05, 0.09, 0, 0.025, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, m.steel, 0.004, 0.052, 0.092, x, 0.025, 0); };
   const core = (n, mt) => { box(n, mt, 0.18, 0.07, 0.09, 0, 0.035, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, mt === brazed ? brazed : m.steel, 0.004, 0.074, 0.094, x, 0.035, 0); for (const sx of [-1, 1]) box(n, mt, 0.02, 0.06, 0.07, sx * 0.1, 0.035, 0); };
   const clamps = n => { for (const sx of [-1, 1]) { box(n, clampM, 0.02, 0.09, 0.11, sx * 0.06, 0.04, 0); box(n, m.yellow, 0.022, 0.012, 0.112, sx * 0.06, 0.08, 0); } box(n, clampM, 0.24, 0.012, 0.12, 0, 0.004, 0); };
-  const pasteLines = (n, pre) => [-0.0625, 0, 0.0625].forEach((x, i) => box(pre ? G(pre + (i + 1), n) : n, m.paste, 0.006, 0.004, 0.092, x, 0.072, 0));
+  const LINES6 = [-0.08, -0.065, -0.05, 0.05, 0.065, 0.08]; // paste lines: 2 rows (tube-end joints at both headers) × 3, across the core (Z)
+  const pasteLines = (n, pre) => LINES6.forEach((x, i) => box(pre ? G(pre + (i + 1), n) : n, m.paste, 0.005, 0.004, 0.08, x, 0.072, 0));
   const belt = (x0, x1, z = 0, legs = true) => { const L = x1 - x0, c = (x0 + x1) / 2;
     for (const sz of [-1, 1]) box(root, m.alu, L, 0.1, 0.035, c, BT - 0.055, z + sz * (BW / 2 + 0.03));
     box(root, m.belt, L - 0.02, 0.01, BW, c, BT - 0.005, z);
@@ -1119,11 +1120,11 @@ function egrCoreLine(o = {}) {
   box(py, m.alu, 0.05, 0.6, 0.05, 0, 2.05, 0); box(py, m.aluDark, 0.16, 0.02, 0.12, 0, 1.755, 0);
   blank(G('Picker_Part', py, 0, 1.744 - 0.03, 0));
   belt(-0.15, 3.3);
-  // 2. servo press (x 1.2): columns either side of the belt, crown, ram with the forming die
-  for (const sz of [-1, 1]) { box(root, m.black, 0.28, 2.3, 0.2, 1.2, 1.15, sz * 0.5); box(root, m.yellow, 0.282, 0.06, 0.202, 1.2, 0.9, sz * 0.5); }
-  box(root, m.orange, 0.5, 0.42, 1.22, 1.2, 2.5, 0); box(root, m.black, 0.32, 0.28, 0.32, 1.2, 2.85, 0); box(root, m.aluDark, 0.42, 0.12, 0.62, 1.2, BT - 0.17, 0);
-  const ram = G('Press_Ram', root); box(ram, m.aluDark, 0.36, 0.5, 0.7, 1.2, 2.0, 0); box(ram, m.steel, 0.22, 0.08, 0.14, 1.2, 1.71, 0);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { box(root, m.yellow, 0.035, 1.3, 0.035, 1.2 + sx * 0.36, BT + 0.65, sz * 0.34); }
+  // 2. process inspection (x 1.2): the operator checks the incoming plate kit at the stop under a lamp, a gauge and the reject bin at hand
+  for (const sz of [-1, 1]) prof(root, [1.2 + 0.0, BT + 0.05, sz * 0.32], [1.2, BT + 0.75, sz * 0.32], 0.035); box(root, m.aluDark, 0.08, 0.04, 0.7, 1.2, BT + 0.77, 0); box(root, m.light, 0.06, 0.012, 0.5, 1.2, BT + 0.745, 0); // inspection lamp
+  box(root, m.aluDark, 0.5, 0.03, 0.4, 0.55, 0.9, 1.0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [0.55 + sx * 0.22, 0.06, 1.0 + sz * 0.17], [0.55 + sx * 0.22, 0.885, 1.0 + sz * 0.17], 0.04);
+  box(root, m.steel, 0.16, 0.03, 0.08, 0.5, 0.93, 1.0); box(root, m.red, 0.3, 0.2, 0.2, 0.55, 0.1, 1.0); // gauge, reject bin
+  worker('Op_Insp', 1.2, 0.75, Math.PI);
   // 3. core stacking table + operator (x 2.8, south side): plate bins and the clamping jigs at hand
   // table beside the operator (x 1.95): plate bins and the clamping jigs at hand; the operator stands at the belt (x 2.85, z 0.75)
   box(root, m.aluDark, 0.9, 0.03, 0.5, 1.95, 0.9, 1.0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [1.95 + sx * 0.42, 0.06, 1.0 + sz * 0.22], [1.95 + sx * 0.42, 0.885, 1.0 + sz * 0.22], 0.04);
@@ -1132,24 +1133,46 @@ function egrCoreLine(o = {}) {
   const st = worker('Op_Stack', 2.85, 0.75, Math.PI);
   prof(root, [1.55, 0.92, 1.2], [1.55, 1.62, 1.2], 0.04); const wi = G('Stack_Monitor', root, 1.75, 1.62, 1.2); wi.rotation.y = -0.6; box(wi, m.black, 0.42, 0.28, 0.04, 0, 0, 0); box(wi, m.screen, 0.37, 0.23, 0.004, 0, 0, 0.022); // work instructions, turned to the operator
   // 4. Ni paste dispensing (x 4.6, the belt stops there)
-  belt(3.3, 5.9, 0, false); belt(5.9, 6.55);
+  if (!o.manual) { belt(3.3, 4.1); belt(5.1, 6.55); } else { belt(3.3, 5.9, 0, false); belt(5.9, 6.55); }
   if (!o.manual) {
-    const dc = G('Auto_Dispense', root), C = 4.6;
-    box(dc, m.sheet, 2.0, 0.7, 1.3, C, 0.4, 0); box(dc, m.black, 2.02, 0.05, 1.32, C, 0.03, 0); box(dc, m.yellow, 2.01, 0.05, 0.004, C, 0.68, 0.652);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(dc, [C + sx * 0.98, 0.75, sz * 0.63], [C + sx * 0.98, 2.1, sz * 0.63], 0.045, m.frameDark);
-    for (const sz of [-1, 1]) prof(dc, [C - 0.98, 2.1, sz * 0.63], [C + 0.98, 2.1, sz * 0.63], 0.045, m.frameDark); for (const sx of [-1, 1]) prof(dc, [C + sx * 0.98, 2.1, -0.63], [C + sx * 0.98, 2.1, 0.63], 0.045, m.frameDark);
-    for (const sz of [-1, 1]) box(dc, m.glass, 1.9, 1.3, 0.008, C, 1.43, sz * 0.63); for (const sx of [-1, 1]) { box(dc, m.glass, 0.008, 1.0, 1.2, C + sx * 0.98, 1.6, 0); box(dc, m.black, 0.012, 0.25, 0.62, C + sx * 0.98, 0.98, 0); }
-    box(dc, m.sheet, 1.96, 0.02, 1.26, C, 2.12, 0); for (const sz of [-1, 1]) box(dc, m.aluDark, 1.8, 0.08, 0.08, C, 1.85, sz * 0.5);
-    const dx = G('Disp_X', dc), dz = G('Disp_Z', dx); box(dx, m.aluDark, 0.12, 0.1, 1.08, C, 1.79, 0); box(dz, m.yellow, 0.16, 0.22, 0.12, C, 1.7, 0);
-    const dn = G('Disp_Needle', dz); box(dn, m.aluDark, 0.06, 0.4, 0.06, C, 1.4, 0); cyl(dn, m.syringe, 0.022, 0.16, C + 0.06, 1.42, 0, 'y', 16); cyl(dn, m.paste, 0.016, 0.06, C + 0.06, 1.53, 0, 'y', 12);
-    cyl(dn, m.steel, 0.006, 0.12, C, 1.14, 0, 'y', 8); cyl(dn, m.stainless, 0.0015, 0.03, C, 1.065, 0, 'y', 6);
-    box(dc, m.black, 0.1, 0.12, 0.1, C, 1.98, -0.35); const ring = G('Align_Light', dc); cyl(ring, m.light, 0.06, 0.01, C, 1.85, -0.35, 'y', 24);
-    box(dc, m.syringe, 0.18, 0.3, 0.18, C - 0.8, 2.28, 0.4); box(dc, m.paste, 0.14, 0.1, 0.14, C - 0.8, 2.2, 0.4);
-    cyl(dc, m.black, 0.012, 0.25, C + 0.85, 2.25, 0.5, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(dc, mt, 0.03, 0.06, C + 0.85, 2.4 + k * 0.065, 0.5, 'y', 14);
-    // HMI on a swing arm from the front-right post, facing the operator side (+Z), 1.55 m
-    box(dc, m.aluDark, 0.05, 0.05, 0.3, C + 0.98, 1.55, 0.78); box(dc, m.aluDark, 0.3, 0.05, 0.05, C + 0.84, 1.55, 0.93); box(dc, m.black, 0.42, 0.32, 0.05, C + 0.62, 1.55, 0.96); box(dc, m.screen, 0.36, 0.26, 0.004, C + 0.62, 1.55, 0.987);
-    // ONE STATION status display on a bracket on top of the enclosure, tilted towards the aisle
-    for (const sx of [-1, 1]) box(dc, m.aluDark, 0.04, 0.24, 0.04, C + sx * 0.2, 2.25, 0.5); const sd = G('Status_Display', dc, C, 2.42, 0.55); sd.rotation.x = -0.25; box(sd, m.black, 0.56, 0.34, 0.04, 0, 0, 0); box(sd, m.screen, 0.5, 0.28, 0.004, 0, 0, 0.022);
+    // ONE STATION automatic dispensing cell (x 3.9 … 5.4): a 6-axis robot on a pedestal clamps the core off the entry block, carries it under
+    // the fixed single-nozzle dispenser (progressive cavity pump) and traces the six lines, holds it under the vision camera, then sets it
+    // on the exit block (OK) or in the NG storage box. Paste drum with agitator on a scale, low-level alarm lamp, rework inlet, HMI.
+    const dc = G('Auto_Dispense', root), RB = [4.6, 0.95, -0.2], NOZ = [4.6, 1.125, 0.32], CAM = [5.0, 1.62, 0.25], NGB = [4.1, 0.62, 0.55];
+    box(dc, m.black, 0.36, RB[1] - 0.02, 0.36, RB[0], (RB[1] - 0.02) / 2 + 0.02, RB[2]); box(dc, m.yellow, 0.37, 0.04, 0.37, RB[0], RB[1] - 0.04, RB[2]); box(dc, m.aluDark, 0.42, 0.02, 0.42, RB[0], 0.01, RB[2]);
+    // fixed dispenser: column, arm, valve body, syringe-style barrel, nozzle pointing down
+    prof(dc, [NOZ[0] + 0.45, 0.06, NOZ[2]], [NOZ[0] + 0.45, NOZ[1] + 0.45, NOZ[2]], 0.06, m.frameDark); box(dc, m.aluDark, 0.5, 0.08, 0.08, NOZ[0] + 0.22, NOZ[1] + 0.42, NOZ[2]);
+    box(dc, m.yellow, 0.12, 0.2, 0.12, NOZ[0], NOZ[1] + 0.32, NOZ[2]); cyl(dc, m.black, 0.035, 0.12, NOZ[0], NOZ[1] + 0.16, NOZ[2], 'y', 16); cyl(dc, m.steel, 0.005, 0.08, NOZ[0], NOZ[1] + 0.06, NOZ[2], 'y', 8); cyl(dc, m.stainless, 0.0015, 0.02, NOZ[0], NOZ[1] + 0.012, NOZ[2], 'y', 6);
+    cyl(dc, m.black, 0.012, 0.9, NOZ[0] + 0.45, NOZ[1] + 0.2, NOZ[2] + 0.35, 'z', 8); // paste hose from the pump
+    // vision camera with ring light on a bracket
+    prof(dc, [CAM[0] + 0.4, 0.06, CAM[2]], [CAM[0] + 0.4, CAM[1] + 0.12, CAM[2]], 0.045, m.frameDark); box(dc, m.aluDark, 0.44, 0.05, 0.05, CAM[0] + 0.2, CAM[1] + 0.12, CAM[2]);
+    box(dc, m.black, 0.08, 0.12, 0.08, CAM[0], CAM[1] + 0.04, CAM[2]); const vf = G('Disp_Vision_Flash', dc); cyl(vf, m.light, 0.07, 0.01, CAM[0], CAM[1] - 0.03, CAM[2], 'y', 24);
+    // NG storage box and rework inlet (the operator puts a rejected core back here to be dispensed again)
+    const ngb = G('Disp_NG_Box', dc, NGB[0], 0.26, NGB[2]);   // on a stand: its floor at 0.79 m box(ngb, m.red, 0.5, 0.02, 0.4, 0, 0.52, 0); for (const s of [-1, 1]) { box(ngb, m.red, 0.5, 0.2, 0.012, 0, 0.62, s * 0.2); box(ngb, m.red, 0.012, 0.2, 0.4, s * 0.25, 0.62, 0); }
+    for (const [x, z] of [[-0.2, -0.15], [0.2, -0.15], [-0.2, 0.15], [0.2, 0.15]]) prof(ngb, [x, -0.26, z], [x, 0.51, z], 0.03, m.frameDark); box(ngb, m.ngLabel, 0.3, 0.1, 0.004, 0, 0.66, 0.207);
+    box(dc, m.aluDark, 0.4, 0.03, 0.35, 3.45, 0.88, 0.75); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(dc, [3.45 + sx * 0.17, 0.06, 0.75 + sz * 0.14], [3.45 + sx * 0.17, 0.865, 0.75 + sz * 0.14], 0.035); box(dc, m.yellow, 0.4, 0.04, 0.02, 3.45, 0.92, 0.58); // rework inlet
+    // paste drum with agitator on a scale, low-level alarm lamp
+    box(dc, m.black, 0.6, 0.06, 0.6, 5.55, 0.03, 0.95); box(dc, m.screen, 0.16, 0.06, 0.004, 5.55, 0.04, 1.252); cyl(dc, m.sheet, 0.22, 0.5, 5.55, 0.31, 0.95, 'y', 28); cyl(dc, m.paste, 0.2, 0.02, 5.55, 0.56, 0.95, 'y', 28);
+    box(dc, m.aluDark, 0.08, 0.5, 0.08, 5.82, 0.8, 0.95); box(dc, m.aluDark, 0.34, 0.06, 0.06, 5.68, 1.02, 0.95); cyl(dc, m.black, 0.07, 0.2, 5.55, 1.0, 0.95, 'y', 16); const ag = G('Agitator', dc, 5.55, 0, 0.95); cyl(ag, m.steel, 0.012, 0.45, 0, 0.7, 0, 'y', 8); box(ag, m.steel, 0.2, 0.02, 0.03, 0, 0.5, 0);
+    prof(dc, [5.9, 0.06, 1.2], [5.9, 1.6, 1.2], 0.04); cyl(dc, m.black, 0.04, 0.05, 5.9, 1.63, 1.2, 'y', 14); const al = G('Paste_Alarm', dc); cyl(al, m.red, 0.04, 0.1, 5.9, 1.71, 1.2, 'y', 14);
+    // guard: fence panels on the north side and the ends, light curtains at the entry and exit blocks
+    for (const [x0, z0, x1, z1] of [[3.85, -1.45, 5.45, -1.45], [3.85, -1.45, 3.85, -0.35], [5.45, -1.45, 5.45, -0.35]]) { const L = Math.hypot(x1 - x0, z1 - z0); box(dc, m.black, Math.abs(x1 - x0) || 0.04, 1.8, Math.abs(z1 - z0) || 0.04, (x0 + x1) / 2, 0.95, (z0 + z1) / 2); void L; }
+    for (const x of [4.12, 5.08]) for (const sz of [-1, 1]) { box(dc, m.yellow, 0.04, 1.4, 0.04, x, 0.75, sz * 0.36); box(dc, m.black, 0.02, 1.3, 0.02, x, 0.75, sz * 0.33); }
+    cyl(dc, m.black, 0.012, 0.25, 5.4, 1.95, -1.4, 'y', 8); for (const [k, mt] of [[0, m.lampG], [1, m.yellow], [2, m.red]]) cyl(dc, mt, 0.03, 0.06, 5.4, 2.1 + k * 0.065, -1.4, 'y', 14);
+    prof(dc, [3.85, 0.06, 0.62], [3.85, 1.4, 0.62], 0.045); const hm = G('Disp_HMI', dc, 3.85, 1.55, 0.62); hm.rotation.y = Math.PI / 4; box(hm, m.black, 0.42, 0.32, 0.05, 0, 0, 0); box(hm, m.screen, 0.36, 0.26, 0.004, 0, 0, 0.027);
+    box(hm, m.yellow, 0.1, 0.04, 0.02, 0.12, -0.21, 0.02); // REWORK mode key on the HMI
+    worker('Op_Cell', 3.95, 1.3, Math.PI);   // one operator: loads / collects, takes NG cores to the rework inlet
+    // the robot (FR5 class, coloured as delivered; no brand marks), clamp tool with two jaws across the core
+    const fr = globalThis.FR5 ? globalThis.FR5.clone(true) : null;
+    if (fr) { fr.name = 'Disp_Robot'; fr.position.set(...RB); dc.add(fr);
+      const J = [1, 2, 3, 4, 5, 6].map(i => fr.getObjectByName('Joint_' + i)); J.forEach(j => { j.name = 'Disp_' + j.name; });
+      const tool = G('Disp_Clamp', J[5], 0, 0, 0.101); { const mt = m.aluDark; const bx = new THREE.BoxGeometry(0.08, 0.1, 0.06); bx.translate(0, 0, 0.03); bin(tool, mt, bx); const br = new THREE.BoxGeometry(0.06, 0.13, 0.02); br.translate(0, 0, 0.07); bin(tool, m.yellow, br);
+        for (const s of [-1, 1]) { const jw = new THREE.BoxGeometry(0.03, 0.012, 0.09); jw.translate(0, s * 0.052, 0.12); bin(tool, m.black, jw); } }
+      const gp = G('Disp_Grip_Part', tool, 0, 0, 0.13 + 0.035); gp.rotation.x = -Math.PI / 2; // hangs under the jaws (tool +Z is world down), its X along world X
+      { const c = G('Disp_Grip_Core', gp, 0, -0.035, 0); core(c, m.stainless); clamps(c); pasteLines(c, 'Disp_Grip_Paste_'); }
+      robotRef = { fr, J, tool };   // kept out of userData (it would be written into the glTF extras)
+      const ngc = G('Disp_NG_Core', dc, NGB[0], 0.79, NGB[2]); core(ngc, m.stainless); clamps(ngc); pasteLines(ngc);
+    }
   } else { // operator at a stop with a handheld dispenser: controller + paste syringe on a side table, foot switch
     box(root, m.aluDark, 0.6, 0.03, 0.45, 4.0, 0.9, 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [4.0 + sx * 0.27, 0.06, 0.95 + sz * 0.19], [4.0 + sx * 0.27, 0.885, 0.95 + sz * 0.19], 0.04);
     box(root, m.sheet, 0.26, 0.12, 0.24, 4.0, 0.975, 0.95); box(root, m.screen, 0.12, 0.05, 0.002, 4.0, 1.0, 1.071); box(root, m.black, 0.22, 0.05, 0.28, 4.6, 0.025, 0.95);
@@ -1196,6 +1219,34 @@ function egrCoreLine(o = {}) {
   box(ngb, m.ngLabel, 0.3, 0.12, 0.004, 0, 0.52, -0.207);
 
   const oo = worker('Op_Out', 16.3, 0.78, Math.PI); { const hp = G('Op_Out_Part', oo._Arm_R, -0.06, -0.78, 0.05); core(hp, brazed); } // outfeed operator: belt end → AMR tote
+  // ---- the dispensing robot's cycle (numeric IK, damped least squares on six joints; tool axis down, tool X along world X), solved once
+  // for an OK core and once for an NG core, as joint keys relative to the core's arrival at the entry block
+  const robotCycle = (() => {
+    if (!robotRef) return null; const R = { robot: robotRef };
+    const { J } = R.robot, AXS = J.map(j => j.userData.anim.axis), rest = J.map((j, i) => j.rotation[AXS[i]]), TIPL = new THREE.Vector3(0, 0, 0.101 + 0.165), X = new THREE.Vector3(1, 0, 0);
+    const setQ = v => { v.forEach((q, i) => { J[i].rotation.set(0, 0, 0); J[i].rotation[AXS[i]] = q; }); root.updateMatrixWorld(true); };
+    const err = tg => { const mw = J[5].matrixWorld, tip = TIPL.clone().applyMatrix4(mw), z = new THREE.Vector3(0, 0, 1).transformDirection(mw), x = new THREE.Vector3(1, 0, 0).transformDirection(mw);
+      const dz = new THREE.Vector3(0, -1, 0).sub(z), cx = new THREE.Vector3().crossVectors(x, X); return [...tg.clone().sub(tip).toArray(), dz.x * 0.5, dz.y * 0.5, dz.z * 0.5, cx.y * 0.3]; };
+    const solve = (A, bb) => { const n = bb.length, M = A.map((r, i) => [...r, bb[i]]); for (let i = 0; i < n; i++) { let pv = i; for (let k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[pv][i])) pv = k; [M[i], M[pv]] = [M[pv], M[i]];
+        for (let k = i + 1; k < n; k++) { const fc = M[k][i] / M[i][i]; for (let jj = i; jj <= n; jj++) M[k][jj] -= fc * M[i][jj]; } } const xx = new Array(n).fill(0); for (let i = n - 1; i >= 0; i--) { let sm = M[i][n]; for (let jj = i + 1; jj < n; jj++) sm -= M[i][jj] * xx[jj]; xx[i] = sm / M[i][i]; } return xx; };
+    const ik = (tg, seed) => { let v = seed.slice(); for (let it = 0; it < 300; it++) { setQ(v); const e = err(tg); if (Math.hypot(...e) < 1e-5) break; const Jm = []; for (let k = 0; k < 6; k++) { const w = v.slice(); w[k] += 1e-4; setQ(w); const e2 = err(tg); Jm.push(e.map((x, i) => (x - e2[i]) / 1e-4)); }
+        const mm = e.length, A = Array.from({ length: mm }, (_, i) => Array.from({ length: mm }, (_, jj) => Jm.reduce((sm, c) => sm + c[i] * c[jj], 0) + (i === jj ? 1e-4 : 0))); const y = solve(A, e); v = v.map((q, k) => q + Jm[k].reduce((sm, c, i) => sm + c * y[i], 0) * 0.8); }
+      setQ(v); return { v, e: Math.hypot(...err(tg).slice(0, 3)) }; };
+    const RBp = R.robot.fr.position, NOZ = [4.6, 1.125, 0.32], CAM = [5.0, 1.62, 0.25], NGB = [4.1, 0.62, 0.55], V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const run = ng => { let seed = [0, -90, 90, -90, -90, 0].map(d => d * Math.PI / 180), t = 0, last = null, worst = 0; const wp = [], ev = {};
+      const go = (pos, dt, name) => { const steps = last ? Math.max(1, Math.ceil(last.distanceTo(pos) / 0.02)) : 1;
+        for (let k = 1; k <= steps; k++) { const pp = last ? last.clone().lerp(pos, k / steps) : pos.clone(); const r = ik(pp, seed); seed = r.v; worst = Math.max(worst, r.e); t += dt / steps; wp.push([t, r.v.slice()]); }
+        if (name) ev[name] = t; last = pos.clone(); };
+      const CY = 0.035, TY = NOZ[1] - 0.002 - 2 * CY + CY; // tip (core centre) height when the core top is 2 mm under the nozzle
+      go(V(4.6, 1.25, -0.05), 0); go(V(3.95, BT + CY + 0.12, 0), 1.4); go(V(3.95, BT + CY, 0), 0.6); go(V(3.95, BT + CY, 0), 0.3, 'grip'); go(V(3.95, BT + CY + 0.12, 0), 0.5);
+      LINES6.forEach((lx, i) => { const x = NOZ[0] - lx; go(V(x, TY - 0.03, NOZ[2] + 0.04), i ? 0.35 : 1.6); go(V(x, TY, NOZ[2] + 0.04), 0.25); go(V(x, TY, NOZ[2] - 0.04), 1.0, 'line' + (i + 1)); go(V(x, TY - 0.03, NOZ[2] - 0.04), 0.2); });
+      go(V(CAM[0], TY, CAM[2]), 1.0); go(V(CAM[0], TY, CAM[2]), 1.0, 'vision');
+      if (!ng) { go(V(5.25, BT + CY + 0.12, 0), 1.3); go(V(5.25, BT + CY + 0.003, 0), 0.5); go(V(5.25, BT + CY + 0.003, 0), 0.3, 'release'); go(V(5.25, BT + CY + 0.12, 0), 0.4); }
+      else { go(V(NGB[0], 0.79 + CY + 0.15, NGB[2]), 1.6); go(V(NGB[0], 0.79 + CY + 0.003, NGB[2]), 0.5); go(V(NGB[0], 0.79 + CY + 0.003, NGB[2]), 0.3, 'release'); go(V(NGB[0], 0.79 + CY + 0.15, NGB[2]), 0.4); }
+      go(V(4.6, 1.25, -0.05), 1.1);
+      if (worst > 0.005) { setQ([0, -90, 90, -90, -90, 0].map(d => d * Math.PI / 180)); const tp = TIPL.clone().applyMatrix4(J[5].matrixWorld); throw new Error('dispensing robot IK: ' + (worst * 1000).toFixed(1) + ' mm off (' + (ng ? 'NG' : 'OK') + ') home tip ' + tp.toArray().map(v => v.toFixed(2)) + ' base ' + J[0].getWorldPosition(new THREE.Vector3()).toArray().map(v => v.toFixed(2)) + ' first ' + JSON.stringify(wp.slice(0, 2).map(w => w[1].map(v => v.toFixed(2))))); }
+      return { wp, ev, T: t, rest }; };
+    const r = { ok: run(false), ng: run(true) }; setQ(rest); void RBp; return r; })();
   // ---- keys
   const ease = u => u * u * (3 - 2 * u), ch = {}, add = (node, c, list) => { const key = node + '|' + c; (ch[key] || (ch[key] = [])).push(...list); };
   const ser = (evs, rest) => { evs = evs.slice().sort((a, b) => a[0] - b[0]);
@@ -1211,7 +1262,7 @@ function egrCoreLine(o = {}) {
     add('Door_F', 'z', [[F - 1.5, 0], [F - 0.3, -1.9], [F + 4.4, -1.9], [F + 6, 0]]); add('Door_R', 'z', [[F + 100, 0], [F + 101.6, -1.9], [F + 106.4, -1.9], [F + 108, 0]]);
     for (const x of ['9_4', '10_1', '10_8']) add('Furnace_Glow_' + x, 'vis', [[F + 8, true], [F + 96, false]]);
   }
-  const NG = 5, slotOff = s => -0.525 + 0.35 * s;
+  const NG = 5, slotOff = s => -0.525 + 0.35 * s, DISP = {};
   for (let j = -9; j < 9; j++) {
     const k = ((j % 8) + 8) % 8, PN = 'Core_' + (k + 1), b = P * j + 16, ng = k === NG;
     // picker: top blank stack in the AS/RS tote → belt
@@ -1219,25 +1270,35 @@ function egrCoreLine(o = {}) {
     const KT = P === 64 ? 4 : 8, yb = 1.266 + (KT - 1 - (((j % KT) + KT) % KT)) * 0.032; // the AS/RS tote at the pick station holds 8 kits; pick j takes the top one (see asrsCell)
     add('Picker_Y', 'y', [[b - 1, 0], [b - 0.2, -(1.714 - yb)], [b, -(1.714 - yb)], [b + 0.8, 0], [b + 2.8, 0], [b + 3.6, -(1.714 - BT)], [b + 3.8, -(1.714 - BT)], [b + 4.6, 0]]);
     add('Picker_Part', 'vis', [[b, true], [b + 3.8, false]]);
-    add('Press_Ram', 'y', [[b + 8.4, 0], [b + 9.2, -0.62], [b + 9.6, -0.62], [b + 10.4, 0]]);
+    add('Op_Insp_Arm_R', 'rx', [[b + 8.0, -0.15], [b + 8.6, -0.85], [b + 9.8, -0.85], [b + 10.4, -0.15]]); add('Op_Insp_Arm_L', 'rx', [[b + 8.2, -0.15], [b + 8.8, -0.7], [b + 9.6, -0.7], [b + 10.2, -0.15]]);
     add('Op_Stack_Arm_L', 'rx', [[b + 12.6, -0.15], [b + 13.4, -0.9], [b + 14.2, -0.5], [b + 15.0, -0.9], [b + 16.2, -0.5], [b + 17.0, -0.9], [b + 18.5, -0.4], [b + 19.4, -0.9], [b + 21.6, -0.9], [b + 22.4, -0.15]]);
     add('Op_Stack_Arm_R', 'rx', [[b + 12.6, -0.15], [b + 13.6, -0.6], [b + 14.4, -0.95], [b + 15.6, -0.6], [b + 16.6, -0.95], [b + 18.0, -0.5], [b + 19.0, -0.95], [b + 21.6, -0.95], [b + 22.4, -0.15]]);
     add('Op_Stack_Turn', 'ry', [[b + 13, 0], [b + 13.8, -0.5], [b + 14.6, 0], [b + 15.6, -0.5], [b + 16.4, 0], [b + 18.6, 0.5], [b + 19.4, 0]]);
     // the core: belt → press → stacking → dispensing → loader pick point
     const xs = [[b + 3.8, 0], [b + 4, 0], [b + 8, 1.2], [b + 10.6, 1.2], [b + 13, 2.8], [b + 22.6, 2.8], [b + 28, 4.6], [b + 29 + DT, 4.6], [b + 30.4 + DT, 6.4]];
-    add(PN + '_Blank', 'vis', [[b + 3.8, true], [b + 9.3, false]]); add(PN + '_Formed', 'vis', [[b + 3.8, false], [b + 9.3, true], [b + 17, false]]);
+    add(PN + '_Blank', 'vis', [[b + 3.8, true], [b + 17, false]]); add(PN + '_Formed', 'vis', [[b + 3.8, false]]);   // the plate kit until the operator has stacked the core
     add(PN + '_Core', 'vis', [[b + 3.8, false], [b + 17, true]]); add(PN + '_Clamp', 'vis', [[b + 3.8, false], [b + 21, true]]);
-    const D = b + 29, q = DT / 12; [1, 2, 3].forEach(s => add(PN + '_Paste_' + s, 'vis', [[b + 3.8, false], [D + 3.7 * s * q, true]]));
-    if (!o.manual) {
-      add('Align_Light', 'vis', [[D, true], [D + 0.4, false]]);
-      add('Disp_X', 'x', [[D + 0.5, 0], [D + 1, -0.0625], [D + 4.2, -0.0625], [D + 4.7, 0], [D + 7.9, 0], [D + 8.4, 0.0625], [D + 11.6, 0.0625], [D + 12, 0]]);
-      add('Disp_Z', 'z', [[D + 0.5, 0], [D + 1, -0.046], [D + 1.5, -0.046], [D + 3.7, 0.046], [D + 4.7, 0.046], [D + 7.4, -0.046], [D + 8.4, -0.046], [D + 11.1, 0.046], [D + 12, 0]]);
-      add('Disp_Needle', 'y', [[D + 1, 0], [D + 1.5, -0.12], [D + 11.1, -0.12], [D + 11.6, 0]]);
+    const D = b + 29, q = DT / 12; if (o.manual) [1, 2, 3, 4, 5, 6].forEach(s => add(PN + '_Paste_' + s, 'vis', [[b + 3.8, false], [D + 1.85 * s * q, true]]));
+    if (!o.manual && robotCycle) {   // the robot takes the core at the entry block (b + 28) and sets it down on the exit block / in the NG box
+      const rc = ng ? robotCycle.ng : robotCycle.ok, t0 = b + 28, JN = [1, 2, 3, 4, 5, 6].map(i => 'Disp_Joint_' + i), AX = ['ry', 'rz', 'rz', 'rz', 'ry', 'rz'];
+      JN.forEach((n, i) => add(n, AX[i], [[t0 - 0.01, 0], ...rc.wp.map(([t, v]) => [t0 + t, v[i] - rc.rest[i]]), [t0 + rc.T + 0.01, 0]]));
+      add('Disp_Grip_Part', 'vis', [[t0 + rc.ev.grip, true], [t0 + rc.ev.release, false]]);
+      LINES6.forEach((_, i) => add('Disp_Grip_Paste_' + (i + 1), 'vis', [[t0 + rc.ev.grip - 0.01, false], [t0 + rc.ev['line' + (i + 1)], true]]));
+      add('Disp_Vision_Flash', 'vis', [[t0 + rc.ev.vision - 0.6, true], [t0 + rc.ev.vision - 0.3, false]]);
+      add('Op_Cell_Turn', 'ry', [[t0 + 2, 0], [t0 + 4, 0.35], [t0 + 9, 0.35], [t0 + 11, 0]]);
+      if (ng) { add('Disp_NG_Core', 'vis', [[t0 + rc.ev.release, true], [t0 + rc.ev.release + 60, false]]);   // the operator takes it to the rework inlet a minute later
+        add('Op_Cell_Arm_R', 'rx', [[t0 + rc.ev.release + 55, -0.15], [t0 + rc.ev.release + 58, -0.9], [t0 + rc.ev.release + 62, -0.9], [t0 + rc.ev.release + 64, -0.15]]); }
+      DISP[k] = { grip: t0 + rc.ev.grip, release: t0 + rc.ev.release };
     } else {
       add('Op_Disp_Arm_R', 'rx', [[D, -0.15], [D + q, -0.95], [D + 3.7 * q, -1.05], [D + 4.5 * q, -0.9], [D + 7.4 * q, -1.05], [D + 8.2 * q, -0.9], [D + 11.1 * q, -1.05], [D + 12 * q, -0.15]]);
       add('Op_Disp_Arm_L', 'rx', [[D, -0.15], [D + q, -0.8], [D + 11.1 * q, -0.8], [D + 12 * q, -0.15]]);
       add('Op_Disp_Turn', 'ry', [[D + q, 0], [D + 3.7 * q, 0.12], [D + 4.5 * q, -0.05], [D + 7.4 * q, 0.08], [D + 8.2 * q, -0.08], [D + 11.1 * q, 0.05], [D + 12 * q, 0]]);
     }
+    const AUTO = !o.manual && DISP[k];
+    if (AUTO) { xs.splice(xs.findIndex(([t]) => t === b + 28), 3, [b + 27, 3.95], [DISP[k].release, 5.25], [DISP[k].release + 0.3, 5.25], [b + 30.4 + DT, 6.4]);
+      LINES6.forEach((_, i) => add(PN + '_Paste_' + (i + 1), 'vis', [[b + 3.8, false], [DISP[k].release, true]])); }
+    if (AUTO && ng) { add(PN, 'vis', [[b + 3.8, true], [DISP[k].grip, false]]); add(PN + '_X', 'x', xs.filter(([t]) => t <= DISP[k].grip + 0.01)); add(PN + '_Y', 'y', [[b + 3.8, 0]]); add(PN + '_Z', 'z', [[b + 3.8, 0]]);
+      add(PN + '_Clamp2', 'vis', [[b + 3.8, true]]); add(PN + '_Paste', 'vis', [[b + 3.8, true]]); add(PN + '_CoreS', 'vis', [[b + 3.8, true]]); add(PN + '_Brazed', 'vis', [[b + 3.8, false]]); continue; }   // vision NG: it stays in the NG box for rework
     // loader → tray slot; the furnace batch; unloader → inspection belt
     const a = b + 32 + DT, F = F0 + 4 * P * Math.ceil((a - F0 + 1e-6) / (4 * P)), slot = 3 - Math.round((F - 2 - a) / P), tk = trayKeys(F), u = F + 106 + 6 * slot, sx = slotOff(slot);
     add('Loader_X', 'x', [[a - 2.2, 0], [a - 1.4, 0], [a + 0.2, 7.375 + sx - 6.4], [a + 1.2, 7.375 + sx - 6.4], [a + 2.6, 0]]);
@@ -1252,13 +1313,13 @@ function egrCoreLine(o = {}) {
     add(PN + '_Clamp2', 'vis', [[b + 3.8, true], [u + 1.9, false]]);
     let end;
     add('Vision_Flash', 'vis', [[u + 5.4, true], [u + 5.7, false]]);
-    if (ng) { xs.push([u + 7.3, 14.9]); zs.push([u + 7.6, 0], [u + 8.4, -0.55]); ys.push([u + 8.4, 0], [u + 9, -0.47]); add('NG_Pusher', 'z', [[u + 7.5, 0], [u + 8.4, -0.48], [u + 9.2, 0]]); end = u + 9.2; }
+    if (ng && o.manual) { xs.push([u + 7.3, 14.9]); zs.push([u + 7.6, 0], [u + 8.4, -0.55]); ys.push([u + 8.4, 0], [u + 9, -0.47]); add('NG_Pusher', 'z', [[u + 7.5, 0], [u + 8.4, -0.48], [u + 9.2, 0]]); end = u + 9.2; }
     else { xs.push([u + 12.8, 16.45]); end = u + 13.2;   // at the belt end the operator lifts it, turns and lays it into the AMR tote (u + 14.6)
       add('Op_Out_Turn', 'ry', [[u + 12.6, 0], [u + 13.4, 0], [u + 14.2, -0.75], [u + 14.8, -0.75], [u + 15.6, 0]]);
       add('Op_Out_Arm_R', 'rx', [[u + 12.4, -0.15], [u + 13.0, -0.9], [u + 13.3, -0.9], [u + 13.8, -0.55], [u + 14.3, -0.9], [u + 14.7, -0.9], [u + 15.4, -0.15]]);
       add('Op_Out_Arm_L', 'rx', [[u + 12.4, -0.15], [u + 13.0, -0.8], [u + 14.7, -0.8], [u + 15.4, -0.15]]);
       add('Op_Out_Part', 'vis', [[u + 13.2, true], [u + 14.6, false]]); }
-    add(PN, 'vis', [[b + 3.8, true], [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
+    add(PN, 'vis', [[b + 3.8, true], ...(AUTO ? [[DISP[k].grip, false], [DISP[k].release, true]] : []), [a - 1.6, false], [a + 0.8, true], [u, false], [u + 1.9, true], [end, false]]);
     add(PN + '_X', 'x', xs); add(PN + '_Y', 'y', ys); add(PN + '_Z', 'z', zs);
   }
   for (let k = 0; k < 8; k++) { // core nodes: X > Y > Z > looks
@@ -1269,7 +1330,7 @@ function egrCoreLine(o = {}) {
   const keys = [];
   for (const [key, evs] of Object.entries(ch)) {
     const [node, c] = key.split('|');
-    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Op_Out_Part|Vision_Flash|Align_Light|Furnace_Glow)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) ? false : true)]);
+    if (c === 'vis') keys.push([node, 'vis', vis(evs, /^(Loader_Part|Unloader_Part|Picker_Part|Op_Out_Part|Vision_Flash|Align_Light|Furnace_Glow|Disp_Grip_Part|Disp_Vision_Flash|Disp_NG_Core|Paste_Alarm)/.test(node) || /^Core_\d$/.test(node) || /_(Formed|Core|Clamp|Paste_\d|Brazed)$/.test(node) || /^Disp_Grip_Paste_/.test(node) ? false : true)]);
     else keys.push([node, c, ser(evs, /_Arm_/.test(node) ? -0.15 : 0)]);
   }
   return cycleClip(finalize(root), 'Core_Cycle', TT, keys, 5 * 32 / P); // the slower line samples less often (same file size)

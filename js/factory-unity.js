@@ -70,8 +70,8 @@
     // flowAxis 'x' = conveys along local X (js/factory-unity-groups.js flow); clip = a baked animation played from the sim clock
     e3_fr5_stacking_cell: { label: '적재 셀 (FR5)', group: E3, cat: 'EGR 라인', size: [2.81, 1.33, 2.03], parts: [['e3_fr5_stacking_cell', 0, 0, 0]], clip: 'Stacking_Cycle', clipLen: 26.8 },
     e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
-    e3_egr_core_line: { label: 'EGR 코어 라인 B (프레스 → 코어 적층 → ONE STATION 자동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.99, 4.55], parts: [['e3_egr_core_line', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 256 },
-    e3_egr_core_line_manual: { label: 'EGR 코어 라인 A (프레스 → 코어 적층 → 작업자 수동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.99, 4.55], parts: [['e3_egr_core_line_manual', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 512 },
+    e3_egr_core_line: { label: 'EGR 코어 라인 B (공정검사 → 코어 적층 → ONE STATION 로봇 도포 셀 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.41, 4.55], parts: [['e3_egr_core_line', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 256 },
+    e3_egr_core_line_manual: { label: 'EGR 코어 라인 A (공정검사 → 코어 적층 → 작업자 수동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.41, 4.55], parts: [['e3_egr_core_line_manual', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 512 },
     e3_brazed_core: { label: '브레이징 코어 (반제품)', group: E3, cat: '부품 · 소품', size: [0.22, 0.07, 0.09], parts: [['e3_brazed_core', 0, 0, 0]] },
     e3_tote_blanks: { label: '부품 상자 (판재 블랭크 8키트)', group: E3, cat: '물류', size: [0.61, 0.27, 0.42], parts: [['e3_tote_blanks', 0, 0, 0]] },
     e3_tote_blanks4: { label: '부품 상자 (판재 블랭크 4키트)', group: E3, cat: '물류', size: [0.61, 0.27, 0.42], parts: [['e3_tote_blanks4', 0, 0, 0]] },

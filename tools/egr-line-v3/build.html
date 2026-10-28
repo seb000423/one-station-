@@ -7,7 +7,10 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MODELS } from './models.js';
+// the FR5 (assets/models/egr-line-v3/fr5.glb, joints Joint_1 … Joint_6) for the models that put a robot in (models.js reads globalThis.FR5)
+globalThis.FR5 = await new GLTFLoader().loadAsync('/assets/models/egr-line-v3/fr5.glb').then(g => g.scene).catch(() => null);
 
 const W = 1280, H = 800;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });

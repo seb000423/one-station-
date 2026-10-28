@@ -66,7 +66,7 @@ for z, nm in ((-10, '지붕 북쪽'), (10, '지붕 남쪽')):
 LX0 = -15.965 + 1.3
 AZA, AZB = -16.2, -10.2
 LINES = {'A': dict(z=AZA, model='e3_egr_core_line_manual', asrs='e3_asrs_cell_a', P=64, DT=40, name='EGR 코어 라인 A (작업자 수동 도포)'),
-         'B': dict(z=AZB, model='e3_egr_core_line', asrs='e3_asrs_cell', P=32, DT=12, name='EGR 코어 라인 B (ONE STATION 자동 도포)')}
+         'B': dict(z=AZB, model='e3_egr_core_line', asrs='e3_asrs_cell', P=32, DT=22, name='EGR 코어 라인 B (ONE STATION 자동 도포)')}
 def good_drops(P, DT):   # phases of the line clip (8 P s) at which a good brazed core drops into the AMR tote (mirrors egrCoreLine in models.js)
     out, a0 = set(), 60 + (DT - 12); F0 = a0 + 2 + 2 * P
     for j in range(-9, 9):
@@ -85,17 +85,17 @@ def station(name, x, z, w=1.2, d=0.4): zone(name, 'storage', x, z, w=w, d=d)
 for k, L in LINES.items():
     zs = L['z'] + 1.45
     station(f'피킹 스테이션 ({k})', -15.965, r3(L['z'] + 1.45), w=1.0)
-    station(f'프레스 성형 ({k})', LX0 + 1.2, r3(zs), w=1.0)
+    station(f'공정검사대 ({k})', LX0 + 1.0, r3(zs), w=1.2)
     station(f'코어 적층 · 작업자 ({k})', LX0 + 2.7, r3(zs), w=1.6)
-    station('수동 도포 · 작업자 (A)' if k == 'A' else 'ONE STATION 자동 도포 (B)', LX0 + 4.6, r3(zs), w=1.8)
+    station('수동 도포 · 작업자 (A)' if k == 'A' else 'ONE STATION 자동 도포 셀 (B)', LX0 + 4.6, r3(zs + (0.35 if k == 'B' else 0)), w=1.8)
     station(f'진공 브레이징로 ({k})', LX0 + 10.1, r3(zs), w=1.8)
     station(f'브레이징 후 검사 · NG ({k})', LX0 + 14.4, r3(zs), w=1.6)
     station(f'배출 · AMR 적재 ({k})', LX0 + 16.0, r3(zs + 0.05), w=1.2)
 
 # ---------------------------------------------------------------- KPI boards hung over each line's dispensing station (assumed values until the field numbers come in)
 def uph(L): return round(3600 / L['P'] * 7 / 8)
-KPI = {'A': ['Ni 페이스트 도포 사이클 (쿨러 1개)|40 s', '도포 인원|1 명', '라인 피치 (코어 1개)|64 s', 'UPH (양품)|%d 개/h' % uph(LINES['A']), '도포 불량 (누락 · 과다) 검출|브레이징 후', '병목 공정|수동 도포', '현장 수치 입력 전 가정값|'],
-       'B': ['Ni 페이스트 도포 사이클 (쿨러 1개)|12 s', '도포 인원|0 명 (자동 셀)', '라인 피치 (코어 1개)|32 s', 'UPH (양품)|%d 개/h' % uph(LINES['B']), '도포 불량 (누락 · 과다) 검출|도포 직후 비전', '병목 공정|자동창고 피킹 (32 s)', '현장 수치 입력 전 가정값|']}
+KPI = {'A': ['도포 사이클 (코어 1개)|40 s|가정', '도포 인원|1 명|가정', '라인 피치 · UPH|64 s · %d 개/h|가정' % uph(LINES['A']), '도포 누락 검출|브레이징 후', 'NG|브레이징 후 폐기', '병목 공정|수동 도포', '도포 패턴|선 6줄 (2 × 3)'],
+       'B': ['도포 셀 C/T|25 s|실측', '도포 인원 (투입 · 회수)|1 명|실측', '도포 셀 능력|144 개/h', '라인 피치 · UPH|32 s · %d 개/h' % uph(LINES['B']), '도포 누락 검출|도포 직후 비전|실측', 'NG|보관 → Rework', '병목 공정|자동창고 피킹']}
 for k, L in LINES.items():
     add('kpi', f'KPI 라인 {k}', LX0 + 4.6, L['z'] + 0.05, 0, {'title': ('라인 A · 작업자 수동 도포' if k == 'A' else '라인 B · ONE STATION 자동 도포'), 'rows': KPI[k], 'w': 3.6, 'h': 2.1, 'y': 3.3, 'hang': 8.0})
 

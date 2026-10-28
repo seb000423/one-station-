@@ -18,10 +18,10 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || '/
 const page = await browser.newPage();
 page.on('console', m => { if (m.type() === 'error') console.error('page:', m.text()); });
 page.on('pageerror', e => console.error('page error:', e.message));
-const TYPES = { '.js': 'text/javascript', '.html': 'text/html' };
+const TYPES = { '.js': 'text/javascript', '.html': 'text/html', '.glb': 'model/gltf-binary' };
 await page.route('http://build.local/**', route => {
   const p = new URL(route.request().url()).pathname;
-  const file = p.startsWith('/three/') ? path.join(THREE_DIR, p.slice(7)) : path.join(HERE, p.slice(1));
+  const file = p.startsWith('/three/') ? path.join(THREE_DIR, p.slice(7)) : p.startsWith('/assets/') ? path.join(ROOT, p.slice(1)) : path.join(HERE, p.slice(1)); // /assets/: models other models build on (the FR5)
   if (!fs.existsSync(file)) return route.fulfill({ status: 404, body: '' });
   route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
 });
