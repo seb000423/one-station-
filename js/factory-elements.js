@@ -110,7 +110,11 @@
       const W = Math.min(Math.max(w, 1.2), 2.4); s.scale.set(W, W / 4, 1); s.position.y = 0.5; s.renderOrder = 5; s.userData.label = true; return s;
     }
     const c = document.createElement('canvas'); c.width = 512; c.height = 128;
-    const x = c.getContext('2d'); x.fillStyle = color; x.font = 'bold 64px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 256, 64);
+    const x = c.getContext('2d'); x.fillStyle = color; x.font = 'bold 64px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    // console 2 (realvirtual) shows the model mirrored in X: floor text in the export is drawn mirrored so it reads right there
+    // (arrows are not: they mirror together with what they point along)
+    if (!BILLBOARD && !/^[▶◀\s]+$/.test(text)) { x.translate(512, 0); x.scale(-1, 1); }
+    x.fillText(text, 256, 64);
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w, 3), Math.min(w, 3) / 4), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
     m.rotation.x = -Math.PI / 2; m.position.y = 0.012; return m;
@@ -174,8 +178,8 @@
         box(g, 'Zone_Area', p.w, 0.004, p.d, mat(c, { transparent: true, opacity: 0.28, depthWrite: false }), 0, 0.002, 0).castShadow = false;
         const edge = mat(c);
         for (const [w, d, x, z] of [[p.w, 0.08, 0, -p.d / 2], [p.w, 0.08, 0, p.d / 2], [0.08, p.d, -p.w / 2, 0], [0.08, p.d, p.w / 2, 0]]) box(g, 'Zone_Edge', w, 0.012, d, edge, x, 0.006, z).castShadow = false;
-        g.add(labelPlane(p.label || (ZONE_KIND[p.kind] || ZONE_KIND.none)[0], p.w, '#ffffff'));
-        const sub = labelPlane((ZONE_KIND[p.kind] || ZONE_KIND.none)[0], p.w * 0.6, '#d6dde4'); sub.position.z = Math.min(p.d, p.w) * 0.22; g.add(sub);
+        // the name is painted on the floor; console 1 shows one screen-space card per zone (name, stock, state) instead of floating labels
+        const name = labelPlane(p.label || (ZONE_KIND[p.kind] || ZONE_KIND.none)[0], Math.min(p.w, 2.6), '#ffffff', true); name.name = 'Zone_Name'; name.userData.floorLabel = true; g.add(name);
       },
       footprint: p => [p.w, p.d]
     },
@@ -409,6 +413,7 @@
     }
     const tags = [amr ? 'AMR 진입 허용' : '', walk ? '보행 허용' : ''].filter(Boolean).join(' · ') || (obj.type === 'zone' ? '진입 금지' : '');
     if (!tags) return;
+    if (BILLBOARD) return; // console 1: access is shown by the floor hatch and the object's card, not by a floating tag
     const lab = labelPlane(tags, 1.6, amr || walk ? '#7dffb2' : '#ff8a80'); lab.name = 'Area_Access';
     if (lab.isSprite) lab.position.y = obj.type === 'zone' ? 0.95 : 2.4; else { lab.position.z = (Object.assign(TYPES.zone.defaults(), obj.params || {}).d || 2) * -0.3; }
     g.add(lab);

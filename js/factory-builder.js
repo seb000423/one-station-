@@ -606,19 +606,31 @@
     ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
-  // 모델 tab: every equipment model (js/factory-unity.js CATALOG) as its own thumbnail tile, grouped, searchable
-  function modelTiles() {
+  // palette tabs: each tab shows its own sections of thumbnail tiles (catalog models, parametric parts, movers), searchable.
+  //   모델: process equipment, robots, conveyors, racks, parts · 건물: hall parts and shells · 동선·구역: zones, walkways, aisle marks · 이동체: AMRs, AGVs, forklifts, workers
+  const MOVER_MODELS = ['e3_amr_deck_bot', 'e3_omron_agv', 'uw_forklift', 'uw_reachlift', 'uw_palletrobot', 'uf_cart', 'uf_wagon', 'uw_trolley'];
+  function paletteTiles(tab) {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
     const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group)); // sections by category (EGR 라인, 로봇, 물류, 건물, …), real-size models
-    // parametric parts (js/factory-kit.js) lead their section: size, length, bays / levels are set in the property panel
-    const KIT = { 'EGR 라인': [['conveyor:roller', '롤러 컨베이어 (길이 · 폭 · 높이 조절)'], ['conveyor:belt', '벨트 컨베이어 (길이 · 폭 · 높이 조절)'], ['fence', '안전 펜스 (길이 조절)']],
-      '공장 설비': [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']],
-      '물류': [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']],
-      '건물': [['wall', '벽 (창문 · 길이 조절)'], ['column', 'H형강 기둥'], ['door', '셔터 출입문'], ['roof', '지붕 트러스 (크기 조절)']] };
-    const kitTile = ([place, label], g) => `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 크기는 놓은 뒤 오른쪽 설정에서 바꿉니다"><img src="assets/models/thumbs/kit_${place.replace(':', '_')}.webp" alt="" loading="lazy" draggable="false"><span>${esc(label)}</span></button>`;
-    return '<input class="find" type="search" placeholder="모델 검색">' + U.CATS.map(g => [g, shown.filter(([, c]) => (c.cat || '공정 설비') === g)]).filter(([, l]) => l.length).map(([g, list]) => `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${(KIT[g] || []).map(t => kitTile(t, g)).join('')}${list.map(([k, c]) =>
-      `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`).join('')}</div></div>`).join('');
+    const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group));
+    const kit = ([place, label, img], g) => `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 놓은 뒤 오른쪽 설정에서 크기 · 동작을 바꿉니다"><img src="${img || 'assets/models/thumbs/kit_' + place.replace(':', '_') + '.webp'}" alt="" loading="lazy" draggable="false"><span>${esc(label)}</span></button>`;
+    const typ = ([t, l], g) => `<button type="button" class="tile kit typ" draggable="true" data-place="${t}" data-q="${esc((l + ' ' + g).toLowerCase())}" title="${esc(l)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(t)}</i><span>${esc(l)}</span></button>`;
+    const model = ([k, c], g) => `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`;
+    const byCat = (cat, keep = () => true) => shown.filter(([k, c]) => (c.cat || '공정 설비') === cat && keep(k));
+    const SEC = {
+      models: [['EGR 라인', [['conveyor:roller', '롤러 컨베이어 (길이 · 폭 · 높이 조절)'], ['conveyor:belt', '벨트 컨베이어 (길이 · 폭 · 높이 조절)']], byCat('EGR 라인', k => !/fence/.test(k))],
+        ['로봇', [], byCat('로봇')],
+        ['물류 · 보관', [['rack', '랙 (베이 · 단 조절)'], ['tote:tote', '부품 상자 (크기 · 쌓기)'], ['tote:carton', '골판지 상자 (크기 · 쌓기)']], byCat('물류', k => !MOVER_MODELS.includes(k))],
+        ['공장 설비', [['bench:assembly', '조립 작업대'], ['bench:leak', '리크 테스트 작업대'], ['bench:pack', '검사 · 포장 작업대']], byCat('공장 설비')],
+        ['부품 · 소품', [], byCat('부품 · 소품')]],
+      building: [['구조 · 외피 (크기 조절)', [['wall', '벽 (창문 · 길이 조절)'], ['column', 'H형강 기둥'], ['door', '셔터 출입문'], ['roof', '지붕 트러스 (크기 조절)'], ['fence', '안전 펜스 (길이 조절)']], []],
+        ['기타 건물 요소', [['stairs', '계단', 'type']], []], ['건물 모듈 · 바닥', [], byCat('건물', k => !/aisle/.test(k))]],
+      route: [['구역 · 동선', [['zone', '구역 (적재 · 하역 · 보관 · 금지)', 'type'], ['walkway', '보행로', 'type']], []], ['바닥 표시', [], byCat('건물', k => /aisle/.test(k))]],
+      mover: [['움직이는 이동체 (경로 · 작업 순서)', [['amr:e3_amr_deck_bot', 'AMR (롤러 상판)', U.thumb('e3_amr_deck_bot')], ['amr:e3_omron_agv', 'AGV (Omron, 트롤리)', U.thumb('e3_omron_agv')], ['amr:uw_forklift', '지게차', U.thumb('uw_forklift')], ['amr:uw_palletrobot', '팔레트 운반 로봇', U.thumb('uw_palletrobot')], ['worker', '작업자', 'type'], ['route', 'AMR 경로', 'type'], ['walkroute', '작업자 경로', 'type']], []],
+        ['정지 차량 · 대차 · 사람 (배치용)', [], shown.filter(([k, c]) => MOVER_MODELS.includes(k) || c.cat === '사람')]]
+    };
+    return `<input class="find" type="search" placeholder="${tab === 'models' ? '모델' : '요소'} 검색">` + (SEC[tab] || []).map(([g, kits, list]) => (kits.length || list.length)
+      ? `<div class="mgrp"><h4>${esc(g)}</h4><div class="tiles">${kits.map(k => (k[2] === 'type' ? typ(k, g) : kit(k, g))).join('')}${list.map(e => model(e, g)).join('')}</div></div>` : '').join('');
   }
   const TABS = [['models', '모델', null], ['building', '건물', PALETTE[0][1]], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
   const css = `
@@ -663,6 +675,20 @@
   #fbPanel .pal .tiles{display:grid;grid-template-columns:1fr 1fr;gap:4px}
   #fbPanel .pal button.tile{flex-direction:column;align-items:stretch;gap:3px;padding:4px;text-align:center;font-size:11px;line-height:1.25}
   #fbPanel .pal .tile img{width:100%;aspect-ratio:1;object-fit:contain;background:rgba(255,255,255,.04);border-radius:2px}
+  #fbPanel .pal .tile .ic{display:grid;place-items:center;width:100%;aspect-ratio:1;background:rgba(255,255,255,.04);border-radius:2px;color:var(--accent,#eec539)}
+  #fbPanel .pal .tile .ic svg{width:42%;height:42%}
+  #fbLabels{position:absolute;inset:0;pointer-events:none;z-index:4}
+  #fbLabels .lead{position:absolute;inset:0;width:100%;height:100%}
+  #fbLabels .lead line{stroke:rgba(238,197,57,.75);stroke-width:1}
+  #fbLabels .lead circle{fill:#eec539}
+  #fbLabels .card{position:absolute;width:150px;height:40px;box-sizing:border-box;padding:4px 8px 4px 10px;border-radius:6px;background:rgba(10,12,15,.78);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.12);border-left:3px solid #eec539;color:#fff;font:600 12px/1.25 'IBM Plex Sans KR',system-ui,sans-serif;display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:6px;pointer-events:auto;cursor:pointer;transition:transform .12s}
+  #fbLabels .card:hover{transform:scale(1.06);border-color:rgba(238,197,57,.6);z-index:2}
+  #fbLabels .card b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  #fbLabels .card .n{grid-row:1/3;grid-column:2;align-self:center;font:700 18px/1 'IBM Plex Mono',ui-monospace,monospace;color:#eec539}
+  #fbLabels .card .n i{font-style:normal;font-size:11px;color:rgba(255,255,255,.55);margin-left:1px}
+  #fbLabels .card em{font-style:normal;font-size:10.5px;color:#ffb37c}
+  #fbLabels .card em.k{color:rgba(255,255,255,.55)}
+  #fbLabels .card.warn{border-left-color:#ff8a3c}
   #fbPanel .pal [hidden]{display:none}
   #fbPanel details{border-top:1px solid var(--line);padding-top:6px;min-height:0;display:flex;flex-direction:column}
   #fbPanel details[open].grow{flex:1}
@@ -770,7 +796,7 @@
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
       <div class="sep"></div>
-      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button>
+      <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button><button type="button" data-v="roofs" title="지붕 (트러스 · 지붕판 · 조명)을 숨기거나 보입니다">지붕 숨기기</button><select id="fbLabelMode" title="화면 라벨: 구역 이름 · 재고 · 상태"><option value="all">라벨: 모두</option><option value="stock">라벨: 재고 · 상태</option><option value="name">라벨: 바닥 이름만</option><option value="off">라벨: 끄기</option></select>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
       <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
     $('.view').appendChild(bar);
@@ -799,8 +825,8 @@
     const showTab = k => {
       tab = k; panel.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === k));
       const pal = panel.querySelector('.pal'), items = TABS.find(t => t[0] === k)[2];
-      pal.classList.toggle('models', !items);
-      pal.innerHTML = items ? items.map(([t, l]) => `<button type="button" draggable="true" data-place="${t}" title="${l}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기">${icon(t)}<span>${l}</span></button>`).join('') : modelTiles();
+      pal.classList.add('models'); // every tab is a tile grid now
+      pal.innerHTML = paletteTiles(tab); void items; // every tab: sections of tiles (see paletteTiles)
       const find = pal.querySelector('.find');
       if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); pal.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); pal.querySelectorAll('.mgrp').forEach(g => { g.hidden = !g.querySelector('.tile:not([hidden])'); }); };
       pal.querySelectorAll('[data-place]').forEach(b => {
@@ -813,6 +839,7 @@
     showTab(tab);
     panel.querySelector('[data-t=min]').onclick = () => { panel.classList.toggle('min'); panel.querySelector('[data-t=min]').textContent = panel.classList.contains('min') ? '+' : '–'; };
     const on = (sel, fn) => { const b = bar.querySelector(sel); if (b) b.onclick = fn; };
+    { const lm = bar.querySelector('#fbLabelMode'); if (lm) { lm.value = labelMode; lm.onchange = () => { labelMode = lm.value; lastLabels = 0; try { localStorage.setItem('fb-labels', labelMode); } catch (e) {} }; } }
     on('[data-t=new]', newFactory);
     on('[data-t=example]', () => { if (!doc.objects.length || confirm(`예시 공정을 엽니다. 지금 배치(객체 ${doc.objects.length}개)는 Ctrl+Z로 되돌릴 수 있습니다.`)) loadExample(); });
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
@@ -832,7 +859,7 @@
   }
 
   /* ---------- camera: views fitted to the factory, focus / follow a chosen object ---------- */
-  let camTween = null, lastView = null, followId = null, insideIdx = 0, roofShown = null;
+  let camTween = null, lastView = null, followId = null, insideIdx = 0, roofShown = null, roofsHidden = false;
   function camTo(pos, target, dur = 0.8) {
     const s = S(); s.cfg.follow = false;
     s.controls.maxDistance = Math.max(s.controls.maxDistance, pos.distanceTo(target) * 1.6);
@@ -873,6 +900,7 @@
   const viewTarget = () => { const sel = $('#fbTarget'), o = sel && sel.value && byId(sel.value); return o || null; };
   function stopFollow(quiet) { if (!followId) return; const o = byId(followId); followId = null; viewButtons(); if (!quiet && o) note(`${o.name} 추적을 멈췄습니다`); }
   function view(kind) {
+    if (kind === 'roofs') { roofsHidden = !roofsHidden; bar.querySelector('[data-v=roofs]').textContent = roofsHidden ? '지붕 보이기' : '지붕 숨기기'; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') g.visible = !roofsHidden; } return; }
     if (kind === 'follow' && followId) return stopFollow(); // 추적 is a toggle
     stopFollow(true); lastView = kind;
     bar.querySelectorAll('[data-v=all],[data-v=front],[data-v=top],[data-v=inside]').forEach(b => b.classList.toggle('on', b.dataset.v === kind));
@@ -1284,11 +1312,12 @@
       const F = flowAt(t); renderItems(F);
       if (now - lastPanel > 250) { const cs = $('#fbConvStats'), sel = selectedId && byId(selectedId); if (cs && sel && sel.type === 'conveyor') { const st = F.stats()[sel.id]; if (st) cs.innerHTML = `현재 ${st.state}${sel.params && sel.params.source ? ` · 투입 ${st.made}개` : ''}${sel.params && sel.params.sink ? ` · 배출 ${st.done}개` : ''}`; } }
       if (now - lastPanel > 250) updateLogistics(M, t);
+      labelTick(M, t, now);
       updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
       cameraTick(dt);
       { // roof sheets show from inside / below the eave, and hide when the camera is above the roof (to look in)
         const cy = S().camera.position.y, under = cy < doc.factory.height + 0.5;
-        if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = under; }); } } // also catches rebuilt roofs
+        if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') { g.visible = !roofsHidden; g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = under && (o.params || {}).sheet !== false; }); } } } // also catches rebuilt roofs
       }
       requestAnimationFrame(tick);
     };
@@ -1358,11 +1387,49 @@
     x.fillStyle = '#7dffb2'; x.font = 'bold 34px "IBM Plex Sans KR", "Malgun Gothic", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, 128, 33);
     b.material.map.needsUpdate = true;
   }
+  /* ---------- screen-space labels: one compact card per zone (name · stock · state), black glass with a yellow accent;
+     cards avoid each other (stacked upwards with a thin leader line to their anchor), fade with distance, show details on
+     hover and select their object on click. 라벨 menu: 모두 / 재고 · 상태 / 이름 / 끄기 (floor-painted names follow it too) */
+  let labelMode = (() => { try { return localStorage.getItem('fb-labels') || 'all'; } catch (e) { return 'all'; } })(), labelLayer = null, lastLabels = 0;
+  function labelTick(M, t, now) {
+    if (now - lastLabels < 120) return; lastLabels = now;
+    const view = $('.view'); if (!view) return;
+    if (!labelLayer) {
+      labelLayer = document.createElement('div'); labelLayer.id = 'fbLabels'; labelLayer.innerHTML = '<svg class="lead"></svg><div class="cards"></div>'; view.appendChild(labelLayer);
+      labelLayer.addEventListener('click', e => { const c = e.target.closest('[data-id]'); if (c) select(c.dataset.id); });
+    }
+    const s = S(), cam = s.camera, el = s.renderer.domElement, r = el.getBoundingClientRect(), vr = view.getBoundingClientRect(), Z = (M && M.zones) || {};
+    for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'zone') g.traverse(m => { if (m.userData.floorLabel) m.visible = labelMode === 'all' || labelMode === 'name'; }); }
+    const cards = labelLayer.querySelector('.cards'), lead = labelLayer.querySelector('.lead');
+    if (labelMode === 'off' || labelMode === 'name') { cards.innerHTML = ''; lead.innerHTML = ''; return; }
+    const items = [];
+    for (const o of doc.objects) {
+      if (o.type !== 'zone') continue;
+      const p = Object.assign(window.FactoryElements.defaults('zone', doc.factory), o.params || {}), z = Z[o.id];
+      const v = new THREE.Vector3(o.x, 0.6, o.z).project(cam); if (v.z > 1 || v.z < -1) continue;
+      const x = (v.x + 1) / 2 * r.width + r.left - vr.left, y = (1 - v.y) / 2 * r.height + r.top - vr.top; if (x < -40 || y < -20 || x > vr.width + 40 || y > vr.height + 20) continue;
+      const far = Math.max(60, Math.hypot(doc.factory.width, doc.factory.depth) * 1.5), d = cam.position.distanceTo(new THREE.Vector3(o.x, 0.6, o.z)), op = Math.max(0, Math.min(1, 1.3 - d / far)); if (op <= 0.05) continue; // fade with distance (scaled to the factory)
+      const stock = z ? z.stock(t) : null, cap = z ? z.cap : 0, kind = (window.FactoryElements.ZONE_KIND[p.kind] || [''])[0];
+      const state = stock == null ? '' : cap && stock >= cap ? '가득 참' : stock === 0 ? '비어 있음' : '';
+      items.push({ id: o.id, x, y, d, op, name: o.name, kind, stock, cap, state, keep: p.kind === 'keepout' });
+    }
+    items.sort((a, b) => a.d - b.d);
+    const placed = [], html = [], lines = [], W = 150, H = 40;
+    for (const it of items) {
+      let cy = it.y - H - 14, k = 0; const box = () => ({ x0: it.x - W / 2, x1: it.x + W / 2, y0: cy, y1: cy + H });
+      while (k < 5 && placed.some(b => { const a = box(); return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0; })) { cy -= H + 6; k++; }
+      if (k === 5) continue; placed.push(box());
+      const st = labelMode === 'stock' || labelMode === 'all';
+      html.push(`<div class="card${it.state ? ' warn' : ''}" data-id="${it.id}" style="left:${(it.x - W / 2) | 0}px;top:${cy | 0}px;opacity:${it.op.toFixed(2)}" title="${esc(it.name)} · ${esc(it.kind)}${it.stock != null ? ` · 재고 ${it.stock}${it.cap ? ' / ' + it.cap : ''}` : ''}${it.keep ? ' · 진입 금지' : ''} — 클릭하면 선택"><b>${esc(it.name)}</b>${st && it.stock != null ? `<span class="n">${it.stock}${it.cap ? '<i>/' + it.cap + '</i>' : ''}</span>` : ''}${it.state ? `<em>${it.state}</em>` : `<em class="k">${esc(it.kind)}</em>`}</div>`);
+      lines.push(`<line x1="${it.x | 0}" y1="${(it.y - 2) | 0}" x2="${it.x | 0}" y2="${(cy + H) | 0}" style="opacity:${it.op.toFixed(2)}"/><circle cx="${it.x | 0}" cy="${it.y | 0}" r="2.5" style="opacity:${it.op.toFixed(2)}"/>`);
+    }
+    cards.innerHTML = html.join(''); lead.innerHTML = lines.join('');
+  }
   function updateLogistics(M, t) {
     const Z = M.zones || {};
     for (const o of doc.objects) if (o.type === 'zone') {
       const g = views.get(o.id); if (!g) continue; const z = Z[o.id], old = g.getObjectByName('Zone_Stock');
-      if (z) stockBadge(g, `재고 ${z.stock(t)}${z.cap ? ' / ' + z.cap : ''}`); else if (old) g.remove(old);
+      if (old) g.remove(old); // stock is shown on the zone's screen-space card (labelTick)
       const n = z ? z.stock(t) : 0; g.children.forEach(c => { const m = /^Zone_Pallet_(\d+)$/.exec(c.name); if (m) c.visible = +m[1] < n; }); // the pallets standing in it
     }
     const box = $('#fbLogi'); if (!box) return;

@@ -43,14 +43,15 @@ for s, nm in ((-1, '서쪽 벽'), (1, '동쪽 벽')):
     add('wall', nm, s * X0, 0, PI2, {'length': D, 'thickness': 0.2, 'h': 0, 'windows': True})
 for x, nm in zip(DOORS, ('입고 셔터', '출하 셔터')):
     add('door', nm, x, Z0, 0, {'width': 4, 'height': 4.5, 'thickness': 0.2})
-for k, x in enumerate(range(-30, 31, 6)):
-    for z in (-19.6, 19.6):
-        if z > 0 and any(abs(x - d) < 3 for d in DOORS): continue
+NB = 11                              # roof bays: the columns stand on the rafter lines (x = −32 + k · 64 / 11)
+BAY = [r3(-W / 2 + k * W / NB) for k in range(NB + 1)]
+for k, x in enumerate(BAY):
+    for z in (-19.75, 19.75):
+        if z > 0 and any(abs(x - d) < 2.6 for d in DOORS): continue      # the shutter headers carry these frames
         add('column', f'기둥 {"N" if z < 0 else "S"}{k + 1}', x, z, 0, {'w': 0.3, 'd': 0.4, 'h': 0})
-for k, x in enumerate((-24, -12, 0, 12, 24)):
-    add('column', f'기둥 C{k + 1}', x, 0, 0, {'w': 0.3, 'd': 0.4, 'h': 0})
+    if 0 < k < NB: add('column', f'기둥 C{k}', x, 0, 0, {'w': 0.3, 'd': 0.4, 'h': 0})
 for z, nm in ((-10, '지붕 북쪽'), (10, '지붕 남쪽')):
-    add('roof', nm, 0, z, 0, {'length': W, 'span': 20, 'h': 0, 'bay': 6, 'rise': 1.2, 'sheet': True})  # sheets hide when the camera is above the roof
+    add('roof', nm, 0, z, 0, {'length': W, 'span': 20, 'h': 0, 'bay': r3(W / NB), 'rise': 1.0, 'sheet': True})  # sheets hide when the camera is above the roof
 
 # ---------------------------------------------------------------- AS/RS (west, north): two rack rows, crane + rail in the aisle
 AZ = -15.7
@@ -113,10 +114,10 @@ zone('조립 부품 공급', 'dropoff', -17.5, SL + 2.65, track=True, stock=1, c
 
 # ---------------------------------------------------------------- AMR network and movers
 # the loop passes through every junction (dock spurs join the network only at route points)
-north = sorted({-21.5, -17.6, 2.0, 5.4, 10.0, 16.4}); south = sorted({-17.5, -0.6, 2.0, 3.9, 7.1, 10.0, *DOORS}, reverse=True)  # 2 / 10: crossovers
+north = sorted({-21.5, -17.6, 0.0, 5.4, 11.64, 16.4}); south = sorted({-17.5, -0.6, 0.0, 3.9, 7.1, 11.64, *DOORS}, reverse=True)  # 0 / 11.64: crossovers between the column lines
 route('순환 경로', [(-28, NL)] + [(x, NL) for x in north] + [(28, NL), (28, SL)] + [(x, SL) for x in south] + [(-28, SL), (-28, NL)], oneway=True)
-route('남행 연결로', [(10.0, NL), (10.0, SL)], oneway=True)   # crossovers between the lanes (clear of the centre columns at x 0 / 12)
-route('북행 연결로', [(2.0, SL), (2.0, NL)], oneway=True)
+route('남행 연결로', [(11.64, NL), (11.64, SL)], oneway=True)   # crossovers between the lanes, midway between centre columns
+route('북행 연결로', [(0.0, SL), (0.0, NL)], oneway=True)
 for x in (-21.5, -17.6, 5.4, 16.4):
     route('도킹', [(x, NL), (x, NL - 1.25)])
 for x in (-17.5, -0.6, 3.9, 7.1):

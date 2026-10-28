@@ -118,7 +118,7 @@
     const nA = Math.max(1, Math.round(P.len / 1.2));
     for (let i = 0; i < nA; i++) { const [x, z, yaw] = P.at((i + 0.5) * P.len / nA), a = new THREE.Group(); a.name = 'Conveyor_Arrow'; a.position.set(x, H + r + 0.006, z); a.rotation.y = yaw; a.add(labelPlane('▶', 0.3, 'rgba(238,197,57,.65)', true)); g.add(a); }
     for (const [on, s, text, color] of [[p.source, 0, '투입', '#7cc4ff'], [p.sink, P.len, '배출', '#ffb37c']]) {
-      if (!on) continue; const [x, z] = P.at(s), lab = labelPlane(text, 0.9, color); lab.name = 'Conveyor_' + (s ? 'Sink' : 'Source'); lab.position.set(x, lab.isSprite ? H + 0.75 : H + r + 0.012, z); g.add(lab);
+      if (!on) continue; const [x, z] = P.at(s), lab = labelPlane(text, 0.6, color, true); lab.name = 'Conveyor_' + (s ? 'Sink' : 'Source'); lab.userData.floorLabel = true; lab.position.set(x, H + r + 0.012, z); g.add(lab); // painted on the belt end
     }
   };
 
@@ -246,27 +246,31 @@
   TYPES.door.footprint = p => [p.width + 0.36, p.thickness + 0.6];
   TYPES.roof = {
     label: '지붕 트러스', group: 'building',
-    // length along X (bays of `bay` m, one truss per bay line), span along Z, eave height (0 = factory height), sheet: roof sheets
-    // (off by default so the builder can look in from above; the skylight frames and LED high-bays show either way)
-    defaults: () => ({ length: 24, span: 24, h: 0, bay: 6, rise: 1.2, sheet: false }),
+    // a portal-frame roof: one I-section rafter pair per bay line resting on the column tops (columns on the same 6 m grid),
+    // eave beams along both edges and a ridge beam tie the frames together, knee braces at the eaves, light purlins every
+    // ~3 m, skylight strips and LED high-bays. length along X, span along Z, eave height h (0 = factory height);
+    // sheet: roof sheets (the builder hides them while the camera is above the roof)
+    defaults: () => ({ length: 24, span: 24, h: 0, bay: 6, rise: 1.2, sheet: true }),
     build: (g, p, f) => {
-      const Y = p.h || f.height, S = p.span, L = p.length, nb = Math.max(1, Math.round(L / p.bay)), bay = L / nb, rise = p.rise;
-      const top = z => Y + 0.9 + rise * (1 - Math.abs(z) / (S / 2));
-      const member = (n, a, b, s, m = K.steelCol, h = s) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), o = add(g, n, new THREE.BoxGeometry(s, h, A.distanceTo(B)), m); o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), B.clone().sub(A).normalize()); return o; };
-      const panels = Math.max(4, Math.round(S / 2));
+      const Y = p.h || f.height, S = p.span, L = p.length, nb = Math.max(1, Math.round(L / p.bay)), bay = L / nb, rise = p.rise, RH = 0.4;
+      const top = z => Y + RH / 2 + rise * (1 - Math.abs(z) / (S / 2));
+      const member = (n, a, b, w, h, m = K.steelCol) => { const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), o = add(g, n, boxGeo(w, h, A.distanceTo(B)), m); o.position.copy(A).add(B).multiplyScalar(0.5); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), B.clone().sub(A).normalize()); return o; };
       for (let i = 0; i <= nb; i++) {
         const x = -L / 2 + i * bay;
-        member('Roof_Truss_Bottom', [x, Y, -S / 2], [x, Y, S / 2], 0.14, K.steelCol, 0.16);
-        member('Roof_Truss_Top', [x, top(-S / 2), -S / 2], [x, top(0), 0], 0.16, K.steelCol, 0.2); member('Roof_Truss_Top', [x, top(0), 0], [x, top(S / 2), S / 2], 0.16, K.steelCol, 0.2);
-        for (let k = 0; k <= panels; k++) { const z = -S / 2 + k * S / panels; member('Roof_Truss_Post', [x, Y, z], [x, top(z), z], 0.07); if (k < panels) { const z2 = z + S / panels; member('Roof_Truss_Diag', [x, k < panels / 2 ? Y : top(z), z], [x, k < panels / 2 ? top(z2) : Y, z2], 0.06); } }
+        for (const s of [-1, 1]) {
+          member('Roof_Rafter', [x, top(s * S / 2), s * S / 2], [x, top(0), 0], 0.18, RH);              // I-section rafter (web drawn as one solid)
+          box(g, 'Roof_Haunch', 0.2, 0.5, 0.6, K.steelCol, x, Y + 0.05, s * (S / 2 - 0.3));               // haunch on the column top
+          member('Roof_Knee_Brace', [x, Y - 1.4, s * (S / 2 - 0.05)], [x, top(s * (S / 2 - 1.6)) - RH / 2, s * (S / 2 - 1.6)], 0.08, 0.08);
+        }
       }
-      const np = Math.max(4, Math.round(S / 3));
-      for (let k = 0; k <= np; k++) { const z = -S / 2 + k * S / np; member('Roof_Purlin', [-L / 2, top(z) + 0.12, z], [L / 2, top(z) + 0.12, z], 0.08, K.steelLight, 0.16); }
+      for (const s of [-1, 1]) member('Roof_Eave_Beam', [-L / 2, Y + 0.05, s * (S / 2 - 0.1)], [L / 2, Y + 0.05, s * (S / 2 - 0.1)], 0.18, 0.3);   // ties the column tops
+      member('Roof_Ridge_Beam', [-L / 2, top(0) + 0.05, 0], [L / 2, top(0) + 0.05, 0], 0.16, 0.26);
+      const np = Math.max(2, Math.round(S / 2 / 3));                                                       // purlins ~3 m apart each side
+      for (const s of [-1, 1]) for (let k = 1; k < np; k++) { const z = s * k * S / 2 / np; member('Roof_Purlin', [-L / 2, top(z) + RH / 2 + 0.05, z], [L / 2, top(z) + RH / 2 + 0.05, z], 0.06, 0.12, K.steelLight); }
       const a = Math.atan2(rise, S / 2), len = Math.hypot(rise, S / 2);
-      for (const s of [-1, 1]) for (const [f0, f1, sky] of [[0, 0.45, false], [0.45, 0.6, true], [0.6, 1, false]]) {
-        if (!sky && !p.sheet) continue;
-        const u = (f0 + f1) / 2, l = (f1 - f0) * len, o = plane(g, sky ? 'Roof_Skylight' : 'Roof_Sheet', L, l, sky ? K.skylight : K.roof, 0, top(0) - u * rise + 0.21, s * u * S / 2, sky ? 0 : 0.3, 0, -Math.PI / 2);
-        o.rotation.set(-Math.PI / 2 + s * a, 0, 0); if (!sky) tiled(o.geometry, 1, 1);
+      for (const s of [-1, 1]) for (const [f0, f1, sky] of [[0, 0.42, false], [0.42, 0.58, true], [0.58, 1, false]]) {
+        const u = (f0 + f1) / 2, l = (f1 - f0) * len, o = plane(g, sky ? 'Roof_Skylight' : 'Roof_Sheet', L, l, sky ? K.skylight : K.roof, 0, top(0) - u * rise + RH / 2 + 0.14, s * u * S / 2, sky ? 0 : 0.3, 0, 0);
+        o.rotation.set(-Math.PI / 2 + s * a, 0, 0); o.visible = sky || p.sheet;
       }
       for (let i = 0; i < nb; i++) for (const z of [-S / 4, S / 4]) { const x = -L / 2 + (i + 0.5) * bay; add(g, 'Roof_Lamp', cylGeo(0.18, 0.25, 0.12, 24), K.frameDark, x, Y - 0.4, z); add(g, 'Roof_Lamp_LED', cylGeo(0.22, 0.22, 0.01, 24), K.lamp, x, Y - 0.465, z); add(g, 'Roof_Lamp_Cable', cylGeo(0.006, 0.006, top(z) - Y - 0.3, 4), K.black, x, (top(z) + Y) / 2 - 0.15, z); }
     },
