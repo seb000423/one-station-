@@ -56,7 +56,7 @@
       <button type="button" class="sp-play" aria-label="재생">${ICON.play}</button>
       <div class="sp-mid">
         <div class="sp-top"><span class="sp-eye"></span><span class="sp-time">--:-- / --:--</span></div>
-        <div class="sp-row"><div class="sp-title">대기</div><select class="sp-step" aria-label="공정 단계 선택"></select></div>
+        <div class="sp-row"><div class="sp-title">대기</div><select class="sp-step none" aria-label="공정 단계 선택" hidden></select></div>
         <div class="sp-bar off" role="slider" aria-label="진행 위치" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><i style="width:0"></i><b style="left:0"></b></div>
       </div>
       <button type="button" class="sp-speed" title="배속">×${speed}</button>
@@ -92,6 +92,7 @@
         sel.innerHTML = steps.length ? steps.map((n, i) => `<option value="${i}">${i + 1}. ${esc(n)}</option>`).join('') : '<option value="">단계 정보 없음</option>';
         sel.disabled = !steps.length || !opts.onStep;
         sel.classList.toggle('none', !steps.length);
+        sel.hidden = !steps.length; // nothing to pick on a scene without cycle steps
       }
       const si = s.step >= 0 && s.step < steps.length ? String(s.step) : '';
       if (document.activeElement !== sel && sel.value !== si) { if (si === '') sel.selectedIndex = -1; else sel.value = si; }

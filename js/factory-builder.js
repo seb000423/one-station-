@@ -726,7 +726,7 @@
   #fbPanel .pal{display:grid;grid-template-columns:1fr 1fr;gap:4px}
   #fbPanel .pal button{display:flex;align-items:center;gap:6px;padding:7px 8px;text-align:left;cursor:grab;line-height:1.4}
   #fbPanel .pal button svg{flex:none;color:var(--accent)}
-  #fbPanel .pal.models{display:block;max-height:52vh;overflow-y:auto;padding-right:2px}
+  #fbPanel .pal.models{display:block;flex:0 0 auto;max-height:min(52vh,560px);overflow-y:auto;padding-right:2px;scroll-padding-top:4px} /* never squeezed by the folds below; they shrink instead */
   #fbPanel .pal .find{box-sizing:border-box;width:100%;height:26px;margin-bottom:6px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:0 8px;border-radius:3px;font:inherit;font-size:12px}
   #fbPanel .pal .mgrp h4{margin:6px 0 4px;font-family:var(--mono);font-size:10px;font-weight:400;letter-spacing:.14em;color:var(--dim)}
   #fbPanel .pal .tiles{display:grid;grid-template-columns:1fr 1fr;gap:4px}
@@ -894,6 +894,7 @@
       const pal = panel.querySelector('.pal'), items = TABS.find(t => t[0] === k)[2];
       pal.classList.add('models'); // every tab is a tile grid now
       pal.innerHTML = paletteTiles(tab); void items; // every tab: sections of tiles (see paletteTiles)
+      pal.scrollTop = 0; // a category opens at its first tile (the grid kept the previous scroll offset)
       const find = pal.querySelector('.find'), allG = pal.querySelector('.mgrp.all'), rest = [...pal.querySelectorAll('.cats, .pcrumb, .mgrp.cur')];
       if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); allG.hidden = !q; rest.forEach(e => { e.hidden = !!q; }); allG.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); };
       pal.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { palCat[tab] = b.dataset.cat; showTab(tab); });
@@ -1387,7 +1388,7 @@
       cameraTick(dt);
       { // roof sheets show from inside / below the eave, and hide when the camera is above the roof (to look in)
         const cy = S().camera.position.y, under = cy < doc.factory.height + 0.5;
-        if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') { g.visible = !roofsHidden; g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = under && (o.params || {}).sheet !== false; }); } } } // also catches rebuilt roofs
+        if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') { g.visible = !roofsHidden && under; g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = (o.params || {}).sheet !== false; }); } } } // from above the eave the whole roof (sheets and steel) steps aside so racks and aisles read; also catches rebuilt roofs
       }
       requestAnimationFrame(tick);
     };
