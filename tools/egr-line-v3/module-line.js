@@ -17,12 +17,12 @@ export const MODULE_T = 400, MODULE_P = 50;
 const NJIG = 11, JPOS = 7, DJ = MODULE_T / 33;   // jig loop: 11 jigs, 7 work positions on the spine, one index every 12.12 s (33 per cycle = 3 laps)
 // stations along the spine (x); the spine runs at z = Z0
 const S = { lane: 1.1, merge: 2.1, prof: 2.7, disp: 3.5, cam: 4.1, scale: 4.7, ngA: 5.2, aEnd: 5.5,
-  turn: 6.0, tank: 6.8, press: [7.6, 8.3], vis: 8.9, bstop: 9.5, bcab: [10.4, Z0 - 0.78], bback: 10.25, bng: 10.7, bEnd: 11.25,
+  turn: 6.0, tank: 6.8, press: [7.6, 8.3], vis: 8.9, bstop: 9.6, bcab: [10.4, Z0 - 0.78], bback: 10.1, bng: 10.7, bEnd: 11.25,
   cin: 11.45, jig0: 11.75, cEnd: 16.3, cout: 15.0,
   cf: 16.95, paste: 18.05, check: 19.2, dstop: 20.35, dEnd: 20.6,
-  ein: 21.45, eturn: 22.05, evis: 22.65, estop: 23.2, ecab: [24.1, Z0 - 0.78], eback: 23.95, mark: 25.05, nut: 25.85, okng: 26.55, lift: 27.2, eEnd: 27.5 };
+  ein: 21.45, eturn: 22.05, evis: 22.65, estop: 23.3, ecab: [24.1, Z0 - 0.78], eback: 23.8, mark: 25.05, nut: 25.85, okng: 26.55, lift: 27.2, eEnd: 27.5 };
 const JX = q => (q < JPOS ? S.jig0 + 0.45 * q : S.jig0 + 0.45 * (JPOS - 1) - 0.75 * (q - JPOS + 1)), JZ = q => (q < JPOS ? Z0 : Z0 + 0.7);
-const RBASE = { A: [1.55, Z0], B: [9.85, Z0 - 0.45], E: [23.55, Z0 - 0.45] }, RH = 0.9;
+const RBASE = { A: [1.55, Z0], B: [9.85, Z0 - 0.6], E: [23.55, Z0 - 0.6] }, RH = 0.9;   // B / E pedestals 0.14 m clear of the spine frame
 const HOME = { A: li => [RBASE.A[0], RH + 0.35, Z0 + (li ? 0.15 : -0.15)], B: [RBASE.B[0] - 0.4, RH + 0.45, RBASE.B[1] - 0.25], E: [RBASE.E[0] - 0.4, RH + 0.45, RBASE.E[1] - 0.25] };   // B / E rest beside the base, on the spine side
 
 export function egrModuleLine() {
@@ -41,7 +41,7 @@ export function egrModuleLine() {
   // ---------------------------------------------------------------- generic pieces
   const nameplate = (text, x, y, z, ry = 0, w = 0.5) => { box(root, m.black, w + 0.02, w / 2 + 0.02, 0.012, x, y, z, [0, ry, 0]); plane(root, plateMat(text), w, w / 2, x + Math.sin(ry) * 0.008, y, z + Math.cos(ry) * 0.008, [0, ry, 0]); };
   const rollers = (x0, x1, z = Z0, w = 0.5) => { // roller section on legs, flow along +X, top at TOP
-    const L = x1 - x0, c = (x0 + x1) / 2; for (const sz of [-1, 1]) { box(root, m.alu, L, 0.1, 0.035, c, TOP - 0.06, z + sz * (w / 2 + 0.03)); box(root, m.aluDark, L, 0.008, 0.045, c, TOP + 0.014, z + sz * (w / 2 + 0.03)); }
+    fp('컨베이어 ' + x0.toFixed(1), x0, x1, z - w / 2 - 0.05, z + w / 2 + 0.05); const L = x1 - x0, c = (x0 + x1) / 2; for (const sz of [-1, 1]) { box(root, m.alu, L, 0.1, 0.035, c, TOP - 0.06, z + sz * (w / 2 + 0.03)); box(root, m.aluDark, L, 0.008, 0.045, c, TOP + 0.014, z + sz * (w / 2 + 0.03)); }
     for (let k = 0, n = Math.round(L / 0.1); k < n; k++) cyl(root, m.steel, 0.022, w, x0 + (k + 0.5) * L / n, TOP - 0.025, z, 'z', 10);
     for (let k = 0, n = Math.max(1, Math.ceil(L / 1.4)); k <= n; k++) { const x = x0 + 0.1 + (L - 0.2) * k / n; for (const sz of [-1, 1]) { prof(root, [x, 0.06, z + sz * (w / 2 + 0.03)], [x, TOP - 0.11, z + sz * (w / 2 + 0.03)], 0.04); foot(root, x, z + sz * (w / 2 + 0.03)); } prof(root, [x, 0.3, z - w / 2 - 0.03], [x, 0.3, z + w / 2 + 0.03], 0.04); } };
   const stopLift = (name, x, z = Z0) => { // pneumatic stop blade past the station and a lift-and-locate plate (node) between the rollers
@@ -82,7 +82,7 @@ export function egrModuleLine() {
     for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) prof(root, [x, 0.06, z], [x, h, z], 0.06, m.frameDark);
     box(root, blue, w + 0.06, 0.12, d + 0.06, cx, h - 0.06, cz); box(root, m.sheet, w + 0.06, 0.4, d + 0.06, cx, 0.2, cz);
     for (const [side, px, pz, r, L] of [['S', cx, z0, 0, w], ['N', cx, z1, 0, w], ['W', x0, cz, Math.PI / 2, d], ['E', x1, cz, Math.PI / 2, d]]) if (side !== openSide) plane(root, glass, L - 0.08, h - 0.55, px, (h + 0.4) / 2 - 0.05, pz, [0, r, 0]);
-    nameplate(text, cx, h - 0.06, z0 - 0.04, 0, 0.6); fp(text, x0, x1, z0, z1); };
+    nameplate(text, cx, h + 0.1, cz, 0, 0.44); fp(text, x0, x1, z0, z1); };
   // part looks (origin at the bottom centre, body centre at YC; long axis X): brazed core → paste → end tanks → laser seams → flanges → pipes → mark
   const lookCore = n => { box(n, brazed, 0.18, 0.07, 0.09, 0, YC, 0); for (let x = -0.075; x <= 0.0751; x += 0.025) box(n, brazed, 0.004, 0.074, 0.094, x, YC, 0); };
   const lookPaste = n => { for (const sx of [-1, 1]) for (const dz of [-0.03, 0, 0.03]) box(n, m.paste, 0.004, 0.072, 0.012, sx * 0.093, YC, dz); };
@@ -99,22 +99,22 @@ export function egrModuleLine() {
   fp('A 베이스', -0.4, S.aEnd, Z0 - 1.6, Z0 + 1.6);
   for (const [li, z] of LANES.entries()) {
     const sz = li ? 1 : -1;
-    totes(-0.75, z, 4); rollers(0.0, S.lane + 0.1, z); stopLift('A_LaneLift_' + li, S.lane - 0.05, z);
+    totes(-0.75, z, 4); rollers(0.0, S.lane + 0.25, z); stopLift('A_LaneLift_' + li, S.lane - 0.05, z);
     gate(0.55, z, 0.72, 1.6); for (const s2 of [-1, 1]) { const p = G('A_Center_' + li + (s2 < 0 ? '_L' : '_R'), root); box(p, m.yellow, 0.14, 0.05, 0.03, 0.55, TOP + 0.04, z + s2 * 0.2); cyl(root, m.alu, 0.012, 0.1, 0.55, TOP + 0.04, z + s2 * 0.27, 'z', 8); }   // centring pushers
-    box(root, m.black, 0.05, 0.05, 0.06, 0.55, 1.42, z); cyl(root, m.steel, 0.004, 0.5, 0.55, 1.15, z, 'y', 6);   // direction sensor looking down
+    box(root, m.black, 0.06, 0.1, 0.06, 0.55, 1.52, z); plane(root, m.red, 0.03, 0.03, 0.55, 1.469, z, [Math.PI / 2, 0, 0]);   // direction sensor head under the gate beam, looking down
     camera(0.85, 1.5, z, 'A_FinCam_' + li, TOP + 0.02); box(root, m.black, 0.06, 0.06, 0.1, 0.95, TOP + 0.15, z + sz * 0.3); box(root, m.red, 0.004, 0.02, 0.06, 0.92, TOP + 0.15, z + sz * 0.3);   // fin vision camera, barcode reader
     nameplate(li ? '투입 레인 2' : '투입 레인 1', 0.3, 1.62, z + sz * 0.36, sz > 0 ? 0 : Math.PI, 0.4);
   }
   { const R = robot('A', ...RBASE.A); if (R) { const g = gripper(R.tool, 'A_Grip_Part'); lookCore(G('A_Grip_Core', g)); } fp('핸들링 로봇 A', RBASE.A[0] - 0.25, RBASE.A[0] + 0.25, Z0 - 0.25, Z0 + 0.25); }
   // profiler gate: laser line head on a slide over the lift
-  stopLift('A_ProfLift', S.prof); gate(S.prof, Z0, 0.8, 1.75); { const h = slide('A_ProfHead', S.prof, Z0, 1.75); box(h, m.black, 0.12, 0.08, 0.1, 0, -0.06, 0); const pl = G('A_Profile', h); plane(pl, laserM, 0.16, 0.7, 0, -0.45, 0, [0, Math.PI / 2, 0]); } nameplate('프로파일 검사', S.prof, 1.82, Z0 - 0.44, 0, 0.5); fp('프로파일 검사', S.prof - 0.15, S.prof + 0.15, Z0 - 0.45, Z0 + 0.45);
+  stopLift('A_ProfLift', S.prof); gate(S.prof, Z0, 0.8, 1.75); { const h = slide('A_ProfHead', S.prof, Z0, 1.75); box(h, m.black, 0.12, 0.08, 0.1, 0, -0.06, 0); const pl = G('A_Profile', h); plane(pl, laserM, 0.16, 0.7, 0, -0.45, 0, [0, Math.PI / 2, 0]); } nameplate('프로파일 검사', S.prof, 1.89, Z0 - 0.05, 0, 0.4); fp('프로파일 검사', S.prof - 0.15, S.prof + 0.15, Z0 - 0.45, Z0 + 0.45);
   // dispensing station: portal with an XZ-moving needle head, paste pump on a stand behind, HMI beside
   stopLift('A_DispLift', S.disp); gate(S.disp, Z0, 0.9, 1.85); { const dx = G('A_Disp_X', root, S.disp, 0, Z0), dz = G('A_Disp_Z', dx), dy = G('A_Disp_Y', dz); box(dx, m.aluDark, 0.14, 0.1, 0.9, 0, 1.85, 0); box(dz, m.aluDark, 0.12, 0.1, 0.12, 0, 1.79, 0); box(dy, m.alu, 0.05, 0.5, 0.05, 0, 1.5, 0); box(dy, m.yellow, 0.1, 0.16, 0.1, 0, 1.32, 0); cyl(dy, m.black, 0.03, 0.1, 0, 1.19, 0, 'y', 12); cyl(dy, m.steel, 0.004, 0.06, 0, 1.11, 0, 'y', 6);
     box(root, m.sheet, 0.5, 0.8, 0.5, S.disp, 0.4, Z0 + 1.05); cyl(root, m.stainless, 0.17, 0.5, S.disp, 1.05, Z0 + 1.05, 'y', 24); box(root, m.black, 0.12, 0.08, 0.12, S.disp, 1.34, Z0 + 1.05); cyl(root, m.black, 0.012, 0.7, S.disp, 1.7, Z0 + 0.72, 'z', 8); nameplate('페이스트 공급', S.disp, 0.55, Z0 + 0.79, 0, 0.4); fp('페이스트 공급', S.disp - 0.25, S.disp + 0.25, Z0 + 0.8, Z0 + 1.3); }
-  nameplate('페이스트 도포', S.disp, 1.92, Z0 - 0.49, 0, 0.5); fp('페이스트 도포', S.disp - 0.15, S.disp + 0.15, Z0 - 0.5, Z0 + 0.5);
-  stopLift('A_CamLift', S.cam); gate(S.cam, Z0, 0.8, 1.7); camera(S.cam, 1.5, Z0, 'A_NozCam'); nameplate('노즐 비전', S.cam, 1.77, Z0 - 0.44, 0, 0.4); fp('노즐 비전', S.cam - 0.15, S.cam + 0.15, Z0 - 0.45, Z0 + 0.45);
+  nameplate('페이스트 도포', S.disp, 1.99, Z0 - 0.05, 0, 0.4); fp('페이스트 도포', S.disp - 0.15, S.disp + 0.15, Z0 - 0.5, Z0 + 0.5);
+  stopLift('A_CamLift', S.cam); gate(S.cam, Z0, 0.8, 1.7); camera(S.cam, 1.5, Z0, 'A_NozCam'); nameplate('노즐 비전', S.cam, 1.84, Z0 - 0.05, 0, 0.36); fp('노즐 비전', S.cam - 0.15, S.cam + 0.15, Z0 - 0.45, Z0 + 0.45);
   { stopLift('A_ScaleLift', S.scale); box(root, m.black, 0.36, 0.1, 0.5, S.scale, TOP - 0.2, Z0); box(root, m.display, 0.14, 0.04, 0.004, S.scale, TOP - 0.18, Z0 - 0.252); nameplate('도포 중량 검사', S.scale, TOP - 0.3, Z0 - 0.26, 0, 0.32); }   // scale under the lift plate
-  { pusher('A_NG_Pusher', S.ngA, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.ngA - 0.2, S.ngA + 1.0, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.ngA + 0.78, TOP + 0.03, Z0 + 0.85); nameplate('NG 배출', S.ngA + 0.4, TOP + 0.25, Z0 + 1.1, 0, 0.36); fp('A NG 컨베이어', S.ngA - 0.2, S.ngA + 1.0, Z0 + 0.6, Z0 + 1.1); }
+  { pusher('A_NG_Pusher', S.ngA, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.ngA - 0.2, S.ngA + 1.0, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.ngA + 0.78, TOP + 0.03, Z0 + 0.85); nameplate('NG 배출', S.ngA + 0.4, TOP + 0.25, Z0 + 1.1, 0, 0.36); }
   cabinetBox('A 제어반', 0.6, Z0 - 1.95); cabinetBox('도포 제어', 1.6, Z0 - 1.95); monitor('A_HMI', 3.0, Z0 - 1.4, 0.4); tower(S.aEnd - 0.2, Z0 - 1.5);
   opWorker(root, 'Op_Load', -0.3, Z0 - 1.3, 0);
 
@@ -130,15 +130,15 @@ export function egrModuleLine() {
   for (const [k, px] of S.press.entries()) { // tank presses: C-frame beside the spine, horizontal ram, hydraulic unit behind
     stopLift('B_PressLift_' + k, px); const sz = k ? 1 : -1, pz = Z0 + sz * 0.75; box(root, blue, 0.4, 1.3, 0.3, px, 0.65, pz + sz * 0.15); box(root, blue, 0.4, 0.22, 0.75, px, 1.17, pz - sz * 0.15); box(root, m.sheet, 0.42, 0.3, 0.3, px, 1.45, pz + sz * 0.15);
     const ram = G('B_Press_' + k, root, px, TOP + LIFT + YC, pz - sz * 0.42); cyl(ram, m.steel, 0.03, 0.3, 0, 0, 0, 'z', 12); box(ram, m.aluDark, 0.12, 0.12, 0.06, 0, 0, -sz * 0.17);
-    nameplate('탱크 프레스 ' + (k + 1), px, 1.35, pz - sz * 0.53 + (sz < 0 ? 0.02 : -0.02), sz < 0 ? 0 : Math.PI, 0.4); fp('탱크 프레스 ' + (k + 1), px - 0.22, px + 0.22, Math.min(pz - sz * 0.53, pz + sz * 0.3), Math.max(pz - sz * 0.53, pz + sz * 0.3)); }
-  stopLift('B_VisLift', S.vis); gate(S.vis, Z0, 0.8, 1.7); camera(S.vis, 1.5, Z0, 'B_PressCam'); nameplate('프레스 비전', S.vis, 1.77, Z0 - 0.44, 0, 0.4); fp('프레스 비전', S.vis - 0.15, S.vis + 0.15, Z0 - 0.45, Z0 + 0.45);
+    nameplate('탱크 프레스 ' + (k + 1), px, 1.35, pz - sz * 0.53 + (sz < 0 ? 0.02 : -0.02), sz < 0 ? 0 : Math.PI, 0.4); fp('탱크 프레스 ' + (k + 1), px - 0.22, px + 0.22, Math.min(pz, pz + sz * 0.3), Math.max(pz, pz + sz * 0.3)); }   // the floor column; the arm and ram reach over the spine
+  stopLift('B_VisLift', S.vis); gate(S.vis, Z0, 0.8, 1.7); camera(S.vis, 1.5, Z0, 'B_PressCam'); nameplate('프레스 비전', S.vis, 1.84, Z0 - 0.05, 0, 0.36); fp('프레스 비전', S.vis - 0.15, S.vis + 0.15, Z0 - 0.45, Z0 + 0.45);
   { stopLift('B_RobotLift', S.bstop); const R = robot('B', ...RBASE.B); if (R) { const g = gripper(R.tool, 'B_Grip_Part', Math.PI / 2); lookCore(G('B_Grip_Core', g)); lookPaste(G('B_Grip_Paste', g)); lookTanks(G('B_Grip_Tanks', g)); lookSeam(G('B_Grip_Seam', g)); } fp('핸들링 로봇 B', RBASE.B[0] - 0.25, RBASE.B[0] + 0.25, RBASE.B[1] - 0.25, RBASE.B[1] + 0.25);
     const [cx, cz] = S.bcab; cabin('스캔 레이저 용접', cx - 0.3, cx + 0.3, cz - 0.45, cz + 0.35, 2.1, 'N');   // laser cabin, open towards the robot
     box(root, m.aluDark, 0.3, 0.03, 0.3, cx, 0.835, cz); for (const sx of [-1, 1]) prof(root, [cx + sx * 0.12, 0.4, cz], [cx + sx * 0.12, 0.82, cz], 0.04); box(root, clampM, 0.12, 0.012, 0.24, cx, 0.856, cz);   // fixture (top 0.862)
     const sh = slide('B_LaserHead', cx, cz, 2.0, 0.4); box(sh, m.black, 0.2, 0.22, 0.2, 0, -0.12, 0); cyl(sh, m.steel, 0.04, 0.06, 0, -0.26, 0, 'y', 14); const bm = G('B_Laser_Beam', sh); cyl(bm, laserM, 0.004, 0.6, 0, -0.6, 0, 'y', 6);
     box(root, m.sheet, 0.5, 1.2, 0.5, cx + 0.7, 0.6, cz); box(root, m.black, 0.46, 0.06, 0.46, cx + 0.7, 1.23, cz); nameplate('레이저 소스', cx + 0.7, 0.9, cz - 0.253, 0, 0.36); fp('레이저 소스', cx + 0.45, cx + 0.95, cz - 0.25, cz + 0.25);
     stopLift('B_BackLift', S.bback); }
-  { pusher('B_NG_Pusher', S.bng, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.bng - 0.2, S.bng + 0.6, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.bng + 0.38, TOP + 0.03, Z0 + 0.85); nameplate('NG 배출', S.bng + 0.2, TOP + 0.25, Z0 + 1.1, 0, 0.36); fp('B NG 컨베이어', S.bng - 0.2, S.bng + 0.6, Z0 + 0.6, Z0 + 1.1); }
+  { pusher('B_NG_Pusher', S.bng, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.bng - 0.2, S.bng + 0.6, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.bng + 0.38, TOP + 0.03, Z0 + 0.85); nameplate('NG 배출', S.bng + 0.2, TOP + 0.25, Z0 + 1.1, 0, 0.36); }
   cabinetBox('B 제어반', 6.4, Z0 - 1.95); cabinetBox('프레스 제어', 7.6, Z0 - 1.95); monitor('B_HMI', 8.8, Z0 - 1.4, 0.4); tower(S.bEnd - 0.2, Z0 - 1.5);
 
   // ================================================================ C. tack welding (x 11.25 … 16.3): chain-driven jig loop on the spine, flange feeders, four MIG robots, manual MIG
@@ -175,18 +175,18 @@ export function egrModuleLine() {
     const ok = G('D_CF_OK', root); cyl(ok, m.lampG, 0.032, 0.06, S.cf - 0.2, 1.4, Z0 + 0.6, 'y', 14); prof(root, [S.cf - 0.2, 0.9, Z0 + 0.6], [S.cf - 0.2, 1.36, Z0 + 0.6], 0.03, m.frameDark); }
   { stopLift('D_PasteLift', S.paste); gate(S.paste, Z0, 0.9, 1.85); const gx = G('D_Disp_X', root, S.paste, 0, Z0), gz = G('D_Disp_Z', gx), gy = G('D_Disp_Y', gz); box(gx, m.aluDark, 0.14, 0.1, 0.9, 0, 1.85, 0); box(gz, m.aluDark, 0.12, 0.1, 0.12, 0, 1.79, 0); box(gy, m.alu, 0.05, 0.5, 0.05, 0, 1.5, 0); box(gy, m.yellow, 0.1, 0.16, 0.1, 0, 1.32, 0); cyl(gy, m.black, 0.03, 0.1, 0, 1.19, 0, 'y', 12); cyl(gy, m.steel, 0.004, 0.06, 0, 1.11, 0, 'y', 6);
     box(root, m.sheet, 1.4, 0.8, 0.5, S.paste, 0.4, Z0 + 1.15); for (let k = 0; k < 4; k++) cyl(root, magenta, 0.12, 0.5, S.paste - 0.5 + k * 0.34, 1.06, Z0 + 1.15, 'y', 20); cyl(root, m.black, 0.012, 0.7, S.paste, 1.75, Z0 + 0.8, 'z', 8);
-    nameplate('외부 페이스트 도포', S.paste, 1.92, Z0 - 0.49, 0, 0.5); nameplate('페이스트 탱크 ×4', S.paste, 0.55, Z0 + 0.89, 0, 0.4); fp('페이스트 탱크', S.paste - 0.7, S.paste + 0.7, Z0 + 0.9, Z0 + 1.4); fp('외부 도포', S.paste - 0.15, S.paste + 0.15, Z0 - 0.5, Z0 + 0.5); }
+    nameplate('외부 페이스트 도포', S.paste, 1.99, Z0 - 0.05, 0, 0.44); nameplate('페이스트 탱크 ×4', S.paste, 0.55, Z0 + 0.89, 0, 0.4); fp('페이스트 탱크', S.paste - 0.7, S.paste + 0.7, Z0 + 0.9, Z0 + 1.4); fp('외부 도포', S.paste - 0.15, S.paste + 0.15, Z0 - 0.5, Z0 + 0.5); }
   { stopLift('D_CheckLift', S.check); for (const sz of [-1, 1]) prof(root, [S.check, 0.06, Z0 + sz * 0.42], [S.check, 1.7, Z0 + sz * 0.42], 0.04); box(root, m.aluDark, 0.08, 0.04, 0.9, S.check, 1.72, Z0); box(root, m.light, 0.06, 0.012, 0.7, S.check, 1.695, Z0);   // inspection lamp over the stop
     cyl(root, m.frameDark, 0.015, 0.5, S.check + 0.3, 1.3, Z0 - 0.42, 'y', 8); cyl(root, glass, 0.09, 0.012, S.check + 0.3, 1.42, Z0 - 0.3, 'z', 20); cyl(root, m.black, 0.1, 0.01, S.check + 0.3, 1.42, Z0 - 0.31, 'z', 20);   // magnifier
     box(root, m.aluDark, 0.5, 0.03, 0.35, S.check, 0.9, Z0 - 0.95); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [S.check + sx * 0.22, 0.06, Z0 - 0.95 + sz * 0.14], [S.check + sx * 0.22, 0.885, Z0 - 0.95 + sz * 0.14], 0.04); box(root, m.red, 0.3, 0.1, 0.25, S.check, 0.95, Z0 - 0.95); box(root, m.ngLabel, 0.2, 0.08, 0.004, S.check, 1.04, Z0 - 1.07);   // NG tray
-    nameplate('수동 검사', S.check, 1.78, Z0 - 0.46, 0, 0.4); monitor('D_Monitor', S.check - 0.7, Z0 - 0.95, -0.6); fp('수동 검사', S.check - 0.3, S.check + 0.35, Z0 - 1.15, Z0 + 0.45); }
+    nameplate('수동 검사', S.check, 1.86, Z0 - 0.05, 0, 0.36); monitor('D_Monitor', S.check - 0.7, Z0 - 0.95, -0.6); fp('수동 검사', S.check - 0.3, S.check + 0.35, Z0 - 1.15, Z0 + 0.45); }
   stopLift('D_UnloadLift', S.dstop); box(root, m.yellow, 0.025, 0.05, 0.4, S.dEnd - 0.03, TOP + 0.03, Z0);
   cabinetBox('D 제어반', S.cEnd + 0.6, Z0 - 1.95); tower(S.dEnd - 0.2, Z0 - 1.5);
 
   // ================================================================ E. leak test (x 21.45 … 27.5)
   fp('E 베이스', S.ein - 0.3, S.eEnd + 0.4, Z0 - 1.6, Z0 + 1.6);
   { stopLift('E_Turntable', S.eturn); cyl(root, m.frameDark, 0.16, 0.4, S.eturn, 0.2, Z0, 'y', 16); box(root, m.black, 0.06, 0.06, 0.1, S.eturn - 0.35, TOP + 0.3, Z0 - 0.4); box(root, m.red, 0.004, 0.02, 0.06, S.eturn - 0.32, TOP + 0.3, Z0 - 0.4); prof(root, [S.eturn - 0.35, 0.06, Z0 - 0.42], [S.eturn - 0.35, TOP + 0.35, Z0 - 0.42], 0.03); nameplate('바코드 · 턴테이블', S.eturn, 0.42, Z0 - 0.17, 0, 0.3); }
-  stopLift('E_VisLift', S.evis); gate(S.evis, Z0, 0.8, 1.7); camera(S.evis, 1.5, Z0, 'E_VisCam'); nameplate('외관 검사', S.evis, 1.77, Z0 - 0.44, 0, 0.4); fp('외관 검사', S.evis - 0.15, S.evis + 0.15, Z0 - 0.45, Z0 + 0.45);
+  stopLift('E_VisLift', S.evis); gate(S.evis, Z0, 0.8, 1.7); camera(S.evis, 1.5, Z0, 'E_VisCam'); nameplate('외관 검사', S.evis, 1.84, Z0 - 0.05, 0, 0.36); fp('외관 검사', S.evis - 0.15, S.evis + 0.15, Z0 - 0.45, Z0 + 0.45);
   { stopLift('E_RobotLift', S.estop); const R = robot('E', ...RBASE.E); if (R) { const g = gripper(R.tool, 'E_Grip_Part', Math.PI / 2); lookCore(G('E_Grip_Core', g)); lookPaste(G('E_Grip_Paste', g)); lookTanks(G('E_Grip_Tanks', g)); lookSeam(G('E_Grip_Seam', g)); for (const sx of [-1, 1]) lookFlange(G('E_Grip_Flange' + (sx < 0 ? 'L' : 'R'), g), sx); lookPipes(G('E_Grip_Pipes', g)); } fp('핸들링 로봇 E', RBASE.E[0] - 0.25, RBASE.E[0] + 0.25, RBASE.E[1] - 0.25, RBASE.E[1] + 0.25);
     const [cx, cz] = S.ecab; cabin('리크 테스터', cx - 0.3, cx + 0.3, cz - 0.45, cz + 0.35, 2.0, 'N');
     box(root, m.aluDark, 0.3, 0.03, 0.3, cx, 0.835, cz); for (const sx of [-1, 1]) prof(root, [cx + sx * 0.12, 0.4, cz], [cx + sx * 0.12, 0.82, cz], 0.04); box(root, clampM, 0.12, 0.012, 0.24, cx, 0.856, cz);
@@ -198,8 +198,8 @@ export function egrModuleLine() {
   { stopLift('E_NutLift', S.nut); const nr = balancer('E_Nutrunner', S.nut + 0.5, Z0 + 0.75, 1.5, Math.PI * 1.25); cyl(nr, m.black, 0.02, 0.4, 0, 0, 0, 'y', 10); cyl(nr, m.yellow, 0.03, 0.08, 0, 0.1, 0, 'y', 10); cyl(nr, m.steel, 0.006, 0.08, 0, -0.24, 0, 'y', 6);
     box(root, m.aluDark, 0.4, 0.03, 0.3, S.nut, 0.9, Z0 - 0.7); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [S.nut + sx * 0.17, 0.06, Z0 - 0.7 + sz * 0.12], [S.nut + sx * 0.17, 0.885, Z0 - 0.7 + sz * 0.12], 0.04); for (let k = 0; k < 3; k++) cyl(root, m.rubber, 0.04, 0.004, S.nut - 0.1 + k * 0.1, 0.918, Z0 - 0.7, 'y', 16); cyl(root, m.sheet, 0.12, 0.3, S.nut + 0.25, 1.05, Z0 - 0.7, 'y', 16);   // gasket tray, bolt feeder
     nameplate('가스켓 · 볼트 체결', S.nut, 0.9, Z0 - 0.86, 0, 0.4); fp('가스켓 · 볼트', S.nut - 0.22, S.nut + 0.4, Z0 - 0.9, Z0 - 0.5); }
-  { stopLift('E_OKNGLift', S.okng); gate(S.okng, Z0, 0.8, 1.6); const ok = G('E_OKNG_OK', root); cyl(ok, m.lampG, 0.032, 0.06, S.okng, 1.65, Z0 - 0.4, 'y', 14); const ng = G('E_OKNG_NG', root); cyl(ng, m.lampR, 0.032, 0.06, S.okng, 1.65, Z0 + 0.4, 'y', 14); nameplate('OK / NG 분기', S.okng, 1.67, Z0 - 0.44, 0, 0.4);
-    pusher('E_NG_Pusher', S.okng, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.okng - 0.2, S.okng + 1.0, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.okng + 0.78, TOP + 0.03, Z0 + 0.85); nameplate('NG 보관', S.okng + 0.4, TOP + 0.25, Z0 + 1.1, 0, 0.36); fp('E NG 컨베이어', S.okng - 0.2, S.okng + 1.0, Z0 + 0.6, Z0 + 1.1); }
+  { stopLift('E_OKNGLift', S.okng); gate(S.okng, Z0, 0.8, 1.6); const ok = G('E_OKNG_OK', root); cyl(ok, m.lampG, 0.032, 0.06, S.okng, 1.65, Z0 - 0.4, 'y', 14); const ng = G('E_OKNG_NG', root); cyl(ng, m.lampR, 0.032, 0.06, S.okng, 1.65, Z0 + 0.4, 'y', 14); nameplate('OK / NG 분기', S.okng, 1.74, Z0 - 0.05, 0, 0.36);
+    pusher('E_NG_Pusher', S.okng, Z0 - 0.3, TOP + 0.06, 'z', 0.4); rollers(S.okng - 0.2, S.okng + 1.0, Z0 + 0.85, 0.4); box(root, m.yellow, 0.025, 0.05, 0.3, S.okng + 0.78, TOP + 0.03, Z0 + 0.85); nameplate('NG 보관', S.okng + 0.4, TOP + 0.25, Z0 + 1.1, 0, 0.36); }
   { const lf = G('E_Lift', root); box(lf, m.alu, 0.5, 0.1, 0.56, S.lift, TOP - 0.06, Z0); for (let k = 0; k < 5; k++) cyl(lf, m.steel, 0.022, 0.5, S.lift - 0.2 + k * 0.1, TOP - 0.025, Z0, 'z', 10); box(lf, m.yellow, 0.025, 0.05, 0.4, S.lift + 0.24, TOP + 0.03, Z0);
     for (const sz of [-1, 1]) { prof(root, [S.lift, 0.06, Z0 + sz * 0.34], [S.lift, 1.4, Z0 + sz * 0.34], 0.05, m.frameDark); box(root, m.aluDark, 0.1, 0.05, 0.05, S.lift, 0.3, Z0 + sz * 0.3); } box(root, m.yellow, 0.1, 0.06, 0.78, S.lift, 1.4, Z0); nameplate('배출 리프트', S.lift, 1.47, Z0 - 0.42, 0, 0.4); totes(S.lift, Z0 - 1.0, 1); fp('배출 리프트', S.lift - 0.3, S.lift + 0.3, Z0 - 1.25, Z0 + 0.4); }
   cabinetBox('E 제어반', S.ein + 0.3, Z0 - 1.95); cabinetBox('리크 제어', S.ein + 1.3, Z0 - 1.95); monitor('E_HMI', S.eturn + 0.8, Z0 - 1.4, 0.4); tower(S.eEnd - 0.2, Z0 - 1.5);
@@ -220,7 +220,8 @@ export function egrModuleLine() {
   }
   // ---------------------------------------------------------------- footprint check: machines must not overlap each other (cell base plates excepted)
   const bad = [];
-  for (let a = 0; a < FOOT.length; a++) for (let b = a + 1; b < FOOT.length; b++) { const A = FOOT[a], B = FOOT[b]; if (/베이스$/.test(A[0]) || /베이스$/.test(B[0])) continue;
+  for (let a = 0; a < FOOT.length; a++) for (let b = a + 1; b < FOOT.length; b++) { const A = FOOT[a], B = FOOT[b]; const conv = F => /^컨베이어/.test(F[0]), straddles = F => F[3] < Z0 && F[4] > Z0 && !conv(F);   // inline stations sit across the spine by design
+    if (/베이스$/.test(A[0]) || /베이스$/.test(B[0]) || (conv(A) && (conv(B) || straddles(B) || /지그 트랜스퍼/.test(B[0]))) || (conv(B) && (straddles(A) || /지그 트랜스퍼/.test(A[0])))) continue;
     if (A[1] < B[2] - 0.02 && B[1] < A[2] - 0.02 && A[3] < B[4] - 0.02 && B[3] < A[4] - 0.02) bad.push(A[0] + ' × ' + B[0]); }
   if (bad.length) throw new Error('machine footprints overlap: ' + bad.join(', '));
   return animate(finalize(root), robots);
@@ -250,10 +251,10 @@ function animate(root, robots) {
     return rigA && rigA.trace([[HOME.A(li), 0], [[RBASE.A[0] - 0.1, RH + 0.4, Z0 + sz * 0.5], 0.8], [[S.lane - 0.05, y0 + H, lz], 1.2], [[S.lane - 0.05, y0, lz], 0.6], [[S.lane - 0.05, y0, lz], 0.3, 'grip'], [[S.lane - 0.05, y0 + H, lz], 0.5],
       [[S.merge, y0 + H, Z0], 1.6], [[S.merge, y0 + 0.003, Z0], 0.5], [[S.merge, y0 + 0.003, Z0], 0.3, 'release'], [[S.merge, y0 + H, Z0], 0.4], [[RBASE.A[0] - 0.1, RH + 0.4, Z0 + sz * 0.5], 1.0], [HOME.A(li), 0.6]], 'A robot lane ' + li); };
   const RA = rigA ? [pathA(0), pathA(1)] : null;
-  const pathSide = (rg, home, stopX, cab, backX, label) => { const y0 = TOP + LIFT + YC, [cx, cz] = cab, yc = FIXY + YC;   // spine stop → cabin fixture, wait, fixture → spine
-    return rg && rg.trace([[home, 0], [[stopX, y0 + H, Z0], 1.6], [[stopX, y0, Z0], 0.6], [[stopX, y0, Z0], 0.3, 'grip'], [[stopX, y0 + H, Z0], 0.5], [[stopX + 0.8, y0 + H + 0.1, Z0 - 0.2], 1.0], [[cx, yc + H, cz], 1.2], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'put'], [[cx, yc + H, cz], 0.5], [[cx - 0.25, yc + H + 0.1, cz - 0.1], 0.6], [home, 1.0], [home, 10.0, 'wait'],
-      [[cx, yc + H, cz], 1.4], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'take'], [[cx, yc + H, cz], 0.5], [[backX, y0 + H, Z0], 1.8], [[backX, y0 + 0.003, Z0], 0.5], [[backX, y0 + 0.003, Z0], 0.3, 'release'], [[backX, y0 + H, Z0], 0.4], [[backX - 0.5, y0 + H + 0.2, Z0], 0.8], [home, 1.0]], label); };
-  const RB = pathSide(rigB, HOME.B, S.bstop, S.bcab, S.bback, 'B robot'), RE = pathSide(rigE, HOME.E, S.estop, S.ecab, S.eback, 'E robot');
+  const pathSide = (rg, home, base, stopX, cab, backX, label) => { const y0 = TOP + LIFT + YC, [cx, cz] = cab, yc = FIXY + YC, out = [base[0] - 0.5, RH + 0.2, base[1]];   // spine stop → cabin fixture, wait, fixture → spine; 'out' keeps the swing clear of the base
+    return rg && rg.trace([[home, 0], [out, 0.8], [[stopX, y0 + H, Z0], 1.2], [[stopX, y0, Z0], 0.6], [[stopX, y0, Z0], 0.3, 'grip'], [[stopX, y0 + H, Z0], 0.5], [[stopX + 0.3, y0 + H + 0.05, Z0 - 0.15], 0.6], [[cx, yc + H, cz], 1.4], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'put'], [[cx, yc + H, cz], 0.5], [[cx - 0.25, yc + H + 0.1, cz - 0.1], 0.6], [home, 1.0], [home, 10.0, 'wait'],
+      [[cx, yc + H, cz], 1.4], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'take'], [[cx, yc + H, cz], 0.5], [[backX, y0 + H, Z0], 1.8], [[backX, y0 + 0.003, Z0], 0.5], [[backX, y0 + 0.003, Z0], 0.3, 'release'], [[backX, y0 + H, Z0], 0.4], [[base[0], y0 + H, Z0], 0.8], [out, 0.8], [home, 0.8]], label); };
+  const RB = pathSide(rigB, HOME.B, RBASE.B, S.bstop, S.bcab, S.bback, 'B robot'), RE = pathSide(rigE, HOME.E, RBASE.E, S.estop, S.ecab, S.eback, 'E robot');
 
   // jig loop: index n at I(n) = n · DJ, the move takes 1.5 s; jig j sits at position (j + n) mod 11 after index n
   const I = n => n * DJ, JI = t => Math.ceil(t / DJ);
@@ -274,9 +275,9 @@ function animate(root, robots) {
     show(0, true); ry(0, 0); at(0, [0.1, TOP, lz]); at(5, [S.lane - 0.05, TOP, lz]);
     for (const sd of ['_L', '_R']) add('A_Center_' + li + sd, 'z', [[s + 1.5, 0], [s + 2.2, sd === '_L' ? 0.06 : -0.06], [s + 3.2, sd === '_L' ? 0.06 : -0.06], [s + 3.8, 0]]);   // centring while the part passes the gate
     flash('A_FinCam_' + li, s + 3.6, s + 4.0);
-    lift('A_LaneLift_' + li, s + 5.5, s + 12.5); at(6.3, [S.lane - 0.05, TOP + LIFT, lz]);
     const ra = s + 7.5, rA = RA ? RA[li] : null;
-    if (rA) { playRobot('A', rA, ra); const e = rA.ev; show(ra + e.grip - s, false); flash('A_Grip_Part', ra + e.grip, ra + e.release); at(ra + e.release - s, [S.merge, TOP + LIFT, Z0]); show(ra + e.release - s, true); cx = S.merge; ct = ra + e.release - s; at(ct + 0.8, [S.merge, TOP, Z0]); ct += 0.8; }
+    lift('A_LaneLift_' + li, s + 5.5, rA ? ra + rA.ev.grip + 1.0 : s + 12.5); at(6.3, [S.lane - 0.05, TOP + LIFT, lz]);
+    if (rA) { playRobot('A', rA, ra); const e = rA.ev; at(ra + e.grip - s, [S.lane - 0.05, TOP + LIFT, lz]); show(ra + e.grip - s, false); flash('A_Grip_Part', ra + e.grip, ra + e.release); at(ra + e.release - s, [S.merge, TOP + LIFT, Z0]); show(ra + e.release - s, true); cx = S.merge; ct = ra + e.release - s; at(ct + 0.8, [S.merge, TOP, Z0]); ct += 0.8; }
     else { at(14, [S.merge, TOP, Z0]); cx = S.merge; ct = 14; }
     conv(S.prof); { const t0 = dwell('A_ProfLift', 6); head('A_ProfHead', s + t0 + 0.8, s + t0 + 5.2, 0.45); flash('A_Profile', s + t0 + 1.8, s + t0 + 4.4); }
     conv(S.disp); { const t0 = dwell('A_DispLift', 10); add('A_Disp_Y', 'y', [[s + t0 + 1, 0], [s + t0 + 2, -(1.11 - 0.06 - (TOP + LIFT + 2 * YC + 0.01))], [s + t0 + 8.5, -(1.11 - 0.06 - (TOP + LIFT + 2 * YC + 0.01))], [s + t0 + 9.5, 0]]);
@@ -290,10 +291,10 @@ function animate(root, robots) {
     conv(S.tank); { const t0 = dwell('B_TankLift', 8); for (const sd of ['_L', '_R']) { const sg = sd === '_L' ? -1 : 1; add('B_TankArm' + sd, 'z', [[s + t0 + 0.5, 0], [s + t0 + 1.8, -sg * 0.63], [s + t0 + 5.2, -sg * 0.63], [s + t0 + 6.5, 0]]); add('B_TankArm' + sd, 'y', [[s + t0 + 1.8, 0], [s + t0 + 2.8, -(1.28 - (TOP + LIFT + YC))], [s + t0 + 4.2, -(1.28 - (TOP + LIFT + YC))], [s + t0 + 5.2, 0]]); add('B_TankArm' + sd + '_Tank', 'vis', [[s + t0 + 4.2, false], [s + t0 + 8, true]]); } add(PN + '_Tanks', 'vis', [[s, false], [s + t0 + 4.2, true]]); }
     for (const [k2, px] of S.press.entries()) { conv(px); const t0 = dwell('B_PressLift_' + k2, 6), sg = k2 ? 1 : -1; add('B_Press_' + k2, 'z', [[s + t0 + 1, 0], [s + t0 + 2.2, sg * 0.29], [s + t0 + 4, sg * 0.29], [s + t0 + 5, 0]]); }
     conv(S.vis); { const t0 = dwell('B_VisLift', 3); flash('B_PressCam', s + t0 + 1.2, s + t0 + 1.6); }
-    conv(S.bstop); { const t0 = ct; lift('B_RobotLift', s + t0, s + t0 + 4); at(t0 + 0.8, [S.bstop, TOP + LIFT, Z0]);
-      if (RB) { const rb = s + t0 + 1.5; playRobot('B', RB, rb); const e = RB.ev; show(rb + e.grip - s, false); flash('B_Grip_Part', rb + e.grip, rb + e.put); flash('B_Grip_Part', rb + e.take, rb + e.release);
+    conv(S.bstop); { const t0 = ct, rb = s + t0 + 1.5; lift('B_RobotLift', s + t0, RB ? rb + RB.ev.grip + 1.0 : s + t0 + 4); at(t0 + 0.8, [S.bstop, TOP + LIFT, Z0]);
+      if (RB) { playRobot('B', RB, rb); const e = RB.ev; at(rb + e.grip - s, [S.bstop, TOP + LIFT, Z0]); show(rb + e.grip - s, false); flash('B_Grip_Part', rb + e.grip, rb + e.put); flash('B_Grip_Part', rb + e.take, rb + e.release);
         at(rb + e.put - s, [S.bcab[0], FIXY, S.bcab[1]]); show(rb + e.put - s, true); head('B_LaserHead', rb + e.put + 1, rb + e.take - 1, 0.35); flash('B_Laser_Beam', rb + e.put + 2.2, rb + e.take - 2.2); add(PN + '_Seam', 'vis', [[s, false], [rb + e.take - 2.2, true]]); flash('B_Grip_Seam', rb + e.take, rb + e.release);
-        show(rb + e.take - s, false); at(rb + e.release - s, [S.bback, TOP + LIFT, Z0]); show(rb + e.release - s, true); lift('B_BackLift', rb + e.release - 2, rb + e.release + 1.5); cx = S.bback; ct = rb + e.release - s + 1.5; at(ct, [S.bback, TOP, Z0]); }
+        at(rb + e.take - s, [S.bcab[0], FIXY, S.bcab[1]]); show(rb + e.take - s, false); at(rb + e.release - s, [S.bback, TOP + LIFT, Z0]); show(rb + e.release - s, true); lift('B_BackLift', rb + e.release - 2, rb + e.release + 1.5); cx = S.bback; ct = rb + e.release - s + 1.5; at(ct, [S.bback, TOP, Z0]); }
       else { ct = t0 + 30; cx = S.bback; at(ct, [S.bback, TOP, Z0]); } }
     conv(S.bEnd - 0.5); conv(S.cin);
     // ---- C: the part slides onto the jig at position 0 right after an index, rides to position 6, slides off onto the spine
@@ -317,10 +318,10 @@ function animate(root, robots) {
       at(t0 + 1.5, [S.dstop, TOP, Z0]); show(t0 + 1.5, false); flash('Op_Leak_Part', s + t0 + 1.5, s + t0 + 5.5); at(t0 + 5.5, [S.ein, TOP, Z0]); show(t0 + 5.5, true); cx = S.ein; ct = t0 + 5.5; }
     conv(S.eturn); { const t0 = dwell('E_Turntable', 5); add('E_Turntable', 'ry', [[s + t0 + 1, 0], [s + t0 + 3.5, Math.PI], [s + t0 + 4.2, Math.PI], [s + t0 + 4.21, 0]]); ry(t0 + 1, Math.PI / 2); ry(t0 + 3.5, Math.PI * 1.5); ry(t0 + 4.21, Math.PI / 2); }
     conv(S.evis); { const t0 = dwell('E_VisLift', 3); flash('E_VisCam', s + t0 + 1.2, s + t0 + 1.6); }
-    conv(S.estop); { const t0 = ct; lift('E_RobotLift', s + t0, s + t0 + 4); at(t0 + 0.8, [S.estop, TOP + LIFT, Z0]);
-      if (RE) { const re = s + t0 + 1.5; playRobot('E', RE, re); const e = RE.ev; show(re + e.grip - s, false); flash('E_Grip_Part', re + e.grip, re + e.put); flash('E_Grip_Part', re + e.take, re + e.release);
+    conv(S.estop); { const t0 = ct, re = s + t0 + 1.5; lift('E_RobotLift', s + t0, RE ? re + RE.ev.grip + 1.0 : s + t0 + 4); at(t0 + 0.8, [S.estop, TOP + LIFT, Z0]);
+      if (RE) { playRobot('E', RE, re); const e = RE.ev; at(re + e.grip - s, [S.estop, TOP + LIFT, Z0]); show(re + e.grip - s, false); flash('E_Grip_Part', re + e.grip, re + e.put); flash('E_Grip_Part', re + e.take, re + e.release);
         at(re + e.put - s, [S.ecab[0], FIXY, S.ecab[1]]); show(re + e.put - s, true); add('E_Hood', 'y', [[re + e.put + 0.8, 0], [re + e.put + 1.8, -0.42], [re + e.take - 2.5, -0.42], [re + e.take - 1.3, 0]]); flash(lNG ? 'E_Leak_NG' : 'E_Leak_OK', re + e.take - 3.5, re + e.take + 2);
-        show(re + e.take - s, false); at(re + e.release - s, [S.eback, TOP + LIFT, Z0]); show(re + e.release - s, true); lift('E_BackLift', re + e.release - 2, re + e.release + 1.5); cx = S.eback; ct = re + e.release - s + 1.5; at(ct, [S.eback, TOP, Z0]); }
+        at(re + e.take - s, [S.ecab[0], FIXY, S.ecab[1]]); show(re + e.take - s, false); at(re + e.release - s, [S.eback, TOP + LIFT, Z0]); show(re + e.release - s, true); lift('E_BackLift', re + e.release - 2, re + e.release + 1.5); cx = S.eback; ct = re + e.release - s + 1.5; at(ct, [S.eback, TOP, Z0]); }
       else { ct = t0 + 30; cx = S.eback; at(ct, [S.eback, TOP, Z0]); } }
     conv(S.mark); { const t0 = dwell('E_MarkLift', 6); head('E_MarkHead', s + t0 + 0.8, s + t0 + 5.2, 0.25); flash('E_Mark_Beam', s + t0 + 2, s + t0 + 4.2); add(PN + '_Mark', 'vis', [[s, false], [s + t0 + 4.2, true]]); }
     conv(S.nut); { const t0 = dwell('E_NutLift', 12); add('E_Nutrunner', 'x', [[s + t0, 0], [s + t0 + 1, -0.62], [s + t0 + 5.5, -0.62], [s + t0 + 6.2, -0.38], [s + t0 + 10.5, -0.38], [s + t0 + 11.5, 0]]); add('E_Nutrunner', 'z', [[s + t0, 0], [s + t0 + 1, 0.75], [s + t0 + 10.5, 0.75], [s + t0 + 11.5, 0]]);
