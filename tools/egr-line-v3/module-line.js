@@ -18,10 +18,10 @@ const NJIG = 11, JPOS = 7, DJ = MODULE_T / 33;   // jig loop: 11 jigs, 7 work po
 // stations along the spine (x); the spine runs at z = Z0
 const S = { lane: 1.1, merge: 2.1, prof: 2.7, disp: 3.5, cam: 4.1, scale: 4.7, ngA: 5.2, aEnd: 5.5,
   turn: 6.0, tank: 6.8, press: [7.6, 8.3], vis: 8.9, bstop: 9.6, bcab: [10.4, Z0 - 0.78], bback: 10.1, bng: 10.7, bEnd: 11.25,
-  cin: 11.45, jig0: 11.75, cEnd: 16.3, cout: 15.0,
-  cf: 16.95, paste: 18.05, check: 19.2, dstop: 20.35, dEnd: 20.6,
+  cin: 11.45, jig0: 11.75, cEnd: 16.4, cout: 15.85,
+  cf: 17.05, paste: 18.15, check: 19.3, dstop: 20.45, dEnd: 20.7,
   ein: 21.45, eturn: 22.05, evis: 22.65, estop: 23.3, ecab: [24.1, Z0 - 0.78], eback: 23.8, mark: 25.05, nut: 25.85, okng: 26.55, lift: 27.2, eEnd: 27.5 };
-const JX = q => (q < JPOS ? S.jig0 + 0.45 * q : S.jig0 + 0.45 * (JPOS - 1) - 0.75 * (q - JPOS + 1)), JZ = q => (q < JPOS ? Z0 : Z0 + 0.7);
+const JP = 0.6, JX = q => (q < JPOS ? S.jig0 + JP * q : S.jig0 + JP * (JPOS - 1) - (JP * (JPOS - 1) / (NJIG - JPOS + 1)) * (q - JPOS + 1)), JZ = q => (q < JPOS ? Z0 : Z0 + 0.7);   // jig pitch 0.6 m; the return lane spreads its 4 jigs over the same span
 const RBASE = { A: [1.55, Z0], B: [9.85, Z0 - 0.6], E: [23.55, Z0 - 0.6] }, RH = 0.9;   // B / E pedestals 0.14 m clear of the spine frame
 const HOME = { A: li => [RBASE.A[0], RH + 0.35, Z0 + (li ? 0.15 : -0.15)], B: [RBASE.B[0] - 0.4, RH + 0.45, RBASE.B[1] - 0.25], E: [RBASE.E[0] - 0.4, RH + 0.45, RBASE.E[1] - 0.25] };   // B / E rest beside the base, on the spine side
 
@@ -149,24 +149,23 @@ export function egrModuleLine() {
     for (const x of [x0 + 0.3, (x0 + x1) / 2, x1 - 0.3]) for (const sz of [-1, 1]) { prof(root, [x, 0.06, Z0 + 0.35 + sz * 0.55], [x, TOP - 0.13, Z0 + 0.35 + sz * 0.55], 0.04); foot(root, x, Z0 + 0.35 + sz * 0.55); prof(root, [x, 0.3, Z0 - 0.2], [x, 0.3, Z0 + 0.9], 0.04); }
     for (let j = 0; j < NJIG; j++) { const jg = G('C_Jig_' + j, root, JX(j), 0, JZ(j)); box(jg, m.alu, 0.34, 0.03, 0.3, 0, TOP + 0.005, 0); for (const sz of [-1, 1]) box(jg, clampM, 0.12, 0.07, 0.02, 0, TOP + 0.055, sz * 0.095); box(jg, m.yellow, 0.02, 0.012, 0.3, -0.16, TOP + 0.025, 0); box(jg, m.black, 0.3, 0.04, 0.26, 0, TOP - 0.02, 0); }
     nameplate('지그 트랜스퍼', (x0 + x1) / 2, TOP - 0.1, Z0 - 0.27, 0, 0.5); fp('지그 트랜스퍼', x0, x1, Z0 - 0.3, Z0 + 1.0); }
-  for (const [k, fx, sz] of [[0, JX(1), -1], [1, JX(2), 1]]) { // flange feeders: bowl feeder + linear track + servo pick arm on a column
+  for (const [k, fx, sz] of [[0, JX(1), -1], [1, JX(1), 1]]) { // flange feeders (both ends at jig position 1): bowl feeder + linear track + servo pick arm on a column
     const fz = Z0 + sz * 1.35; cyl(root, m.sheet, 0.28, 0.5, fx, 0.25, fz, 'y', 20); cyl(root, m.stainless, 0.3, 0.2, fx, 0.6, fz, 'y', 24); for (let r = 0.1; r < 0.28; r += 0.07) cyl(root, m.stainless, r, 0.18, fx, 0.6 + r / 3, fz, 'y', 20);
     box(root, m.aluDark, 0.08, 0.08, 0.6, fx, 0.72, fz - sz * 0.42); for (let i = 0; i < 4; i++) box(root, m.stainless, 0.012, 0.1, 0.15, fx, 0.82, fz - sz * (0.2 + i * 0.12));   // linear track with flanges queued
     prof(root, [fx + 0.3, 0.06, fz], [fx + 0.3, 1.7, fz], 0.06, m.frameDark); box(root, blue, 0.14, 0.12, 0.8, fx + 0.3, 1.7, fz - sz * 0.4); const pa = G('C_FlangeArm_' + k, root, fx, 1.6, fz - sz * 0.7); box(pa, m.aluDark, 0.3, 0.1, 0.1, 0.15, 0, 0); box(pa, m.alu, 0.04, 0.6, 0.04, 0, -0.3, 0); const f = G('C_FlangeArm_' + k + '_Flange', pa, 0, -0.62, 0); box(f, m.stainless, 0.15, 0.1, 0.012, 0, 0, 0);
     nameplate('플랜지 공급기 ' + (k + 1), fx, 0.95, fz - sz * 0.31, sz < 0 ? 0 : Math.PI, 0.4); fp('플랜지 공급기 ' + (k + 1), fx - 0.3, fx + 0.36, fz - 0.3, fz + 0.3); }
-  { const MIG = [[JX(3), Z0 - 1.2, 0], [JX(5), Z0 - 1.2, 0], [JX(3), Z0 + 1.9, Math.PI], [JX(5), Z0 + 1.9, Math.PI]];   // four MIG robots, each with its power source, wire drum and cable tray
-    MIG.forEach(([x, z, ry], i) => { const R = robot('C' + i, x, z, ry); if (R) { torch(R.tool); const ar = G('C' + i + '_Arc', R.tool); bin(ar, arcM, xf(new THREE.SphereGeometry(0.016, 10, 8), 0, 0, 0.235)); }
-      const sg = z < Z0 ? -1 : 1, bz = z + sg * 0.75; box(root, m.red, 0.5, 0.9, 0.4, x, 0.45, bz); box(root, m.black, 0.46, 0.08, 0.36, x, 0.94, bz); box(root, m.display, 0.12, 0.05, 0.004, x, 0.7, bz + sg * 0.202); nameplate('MIG 용접기', x, 0.35, bz + sg * 0.203, sg < 0 ? Math.PI : 0, 0.3);
-      cyl(root, m.lampG, 0.14, 0.35, x + 0.42, 0.175, bz, 'y', 20); cyl(root, m.black, 0.15, 0.02, x + 0.42, 0.36, bz, 'y', 20); box(root, m.aluDark, 0.06, 0.06, 0.5, x + 0.2, 0.95, z + sg * 0.5); cyl(root, m.black, 0.012, 0.45, x + 0.2, 0.98, z + sg * 0.5, 'z', 8);   // cable tray + hose to the robot
-      fp('MIG 로봇 ' + (i + 1), x - 0.25, x + 0.6, Math.min(z - 0.25, bz - 0.2), Math.max(z + 0.25, bz + 0.2)); });
-    for (const [x0, z0, x1, z1] of [[JX(2) + 0.2, Z0 - 1.75, JX(5) + 0.4, Z0 - 1.75], [JX(2) + 0.2, Z0 + 2.45, JX(5) + 0.4, Z0 + 2.45]]) { plane(root, curtain, x1 - x0, 1.8, (x0 + x1) / 2, 1.05, (z0 + z1) / 2, [0, 0, 0]); box(root, m.aluDark, x1 - x0, 0.03, 0.03, (x0 + x1) / 2, 1.97, (z0 + z1) / 2); for (const x of [x0, x1]) { prof(root, [x, 0.06, z0], [x, 2.0, z0], 0.04, m.frameDark); foot(root, x, z0); } }
-    for (const [x, z] of [[JX(2) + 0.1, Z0 - 0.6], [JX(6) + 0.1, Z0 - 0.6], [JX(2) + 0.1, Z0 + 1.3], [JX(6) + 0.1, Z0 + 1.3]]) prof(root, [x, 0.06, z], [x, 2.6, z], 0.06, m.frameDark);   // fume hood on four posts
-    box(root, m.sheet, JX(6) - JX(2) - 0.2, 0.08, 1.9, JX(4), 2.6, Z0 + 0.35); box(root, m.sheet, 0.6, 0.3, 0.6, JX(4), 2.8, Z0 + 0.35); cyl(root, m.sheet, 0.13, 0.8, JX(4), 3.3, Z0 + 0.35, 'y', 20);
+  { const MZ = Z0 - 0.85;   // four MIG robots on the aisle side at jig positions 2 … 5 (the rotary jig turns the part between robots 2 and 3), each with power source and wire drum behind
+    [0, 1, 2, 3].forEach(i => { const x = JX(2 + i), R = robot('C' + i, x, MZ, 0); if (R) { torch(R.tool); const ar = G('C' + i + '_Arc', R.tool); bin(ar, arcM, xf(new THREE.SphereGeometry(0.016, 10, 8), 0, 0, 0.235)); }
+      const bz = MZ - 0.75; box(root, m.red, 0.46, 0.9, 0.4, x, 0.45, bz); box(root, m.black, 0.42, 0.08, 0.36, x, 0.94, bz); box(root, m.display, 0.12, 0.05, 0.004, x, 0.7, bz - 0.202); nameplate('MIG 용접기 ' + (i + 1), x, 0.35, bz - 0.203, Math.PI, 0.3);
+      cyl(root, m.lampG, 0.14, 0.35, x, 0.175, bz - 0.45, 'y', 20); cyl(root, m.black, 0.15, 0.02, x, 0.36, bz - 0.45, 'y', 20); box(root, m.aluDark, 0.06, 0.06, 0.45, x + 0.15, 0.95, MZ - 0.42); cyl(root, m.black, 0.012, 0.4, x + 0.15, 0.98, MZ - 0.42, 'z', 8);   // wire drum, cable tray + hose to the robot
+      fp('MIG 로봇 ' + (i + 1), x - 0.25, x + 0.25, bz - 0.6, MZ + 0.2); });
+    for (const [x, z] of [[JX(1) + 0.3, Z0 - 0.5], [JX(6) - 0.3, Z0 - 0.5], [JX(1) + 0.3, Z0 + 1.3], [JX(6) - 0.3, Z0 + 1.3]]) prof(root, [x, 0.06, z], [x, 2.6, z], 0.06, m.frameDark);   // fume hood on four posts
+    box(root, m.sheet, JX(6) - JX(1) - 0.6, 0.08, 1.9, JX(3.5), 2.6, Z0 + 0.4); box(root, m.sheet, 0.6, 0.3, 0.6, JX(3.5), 2.8, Z0 + 0.4); cyl(root, m.sheet, 0.13, 0.8, JX(3.5), 3.3, Z0 + 0.4, 'y', 20);
     // manual MIG at jig position 5 (−Z side): balancer with the torch, wire feeder, welding screen, operator
-    const mx = JX(6); const mt = balancer('C_Manual_Torch', mx + 0.6, Z0 - 1.5, 1.45, Math.PI * 0.75); cyl(mt, m.black, 0.015, 0.25, 0, 0, 0, 'y', 8); cyl(mt, m.orange, 0.01, 0.05, 0, -0.14, 0, 'y', 8);
+    const mx = JX(6); const mt = balancer('C_Manual_Torch', mx + 0.6, Z0 - 1.4, 1.45, Math.PI * 0.75); cyl(mt, m.black, 0.015, 0.25, 0, 0, 0, 'y', 8); cyl(mt, m.orange, 0.01, 0.05, 0, -0.14, 0, 'y', 8);
     box(root, m.red, 0.4, 0.6, 0.35, mx + 0.6, 0.3, Z0 - 1.95); nameplate('수동 MIG', mx + 0.6, 0.45, Z0 - 2.13, Math.PI, 0.3); fp('수동 MIG', mx + 0.35, mx + 0.85, Z0 - 2.15, Z0 - 1.3);
     opWorker(root, 'Op_Mig', mx, Z0 - 0.75, 0); const ma = G('Op_Mig_Arc', root); bin(ma, arcM, xf(new THREE.SphereGeometry(0.014, 10, 8), mx, TOP + 0.09, Z0 - 0.12)); }
-  cabinetBox('C 제어반', S.bEnd + 0.6, Z0 - 2.55); cabinetBox('로봇 제어', S.bEnd + 1.6, Z0 - 2.55); monitor('C_HMI', S.cEnd - 0.6, Z0 - 1.4, 0.4); tower(S.cEnd - 0.2, Z0 - 1.5);
+  cabinetBox('C 제어반', S.bEnd + 0.5, Z0 - 2.1); cabinetBox('로봇 제어', S.cEnd - 0.6, Z0 + 2.4, 0.8, 0.45, 1.9, Math.PI); monitor('C_HMI', S.cEnd - 0.6, Z0 - 1.4, 0.4); tower(S.cEnd - 0.2, Z0 - 1.5);
 
   // ================================================================ D. C/F check, external paste, manual check, unloading (x 16.3 … 20.6)
   fp('D 베이스', S.cEnd, S.dEnd, Z0 - 1.6, Z0 + 1.6);
@@ -255,12 +254,18 @@ function animate(root, robots) {
     return rg && rg.trace([[home, 0], [out, 0.8], [[stopX, y0 + H, Z0], 1.2], [[stopX, y0, Z0], 0.6], [[stopX, y0, Z0], 0.3, 'grip'], [[stopX, y0 + H, Z0], 0.5], [[stopX + 0.3, y0 + H + 0.05, Z0 - 0.15], 0.6], [[cx, yc + H, cz], 1.4], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'put'], [[cx, yc + H, cz], 0.5], [[cx - 0.25, yc + H + 0.1, cz - 0.1], 0.6], [home, 1.0], [home, 10.0, 'wait'],
       [[cx, yc + H, cz], 1.4], [[cx, yc + 0.003, cz], 0.6], [[cx, yc + 0.003, cz], 0.3, 'take'], [[cx, yc + H, cz], 0.5], [[backX, y0 + H, Z0], 1.8], [[backX, y0 + 0.003, Z0], 0.5], [[backX, y0 + 0.003, Z0], 0.3, 'release'], [[backX, y0 + H, Z0], 0.4], [[base[0], y0 + H, Z0], 0.8], [out, 0.8], [home, 0.8]], label); };
   const RB = pathSide(rigB, HOME.B, RBASE.B, S.bstop, S.bcab, S.bback, 'B robot'), RE = pathSide(rigE, HOME.E, RBASE.E, S.estop, S.ecab, S.eback, 'E robot');
+  // MIG torch path (traced once on robot C0, reused by all four: same geometry relative to the base): approach the near flange joint on the
+  // jig, weld the upper half of the ring, retreat
+  const RM = (() => { if (!robots.C0) return null; const rg = ikRig(root, robots.C0.J, V(0, 0, 0.235)), bx = JX(2), MZ = Z0 - 0.85, yj = TOP + 0.02 + YC, zj = Z0 - 0.146, r = 0.052;
+    const arc = []; for (let i = 0; i <= 6; i++) { const a = 0.25 + (Math.PI - 0.5) * i / 6; arc.push([[bx + r * Math.cos(a), yj + r * Math.sin(a) + 0.004, zj - 0.012], i ? 0.55 : 0.3, i === 0 ? 'weld0' : i === 6 ? 'weld1' : undefined]); }
+    return rg.trace([[[bx, RH + 0.35, MZ + 0.15], 0], [[bx + 0.2, 1.15, Z0 - 0.5], 1.0], [[bx + r + 0.03, yj + 0.1, zj - 0.012], 0.8], ...arc, [[bx - r - 0.02, yj + 0.1, zj - 0.012], 0.4], [[bx - 0.2, 1.15, Z0 - 0.5], 0.8], [[bx, RH + 0.35, MZ + 0.15], 0.8]], 'MIG robot'); })();
 
   // jig loop: index n at I(n) = n · DJ, the move takes 1.5 s; jig j sits at position (j + n) mod 11 after index n
   const I = n => n * DJ, JI = t => Math.ceil(t / DJ);
-  for (let j = 0; j < NJIG; j++) { const xs = [], zs = [];
-    for (let n = 0; n <= 33; n++) { const q0 = (j + n) % NJIG, q1 = (j + n + 1) % NJIG; xs.push([I(n), JX(q0) - JX(j)], [I(n) + 1.5, JX(q1) - JX(j)]); zs.push([I(n), JZ(q0) - JZ(j)], [I(n) + 1.5, JZ(q1) - JZ(j)]); }
-    add('C_Jig_' + j, 'x', xs); add('C_Jig_' + j, 'z', zs); }
+  for (let j = 0; j < NJIG; j++) { const xs = [], zs = [], rs = [];
+    for (let n = 0; n <= 33; n++) { const q0 = (j + n) % NJIG, q1 = (j + n + 1) % NJIG; xs.push([I(n), JX(q0) - JX(j)], [I(n) + 1.5, JX(q1) - JX(j)]); zs.push([I(n), JZ(q0) - JZ(j)], [I(n) + 1.5, JZ(q1) - JZ(j)]);
+      if (q1 === 4) rs.push([I(n) + 1.8, 0], [I(n) + 3.3, Math.PI]); if (q1 === 6) rs.push([I(n) + 1.8, Math.PI], [I(n) + 3.3, 0]); }   // rotary jig: turned 180° at position 4 (robots 3, 4 weld the other end), back at position 6
+    add('C_Jig_' + j, 'x', xs); add('C_Jig_' + j, 'z', zs); add('C_Jig_' + j, 'ry', rs); }
 
   const CV = 0.35;   // spine speed m/s
   for (let jj = -2; jj < N + 2; jj++) {
@@ -300,12 +305,11 @@ function animate(root, robots) {
     // ---- C: the part slides onto the jig at position 0 right after an index, rides to position 6, slides off onto the spine
     const n0 = JI(s + ct + 1), tL = I(n0) + 1.7 - s; at(tL, [S.cin, TOP, Z0]); at(tL + 1.2, [JX(0), TOP + 0.02, Z0]);
     for (let q = 1; q < JPOS; q++) { const ti = I(n0 + q) - s; at(ti, [JX(q - 1), TOP + 0.02, Z0]); at(ti + 1.5, [JX(q), TOP + 0.02, Z0]); const a = ti + 2.5;
-      if (q === 1 || q === 2) { const fk = q - 1, sg = fk ? 1 : -1; add('C_FlangeArm_' + fk, 'z', [[s + a, 0], [s + a + 1.4, sg * 0.5], [s + a + 3.6, sg * 0.5], [s + a + 5.0, 0]]); add('C_FlangeArm_' + fk, 'y', [[s + a + 1.4, 0], [s + a + 2.2, -(0.98 - (TOP + 0.02 + YC))], [s + a + 3.0, -(0.98 - (TOP + 0.02 + YC))], [s + a + 3.6, 0]]);
+      if (q === 1) for (const fk of [0, 1]) { const sg = fk ? 1 : -1; add('C_FlangeArm_' + fk, 'z', [[s + a, 0], [s + a + 1.4, sg * 0.5], [s + a + 3.6, sg * 0.5], [s + a + 5.0, 0]]); add('C_FlangeArm_' + fk, 'y', [[s + a + 1.4, 0], [s + a + 2.2, -(0.98 - (TOP + 0.02 + YC))], [s + a + 3.0, -(0.98 - (TOP + 0.02 + YC))], [s + a + 3.6, 0]]);
         add('C_FlangeArm_' + fk + '_Flange', 'vis', [[s + a + 3.0, false], [s + a + 6, true]]); add(PN + (fk ? '_FlangeR' : '_FlangeL'), 'vis', [[s, false], [s + a + 3.0, true]]); }
-      if (q === 3 || q === 5) for (const side of [0, 1]) { const ri = (q === 3 ? 0 : 1) + side * 2, rn = 'C' + ri + '_Robot', sg = side ? -1 : 1;
-        add(rn + '_Joint_1', 'ry', [[s + a, 0], [s + a + 2.4, 0], [s + a + 5.6, sg * 0.18], [s + a + 7, 0]]); add(rn + '_Joint_2', 'rz', [[s + a, 0], [s + a + 1.2, -0.55], [s + a + 2.4, -0.7], [s + a + 5.6, -0.6], [s + a + 7, 0]]); add(rn + '_Joint_3', 'rz', [[s + a, 0], [s + a + 1.2, 0.9], [s + a + 5.6, 1.0], [s + a + 7, 0]]);
-        add(rn + '_Joint_5', 'ry', [[s + a, 0], [s + a + 1.2, 0.5], [s + a + 5.6, 0.5], [s + a + 7, 0]]); flash('C' + ri + '_Arc', s + a + 2.4, s + a + 5.6); }
-      if (q === 6) { reach('Op_Mig', s + a - 0.5, s + a + 8, -0.85); flash('Op_Mig_Arc', s + a + 1, s + a + 7.2); add('C_Manual_Torch', 'y', [[s + a - 0.5, 0], [s + a + 0.5, -0.45], [s + a + 7.5, -0.45], [s + a + 8.5, 0]]); add('C_Manual_Torch', 'x', [[s + a - 0.5, 0], [s + a + 0.5, -0.5], [s + a + 7.5, -0.5], [s + a + 8.5, 0]]); add('C_Manual_Torch', 'z', [[s + a - 0.5, 0], [s + a + 0.5, 0.7], [s + a + 7.5, 0.7], [s + a + 8.5, 0]]); add(PN + '_Pipes', 'vis', [[s, false], [s + a + 7.2, true]]); } }
+      if (q >= 2 && q <= 5 && RM) { const ri = q - 2; playRobot('C' + ri, RM, s + a); flash('C' + ri + '_Arc', s + a + RM.ev.weld0, s + a + RM.ev.weld1); }
+      if (q === 4) { ry(ti + 1.8, Math.PI / 2); ry(ti + 3.3, Math.PI * 1.5); } if (q === 6) { ry(ti + 1.8, Math.PI * 1.5); ry(ti + 3.3, Math.PI / 2); }   // the rotary jig turns the part with it
+      if (q === 6) { reach('Op_Mig', s + a + 1.5, s + a + 7.0, -0.85); flash('Op_Mig_Arc', s + a + 2.5, s + a + 6.2); add('C_Manual_Torch', 'y', [[s + a + 1.5, 0], [s + a + 2.5, -0.45], [s + a + 6.5, -0.45], [s + a + 7.5, 0]]); add('C_Manual_Torch', 'x', [[s + a + 1.5, 0], [s + a + 2.5, -0.5], [s + a + 6.5, -0.5], [s + a + 7.5, 0]]); add('C_Manual_Torch', 'z', [[s + a + 1.5, 0], [s + a + 2.5, 0.6], [s + a + 6.5, 0.6], [s + a + 7.5, 0]]); add(PN + '_Pipes', 'vis', [[s, false], [s + a + 6.2, true]]); } }
     const tU = I(n0 + JPOS) - s - 3.0; at(tU, [JX(JPOS - 1), TOP + 0.02, Z0]); at(tU + 1.2, [S.cout, TOP, Z0]); cx = S.cout; ct = tU + 1.2;
     conv(S.cEnd - 0.4);
     // ---- D: C/F tester (hood down) → external paste gantry → manual check at the lift → unload stop

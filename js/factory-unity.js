@@ -72,7 +72,7 @@
     e3_fr5_tending_cell: { label: '가공 셀 (AMR → FR5 → 가공기)', group: E3, cat: 'EGR 라인', size: [3.38, 2.22, 1.79], parts: [['e3_fr5_tending_cell', 0, 0, 0]], clip: 'Tending_Cycle', clipLen: 24.9 },
     e3_egr_core_line: { label: 'EGR 코어 라인 B (공정검사 → 코어 적층 → ONE STATION 로봇 도포 셀 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.41, 4.55], parts: [['e3_egr_core_line', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 256 },
     e3_egr_core_line_manual: { label: 'EGR 코어 라인 A (공정검사 → 코어 적층 → 작업자 수동 도포 → 진공 브레이징 → 검사)', group: E3, cat: 'EGR 라인', size: [18.3, 2.41, 4.55], parts: [['e3_egr_core_line_manual', 0, 0, 0]], clip: 'Core_Cycle', clipLen: 512 },
-    e3_egr_module_line: { label: 'EGR 용접 모듈 라인 (코어 투입 · 도포 → 엔드 탱크 · 레이저 → 택 용접 MIG 4대 → C/F · 외부 도포 → 리크 테스트)', group: E3, cat: 'EGR 라인', size: [29.01, 3.7, 5.76], parts: [['e3_egr_module_line', 0, 0, 0]], clip: 'Module_Cycle', clipLen: 400 },
+    e3_egr_module_line: { label: 'EGR 용접 모듈 라인 (코어 투입 · 도포 → 엔드 탱크 · 레이저 → 택 용접 MIG 4대 → C/F · 외부 도포 → 리크 테스트)', group: E3, cat: 'EGR 라인', size: [29.01, 3.7, 5.42], parts: [['e3_egr_module_line', 0, 0, 0]], clip: 'Module_Cycle', clipLen: 400 },
     e3_egr_weld_line: { label: 'EGR 용접 라인 (Body TIG → 1차 강압 검사 → 로봇 MIG → 수동 MIG 3석 → C/F 최종 검사 → DMC · 포장)', group: E3, cat: 'EGR 라인', size: [15.61, 3.9, 2.77], parts: [['e3_egr_weld_line', 0, 0, 0]], clip: 'Weld_Cycle', clipLen: 512 },
     e3_brazed_core: { label: '브레이징 코어 (반제품)', group: E3, cat: '부품 · 소품', size: [0.22, 0.07, 0.09], parts: [['e3_brazed_core', 0, 0, 0]] },
     e3_tote_blanks: { label: '부품 상자 (판재 블랭크 8키트)', group: E3, cat: '물류', size: [0.61, 0.27, 0.42], parts: [['e3_tote_blanks', 0, 0, 0]] },

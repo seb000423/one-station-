@@ -45,7 +45,7 @@ for z, nm in ((-5, '지붕 북쪽'), (5, '지붕 남쪽')):
 # ---------------------------------------------------------------- the line: one baked model, centred on its box (x −1.05 … 26.8, z −2.225 … 4.1 in line coords)
 XS, ZS = -15.35, -4.5
 L = lambda x, z: (r3(x + XS), r3(z + ZS))
-model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(13.455, 1.3815))   # box −1.05 … 27.96 × −1.497 … 4.26 (build.mjs prints size and min)
+model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(13.455, 1.55))   # box −1.05 … 27.96 × −1.16 … 4.26 (build.mjs prints size and min)
 
 # (no floor labels: the user found the 36 label cards cluttered, 2026-10-29)
 
