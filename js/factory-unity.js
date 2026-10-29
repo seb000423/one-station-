@@ -175,6 +175,15 @@
     return out;
   }
   const clipTime = (g, t) => { const u = g.children.find(c => c.name === 'UF_Model'), m = u && u.userData.clipMixer; if (m) m.setTime(t); }; // looping clip at sim time t (the builder replaces g.userData)
+  // rule set v2.0 §5 (rules/smart-factory-standard-v2.md): machines and equipment render with metalness 0.5–0.8 and roughness 0.2–0.4.
+  // Applied to catalogue machines (not people, buildings, logistics goods or small parts); glass, lamps, screens and labels keep theirs.
+  const PBR_CATS = new Set(['사람', '건물', '물류', '부품 · 소품']), PBR_EXEMPT = /glass|polycarbonate|acryl|curtain|^lamp_|led_ring|ring_light|screen|display|beam|weld_arc|^plate_|label|syringe/i, PBR_DONE = new WeakMap();
+  function pbrClamp(root) {
+    const cl = (v, a, b) => Math.min(b, Math.max(a, v));
+    root.traverse(o => { if (!o.isMesh) return; const one = mt => { if (!mt || !mt.isMeshStandardMaterial || mt.transparent || PBR_EXEMPT.test(mt.name || '') || (mt.emissiveIntensity > 0 && mt.emissive && mt.emissive.getHex())) return mt;
+        if (!PBR_DONE.has(mt)) { const c = mt.clone(); c.metalness = cl(mt.metalness, 0.5, 0.8); c.roughness = cl(mt.roughness, 0.2, 0.4); PBR_DONE.set(mt, c); PBR_DONE.set(c, c); } return PBR_DONE.get(mt); };
+      o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  }
   const ufmodel = {
     label: '설비 모델', group: 'equipment',
     defaults: () => ({ model: 'line01', scale: 1, cycle: 12 }),
@@ -191,6 +200,7 @@
       if (all.children.length) {
         const y0 = c.keepY ? A.bounds(all).min.y : 0;
         const placed = A.placed(all, 'UF_Model'); all.position.y += y0; placed.scale.setScalar(s); g.add(placed);
+        if (!PBR_CATS.has(c.cat || '')) pbrClamp(placed);
         if (c.clip) { // a baked animation clip, driven by the sim clock (animate → clipTime): moves only while the simulation plays
           const clip = all.children.flatMap(m => m.animations || []).find(k => k.name === c.clip);
           if (clip) { const mixer = new THREE.AnimationMixer(placed); mixer.clipAction(clip).play(); placed.userData.clipMixer = mixer; placed.userData.clip = clip; }

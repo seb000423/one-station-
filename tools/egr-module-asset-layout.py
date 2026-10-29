@@ -67,7 +67,7 @@ for nm, key, x, w, d, front in (('A셀 제어반', 'ctrl1', 3.0, 1.70, 0.47, 'S'
                                  ('C셀 제어반 (MIG 4대)', 'ctrl1', 15.0, 1.70, 0.47, 'S'), ('PLC 캐비닛 E', 'line08', S['dEnd'] + 0.55, 1.10, 0.71, 'W'),
                                  ('D셀 제어반', 'ctrl1', S['dEnd'] + 2.0, 1.70, 0.47, 'S'), ('E셀 제어반', 'ctrl1', S['dEnd'] + 4.0, 1.70, 0.47, 'S')):
     z = FENCE_S - 0.06 - d / 2                              # line z of the cabinet centre, back to the fence
-    rot = {'S': math.pi, 'E': math.pi / 2, 'W': -math.pi / 2}[front]
+    rot = math.pi if front == 'S' else {'E': -math.pi / 2, 'W': math.pi / 2}[front]   # panel faces are local +z; the side-on cabinets' doors are on their local −z face
     model(nm, key, *L(x, z), round(rot, 4))
     bx0, bx1, bz0, bz1 = x - w / 2 + XS, x + w / 2 + XS, z - d / 2 + ZS, z + d / 2 + ZS
     PANELS.append((nm,) + {'S': (bx0, bx1, bz0 - 0.8, bz0), 'E': (bx1, bx1 + 0.8, bz0, bz1), 'W': (bx0 - 0.8, bx0, bz0, bz1)}[front])

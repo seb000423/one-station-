@@ -203,7 +203,19 @@ export function egrModuleLine() {
     if ((conv(A) && (conv(B) || straddles(B))) || (conv(B) && straddles(A))) continue;
     if (A[1] < B[2] - 0.02 && B[1] < A[2] - 0.02 && A[3] < B[4] - 0.02 && B[3] < A[4] - 0.02) bad.push(A[0] + ' × ' + B[0]); }
   if (bad.length) throw new Error('machine footprints overlap: ' + bad.join(', '));
-  const model = animate(finalize(root), robots); model.userData.table = TABLE; return model;
+  const model = animate(pbrClamp(finalize(root)), robots);   // rule set v2.0 §5: machine surfaces metalness 0.5–0.8, roughness 0.2–0.4 (after finalize builds the meshes)
+  model.userData.table = TABLE; return model;
+}
+
+// rule set v2.0 §5 (rules/smart-factory-standard-v2.md): machines and equipment in MeshStandardMaterial with metalness 0.5–0.8 and roughness
+// 0.2–0.4. Glass, curtains, lamps, screens, beams, arcs and printed plates keep their own values (they are not machine surfaces).
+const PBR_EXEMPT = /glass|polycarbonate|acryl|curtain|^lamp_|led_ring|ring_light|screen|display|beam|weld_arc|^plate_|label|syringe/i;
+function pbrClamp(root) {
+  const done = new Map(), cl = (v, a, b) => Math.min(b, Math.max(a, v));
+  root.traverse(o => { if (!o.isMesh) return; const one = mt => { if (!mt || !mt.isMeshStandardMaterial || mt.transparent || PBR_EXEMPT.test(mt.name) || (mt.emissiveIntensity > 0 && mt.emissive && mt.emissive.getHex())) return mt;
+      if (!done.has(mt)) { const c = mt.clone(); c.metalness = cl(mt.metalness, 0.5, 0.8); c.roughness = cl(mt.roughness, 0.2, 0.4); done.set(mt, c); } return done.get(mt); };
+    o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  return root;
 }
 
 // ---------------------------------------------------------------- the cycle
