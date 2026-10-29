@@ -229,10 +229,10 @@
       const out = [], warp = plan && plan.warp ? plan.warp : t => t, deg = 180 / Math.PI;
       for (const [n, k, dir, rev] of [['Op_Arm_L', 'l', 'RotationX', false], ['Op_Arm_R', 'r', 'RotationX', false]]) { const node = g.getObjectByName(n); if (!node) continue; const a0 = benchPose(p, 0)[k], s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = Math.round((benchPose(p, warp(f * spf))[k] - a0) * deg * 100) / 100; out.push({ node, dir, rev, series: s }); }
       for (const [n, k] of [['Op_Arm_L_Swing', 'lry'], ['Op_Arm_R_Swing', 'ry'], ['Operator_Turn', 'turn']]) { const node = g.getObjectByName(n); if (!node) continue; const a0 = benchPose(p, 0)[k], s = new Array(frames); let any = false; for (let f = 0; f < frames; f++) { s[f] = Math.round((benchPose(p, warp(f * spf))[k] - a0) * deg * 100) / 100; any = any || s[f] !== 0; } if (any) out.push({ node, dir: 'RotationY', rev: true, series: s }); }
-      const vis = (node, on) => { node.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = on(benchPose(p, warp(f * spf))) ? 0 : -50000; if (s.some(v => v !== s[0]) || s[0]) out.push({ node, dir: 'LinearY', rev: false, series: s }); };
+      const vis = (node, on) => { node.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = on(benchPose(p, warp(f * spf))) ? 0 : -3000; if (s.some(v => v !== s[0]) || s[0]) out.push({ node, dir: 'LinearY', rev: false, series: s }); };
       const bp = g.getObjectByName('Bench_Part'), hp = g.getObjectByName('Op_Hand_Part');
       if (bp) { vis(bp, a => a.part); for (let k = 1; k <= 3; k++) { const s = g.getObjectByName('Bench_Paste_' + k); if (s) vis(s, a => a.stripes >= k); } } if (hp) vis(hp, a => a.hand);
-      const on = g.getObjectByName('Andon_On'); if (on && plan && plan.lampAt) { on.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = plan.lampAt(f * spf) ? 0 : -50000; out.push({ node: on, dir: 'LinearY', rev: false, series: s }); }
+      const on = g.getObjectByName('Andon_On'); if (on && plan && plan.lampAt) { on.visible = true; const s = new Array(frames); for (let f = 0; f < frames; f++) s[f] = plan.lampAt(f * spf) ? 0 : -3000; out.push({ node: on, dir: 'LinearY', rev: false, series: s }); }
       return out;
     },
     cycle: p => (p.worker ? Math.max(5, p.cycle) : 0),

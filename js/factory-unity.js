@@ -165,13 +165,14 @@
       const [name, prop] = tr.name.split('.'), node = u.getObjectByName(name); if (!node) continue;
       if (prop === 'quaternion') { const ax = (node.userData.anim && node.userData.anim.axis) || quatAxis(tr.values); /* no anim metadata (operators' arms, turns): the axis that moves */ probes.push({ node, dir: 'Rotation' + ax.toUpperCase(), get: () => { const q = node.quaternion; return 2 * Math.atan2(q[ax], q.w) * 180 / Math.PI; }, deg: true }); }
       else if (prop === 'position') for (const ax of ['x', 'y', 'z']) probes.push({ node, dir: 'Linear' + ax.toUpperCase(), get: () => node.position[ax] * 1000 });
-      else if (prop === 'scale') { const vis = W.jointWrap(node, name + '_Vis'); probes.push({ node: vis, dir: 'LinearY', get: () => (node.scale.x < 0.01 ? -50000 : 0), scaleOf: node }); }
+      // hidden = parked 3 m under the hall floor (the floor slab covers it; 50 m down showed through the viewer's ground outside the building)
+      else if (prop === 'scale') { const vis = W.jointWrap(node, name + '_Vis'); probes.push({ node: vis, dir: 'LinearY', get: () => (node.scale.x < 0.01 ? -3000 : 0), scaleOf: node }); }
     }
     const series = probes.map(() => new Array(frames)), v0 = [];
     for (let f = 0; f < frames; f++) { mixer.setTime(warp ? warp(f * spf) : f * spf); probes.forEach((p, i) => { let v = p.get(); if (f === 0) v0[i] = v; let d = v - v0[i]; if (p.deg) { const prev = f ? series[i][f - 1] : 0; while (d - prev > 180) d -= 360; while (d - prev < -180) d += 360; } series[i][f] = Math.round(d * 100) / 100; }); }
     mixer.setTime(0);
     probes.forEach(p => { if (p.scaleOf) p.scaleOf.scale.setScalar(1); });  // exported shown; the _Vis drive hides it from frame 0 where needed
-    probes.forEach((p, i) => { if (p.scaleOf) series[i] = series[i].map(d => d + (v0[i] < 0 ? -50000 : 0)); });
+    probes.forEach((p, i) => { if (p.scaleOf) series[i] = series[i].map(d => d + (v0[i] < 0 ? -3000 : 0)); });
     probes.forEach((p, i) => { if (series[i].some(v => v !== 0)) out.push({ node: p.node, dir: p.dir, rev: REV[p.dir], series: series[i] }); });
     return out;
   }
