@@ -57,6 +57,9 @@ FENCE_S = LZ - 2.4                                          # the operator-side 
 # the four people on the line (the only manual stations, as in the CAD), inside the guard on the operator side, facing the line (+z at rot 0)
 for nm, x, z in (('투입 작업자 (코어 상자 보급)', S['tote'], LZ - 1.45), ('수동 MIG 작업자', S['manual'] - 0.1, LZ - 0.8), ('수동 검사 작업자', S['check'], LZ - 0.85), ('포장 작업자', S['pack'], LZ - 1.95)):
     model(nm, 'uf_worker', *L(x, z), 0)
+# inspection tunnels over the conveyor (C/F tester, laser marking): the catalogue's scanner gate at 0.7 scale, opening along the line
+for nm, x in (('C/F 검사 터널', S['cf']), ('레이저 마킹 터널', S['mark'])):
+    add('ufmodel', nm, *L(x, LZ), 0, {'model': 'rv_scanner', 'scale': 0.7, 'cycle': 12})
 model('검사 보조 테이블 (게이지 · OK/NG 트레이)', 'egr_st05', *L(S['check'], LZ - 1.75), 0)
 model('수동 MIG 부품 랙 (파이프 · 브래킷)', 'egr_rack', *L(S['cf'] + 0.1, LZ - 1.85), 0)
 # control panels and PLC cabinets OUTSIDE the operator-side guard fence, backs to the fence, fronts to the aisle (rot π) with 0.8 m clear in

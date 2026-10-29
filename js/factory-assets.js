@@ -12,7 +12,9 @@
     // FANUC CRX-10iA/L cobot, joints A1…A6 (A1 RotationY, A2 A3 A5 RotationZ, A4 A6 RotationX), base at y = 0
     fanuc: { url: 'realvirtual/library/Robots/FanucCRX-10iA-L.glb', label: 'FANUC CRX-10iA/L' },
     // AGV with lift pod, about 0.8 × 1.1 m, front towards local +Z
-    agv: { url: 'realvirtual/library/MobileRobots/AGVStacker.glb', label: 'AGV Stacker' }
+    agv: { url: 'realvirtual/library/MobileRobots/AGVStacker.glb', label: 'AGV Stacker' },
+    // inspection tunnel (pallet scanner): 2.02 × 1.95 m, 2.2 m tall, the pallet passes along local X
+    rv_scanner: { url: 'realvirtual/library/PalletHandling/PalletScanner.glb', label: '검사 터널' }
   };
   // Unity Factory (Unity Technologies Japan, Asset Store, converted to GLB — see assets/models/unity-factory/README.md):
   // production-line machines, a 6-axis arm, control cabinets. Metres, on the floor at y = 0, Draco compressed.

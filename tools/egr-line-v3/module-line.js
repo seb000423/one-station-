@@ -20,7 +20,7 @@ const S = { tote: -0.6, lane: 1.1, merge: 2.1, prof: 2.8, disp: 3.6, cam: 4.25, 
   // MIG robots 1.0 m apart (rule set v2.0 §4); the manual MIG station sits 1.5 m past robot 4 (outside the FR10's 1.4 m reach) behind a welding screen
   flange: 12.7, mig: [13.5, 14.5, 15.5, 16.5], cturn: 15.0, manual: 18.1, cEnd: 18.6,
   cf: 19.3, paste: 20.4, check: 21.5, dEnd: 22.2,
-  eturn: 22.9, evis: 23.6, estop: 24.3, ecab: [25.1, Z0 - 0.78], eback: 24.8, mark: 26.0, nut: 26.9, okng: 27.7, pack: 28.6, eEnd: 29.3 };
+  eturn: 22.9, evis: 23.6, estop: 24.3, ecab: [25.1, Z0 - 0.78], eback: 24.8, mark: 26.15, nut: 27.1, okng: 27.85, pack: 28.6, eEnd: 29.3 };
 const RBASE = { A: [1.55, Z0], B: [S.bstop + 0.25, Z0 - 0.6], E: [S.estop + 0.25, Z0 - 0.6] }, MZ = Z0 - 0.95, RH = 0.9, RHM = 0.75;   // handling robots (FR5) and MIG robots (FR10) pedestals
 const HOME = { A: li => [RBASE.A[0], RH + 0.35, Z0 + (li ? 0.15 : -0.15)], B: [RBASE.B[0] - 0.4, RH + 0.45, RBASE.B[1] - 0.25], E: [RBASE.E[0] - 0.4, RH + 0.45, RBASE.E[1] - 0.25] };
 
@@ -156,8 +156,11 @@ export function egrModuleLine() {
   monitor('C_HMI', S.cEnd - 0.4, Z0 - 1.4, 0.4); tower(S.cEnd - 0.2, Z0 - 1.5);
 
   // ================================================================ D. C/F check, external paste, manual check (x 16.9 … 20.5)
-  { stopper('Stop_cf', S.cf); cabin('C/F 검사기', S.cf - 0.45, S.cf + 0.45, Z0 - 0.5, Z0 + 0.5, 1.9, null); const hd = G('D_CF_Hood', root, S.cf, 1.45, Z0); box(hd, m.yellow, 0.4, 0.26, 0.34, 0, 0, 0); box(hd, glass, 0.3, 0.1, 0.28, 0, 0, 0); box(root, m.sheet, 0.3, 0.3, 0.14, S.cf + 0.2, 1.35, Z0 + 0.6); cyl(root, m.sheet, 0.06, 0.012, S.cf + 0.2, 1.38, Z0 + 0.672, 'z', 20);
-    const ok = G('D_CF_OK', root); cyl(ok, m.lampG, 0.032, 0.06, S.cf - 0.2, 1.4, Z0 + 0.6, 'y', 14); prof(root, [S.cf - 0.2, 0.9, Z0 + 0.6], [S.cf - 0.2, 1.36, Z0 + 0.6], 0.03, m.frameDark); }
+  // C/F tester and laser marking: inspection tunnels (the catalogue's pallet scanner, rv_scanner, scale 0.7: 1.42 × 1.36 × 1.54 m, opening along X)
+  // are placed over the conveyor by tools/egr-module-asset-layout.py from this station table; only the moving heads inside are modelled here
+  const TUN = [0.71, 0.68, 1.54];
+  { stopper('Stop_cf', S.cf); fp('C/F 검사 터널', S.cf - TUN[0], S.cf + TUN[0], Z0 - TUN[1], Z0 + TUN[1]); const hd = G('D_CF_Hood', root, S.cf, 1.28, Z0); box(hd, m.yellow, 0.4, 0.26, 0.34, 0, 0, 0); box(hd, glass, 0.3, 0.1, 0.28, 0, 0, 0); box(root, m.aluDark, 0.05, 0.14, 0.05, S.cf, 1.47, Z0);   // test hood hung from the tunnel roof
+    const ok = G('D_CF_OK', root); cyl(ok, m.lampG, 0.032, 0.06, S.cf + 0.5, TUN[2] + 0.04, Z0 - 0.5, 'y', 14); }
   { stopper('Stop_paste', S.paste); gate(S.paste, 0.9, 1.85); const gx = G('D_Disp_X', root, S.paste, 0, Z0), gz = G('D_Disp_Z', gx), gy = G('D_Disp_Y', gz); box(gx, m.aluDark, 0.14, 0.1, 0.9, 0, 1.85, 0); box(gz, m.aluDark, 0.12, 0.1, 0.12, 0, 1.79, 0); box(gy, m.alu, 0.05, 0.5, 0.05, 0, 1.5, 0); box(gy, m.yellow, 0.1, 0.16, 0.1, 0, 1.32, 0); cyl(gy, m.black, 0.03, 0.1, 0, 1.19, 0, 'y', 12); cyl(gy, m.steel, 0.004, 0.06, 0, 1.11, 0, 'y', 6);
     box(root, m.sheet, 1.4, 0.8, 0.5, S.paste, 0.4, Z0 + 1.15); for (let k = 0; k < 4; k++) cyl(root, magenta, 0.12, 0.5, S.paste - 0.5 + k * 0.34, 1.06, Z0 + 1.15, 'y', 20); cyl(root, m.black, 0.012, 0.7, S.paste, 1.75, Z0 + 0.8, 'z', 8);
     nameplate('외부 페이스트 도포', S.paste, 1.99, Z0 - 0.05, 0, 0.44); nameplate('페이스트 탱크 ×4', S.paste, 0.55, Z0 + 0.89, 0, 0.36); fp('페이스트 탱크', S.paste - 0.7, S.paste + 0.7, Z0 + 0.9, Z0 + 1.4); fp('외부 도포', S.paste - 0.15, S.paste + 0.15, Z0 - 0.5, Z0 + 0.5); }
@@ -173,7 +176,7 @@ export function egrModuleLine() {
     const hood = G('E_Hood', root, cx, 1.5, cz); box(hood, glass, 0.4, 0.3, 0.34, 0, 0, 0); box(hood, m.yellow, 0.42, 0.03, 0.36, 0, 0.165, 0); box(root, m.aluDark, 0.08, 0.5, 0.08, cx, 1.85, cz);
     const ok = G('E_Leak_OK', root); cyl(ok, m.lampG, 0.032, 0.06, cx + 0.4, 1.5, cz - 0.1, 'y', 14); const ng = G('E_Leak_NG', root); cyl(ng, m.lampR, 0.032, 0.06, cx + 0.4, 1.5, cz + 0.1, 'y', 14); prof(root, [cx + 0.4, 0.06, cz], [cx + 0.4, 1.45, cz], 0.03, m.frameDark);
     stopper('Stop_eback', S.eback); }
-  { stopper('Stop_mark', S.mark); cabin('레이저 마킹', S.mark - 0.4, S.mark + 0.4, Z0 - 0.5, Z0 + 0.5, 1.9, null); const h = slide('E_MarkHead', S.mark, Z0, 1.85, 0.3); box(h, m.black, 0.18, 0.2, 0.18, 0, -0.1, 0); cyl(h, m.steel, 0.04, 0.05, 0, -0.22, 0, 'y', 12); const bm = G('E_Mark_Beam', h); cyl(bm, laserM, 0.003, 0.55, 0, -0.5, 0, 'y', 6); }
+  { stopper('Stop_mark', S.mark); fp('레이저 마킹 터널', S.mark - TUN[0], S.mark + TUN[0], Z0 - TUN[1], Z0 + TUN[1]); box(root, m.aluDark, 0.05, 0.16, 0.05, S.mark, 1.46, Z0); const h = G('E_MarkHead', root, S.mark, 1.3, Z0); box(h, m.black, 0.18, 0.16, 0.18, 0, 0, 0); cyl(h, m.steel, 0.04, 0.04, 0, -0.1, 0, 'y', 12); const bm = G('E_Mark_Beam', h); cyl(bm, laserM, 0.003, 0.2, 0, -0.22, 0, 'y', 6); }   // galvo head hung from the tunnel roof
   { stopper('Stop_nut', S.nut); const nr = balancer('E_Nutrunner', S.nut + 0.5, Z0 + 0.75, 1.5, Math.PI * 1.25); cyl(nr, m.black, 0.02, 0.4, 0, 0, 0, 'y', 10); cyl(nr, m.yellow, 0.03, 0.08, 0, 0.1, 0, 'y', 10); cyl(nr, m.steel, 0.006, 0.08, 0, -0.24, 0, 'y', 6);
     box(root, m.aluDark, 0.4, 0.03, 0.3, S.nut, 0.9, Z0 - 0.7); for (const sx of [-1, 1]) for (const sz of [-1, 1]) prof(root, [S.nut + sx * 0.17, 0.06, Z0 - 0.7 + sz * 0.12], [S.nut + sx * 0.17, 0.885, Z0 - 0.7 + sz * 0.12], 0.04); for (let k = 0; k < 3; k++) cyl(root, m.rubber, 0.04, 0.004, S.nut - 0.1 + k * 0.1, 0.918, Z0 - 0.7, 'y', 16); cyl(root, m.sheet, 0.12, 0.3, S.nut + 0.25, 1.05, Z0 - 0.7, 'y', 16);
     nameplate('가스켓 · 볼트 체결', S.nut, 0.9, Z0 - 0.86, 0, 0.36); fp('가스켓 · 볼트', S.nut - 0.22, S.nut + 0.4, Z0 - 0.9, Z0 - 0.5); }
@@ -299,7 +302,7 @@ function animate(root, robots) {
       conv(x, i === 2 ? 'Stop_cturn' : i ? 'Stop_mig' + (i - 1) : 'Stop_flange'); const t0 = dwell(9); if (RM) { playRobot('C' + i, RM, s + t0 + 0.5); flash('C' + i + '_Arc', s + t0 + 0.5 + RM.ev.weld0, s + t0 + 0.5 + RM.ev.weld1); } });
     conv(S.manual, 'Stop_mig3'); { const t0 = dwell(8); flash('C_Manual_Arc', s + t0 + 1.5, s + t0 + 6.2); add('C_Manual_Torch', 'y', [[s + t0 + 0.5, 0], [s + t0 + 1.5, -0.45], [s + t0 + 6.5, -0.45], [s + t0 + 7.5, 0]]); add('C_Manual_Torch', 'x', [[s + t0 + 0.5, 0], [s + t0 + 1.5, -0.5], [s + t0 + 6.5, -0.5], [s + t0 + 7.5, 0]]); add('C_Manual_Torch', 'z', [[s + t0 + 0.5, 0], [s + t0 + 1.5, 0.75], [s + t0 + 6.5, 0.75], [s + t0 + 7.5, 0]]); add(QN + '_Pipes', 'vis', [[s, false], [s + t0 + 6.2, true]]); }
     // ---- D
-    conv(S.cf, 'Stop_manual'); { const t0 = dwell(14); add('D_CF_Hood', 'y', [[s + t0 + 1, 0], [s + t0 + 2.2, -0.38], [s + t0 + 12, -0.38], [s + t0 + 13.2, 0]]); flash('D_CF_OK', s + t0 + 11, s + t0 + 14); }
+    conv(S.cf, 'Stop_manual'); { const t0 = dwell(14); add('D_CF_Hood', 'y', [[s + t0 + 1, 0], [s + t0 + 2.2, -0.26], [s + t0 + 12, -0.26], [s + t0 + 13.2, 0]]); flash('D_CF_OK', s + t0 + 11, s + t0 + 14); }
     conv(S.paste, 'Stop_cf'); { const t0 = dwell(10); add('D_Disp_Y', 'y', [[s + t0 + 1, 0], [s + t0 + 2, -(1.05 - (PT + 2 * YC + 0.01))], [s + t0 + 8.5, -(1.05 - (PT + 2 * YC + 0.01))], [s + t0 + 9.5, 0]]); add('D_Disp_Z', 'z', [[s + t0 + 2, -0.13], [s + t0 + 5, -0.13], [s + t0 + 5.4, 0.13], [s + t0 + 8.5, 0.13], [s + t0 + 9.5, 0]]); add('D_Disp_X', 'x', [[s + t0 + 2, -0.05], [s + t0 + 5, 0.05], [s + t0 + 5.4, -0.05], [s + t0 + 8.5, 0.05], [s + t0 + 9.5, 0]]); }
     conv(S.check, 'Stop_paste'); dwell(12);
     // ---- E
@@ -312,7 +315,7 @@ function animate(root, robots) {
         release('Stop_estop'); palAt(t0 + 1.0, S.estop); palAt(t0 + 1.0 + (S.eback - S.estop) / CV, S.eback); cx = S.eback;
         partOnPallet(re + e.release - s, S.eback); show(re + e.release - s, true); ct = re + e.release - s + 0.5; clamp(ct, false); clamp(ct + 0.8, true); ct += 1.5; }
       else { ct = t0 + 30; cx = S.eback; partOnPallet(ct, S.eback); } }
-    conv(S.mark, 'Stop_eback'); { const t0 = dwell(6); head('E_MarkHead', s + t0 + 0.8, s + t0 + 5.2, 0.25); flash('E_Mark_Beam', s + t0 + 2, s + t0 + 4.2); add(QN + '_Mark', 'vis', [[s, false], [s + t0 + 4.2, true]]); }
+    conv(S.mark, 'Stop_eback'); { const t0 = dwell(6); head('E_MarkHead', s + t0 + 0.8, s + t0 + 5.2, 0.06); flash('E_Mark_Beam', s + t0 + 2, s + t0 + 4.2); add(QN + '_Mark', 'vis', [[s, false], [s + t0 + 4.2, true]]); }
     conv(S.nut, 'Stop_mark'); { const t0 = dwell(12); add('E_Nutrunner', 'x', [[s + t0, 0], [s + t0 + 1, -0.62], [s + t0 + 5.5, -0.62], [s + t0 + 6.2, -0.38], [s + t0 + 10.5, -0.38], [s + t0 + 11.5, 0]]); add('E_Nutrunner', 'z', [[s + t0, 0], [s + t0 + 1, 0.75], [s + t0 + 10.5, 0.75], [s + t0 + 11.5, 0]]);
       add('E_Nutrunner', 'y', [[s + t0 + 1, 0], [s + t0 + 2, -0.4], [s + t0 + 5, -0.4], [s + t0 + 5.6, -0.1], [s + t0 + 6.4, -0.1], [s + t0 + 7, -0.4], [s + t0 + 10, -0.4], [s + t0 + 10.8, 0]]); add('E_Nutrunner', 'ry', [[s + t0 + 2, 0], [s + t0 + 5, 6 * TAU], [s + t0 + 7, 6 * TAU], [s + t0 + 10, 12 * TAU], [s + t0 + 11.5, 12 * TAU], [s + t0 + 11.51, 0]]); }
     conv(S.okng, 'Stop_nut'); { const t0 = dwell(4); flash(lNG ? 'E_OKNG_NG' : 'E_OKNG_OK', s + t0 + 1, s + t0 + 4);

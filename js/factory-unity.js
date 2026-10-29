@@ -17,7 +17,7 @@
 
   // id → { label, size: [x, y, z] m, parts: [[asset id, x, y, z]] }  (parts share the GLB origin; the Unity
   // prefab offsets are mirrored in X because the GLBs come out of Blender's FBX import, not Unity's)
-  const UF = '공장', UW = '창고', EGR = 'EGR 조립 라인', E3 = 'EGR 라인', EW = 'EGR 용접 모듈 라인'; // sources; the palette and object list group by cat // group names shown in the 모델 tab
+  const RVL = '물류 라이브러리', UF = '공장', UW = '창고', EGR = 'EGR 조립 라인', E3 = 'EGR 라인', EW = 'EGR 용접 모듈 라인'; // sources; the palette and object list group by cat // group names shown in the 모델 tab
   const CATALOG = {
     line01: { label: '캐비닛 벨트 유닛', group: UF, cat: '공장 설비', size: [0.93, 1.26, 0.90], parts: [['uf_line01', 0, 0, 0]] },
     line02: { label: '소형 벨트 유닛', group: UF, cat: '공장 설비', size: [0.69, 0.89, 0.69], parts: [['uf_line02', 0, 0, 0]] },
@@ -35,6 +35,7 @@
     uf_building: { label: '공장 건물', group: UF, cat: '건물', size: [67.37, 9.55, 67.34], parts: [['uf_building', 0, 0, 0]] },
     uf_cart: { label: '운반 카트', group: UF, cat: '물류', size: [0.56, 1.01, 0.94], parts: [['uf_cart', 0, 0, 0]] },
     uf_wagon: { label: '부품 왜건', group: UF, cat: '물류', size: [0.59, 1.08, 1.56], parts: [['uf_wagon', 0, 0, 0]] },
+    rv_scanner: { label: '검사 터널 (스캐너 게이트)', group: RVL, cat: '검사 · 비전', size: [2.02, 2.20, 1.95], parts: [['rv_scanner', 0, 0, 0]] },
     uf_worker: { label: '작업자 (공장)', group: UF, cat: '사람', size: [0.80, 1.82, 0.40], parts: [['uf_worker', 0, 0, 0]] },
     uf_tablet: { label: '태블릿 (공장)', group: UF, cat: '부품 · 소품', size: [0.31, 0.22, 0.01], parts: [['uf_tablet', 0, 0, 0]] },
     uw_building: { label: '창고 건물', group: UW, cat: '건물', size: [37.66, 9.80, 65.03], parts: [['uw_building', 0, 0, 0]] },
