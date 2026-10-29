@@ -17,10 +17,11 @@ export const MODULE_T = 400, MODULE_P = 50;
 // stations along the spine (x)
 const S = { tote: -0.6, lane: 1.1, merge: 2.1, prof: 2.8, disp: 3.6, cam: 4.25, scale: 4.9, ngA: 5.5, aEnd: 5.9,
   turn: 6.4, tank: 7.3, press: [8.15, 8.9], vis: 9.6, bstop: 10.3, bcab: [11.1, Z0 - 0.78], bback: 10.8, bng: 11.5, bEnd: 12.0,
-  flange: 12.7, mig: [13.5, 14.2, 14.9, 15.6], cturn: 14.55, manual: 16.4, cEnd: 16.9,
-  cf: 17.6, paste: 18.7, check: 19.8, dEnd: 20.5,
-  eturn: 21.2, evis: 21.9, estop: 22.6, ecab: [23.4, Z0 - 0.78], eback: 23.1, mark: 24.3, nut: 25.2, okng: 26.0, pack: 26.9, eEnd: 27.6 };
-const RBASE = { A: [1.55, Z0], B: [10.55, Z0 - 0.6], E: [22.85, Z0 - 0.6] }, MZ = Z0 - 0.95, RH = 0.9, RHM = 0.75;   // handling robots (FR5) and MIG robots (FR10) pedestals
+  // MIG robots 1.0 m apart (rule set v2.0 §4); the manual MIG station sits 1.5 m past robot 4 (outside the FR10's 1.4 m reach) behind a welding screen
+  flange: 12.7, mig: [13.5, 14.5, 15.5, 16.5], cturn: 15.0, manual: 18.1, cEnd: 18.6,
+  cf: 19.3, paste: 20.4, check: 21.5, dEnd: 22.2,
+  eturn: 22.9, evis: 23.6, estop: 24.3, ecab: [25.1, Z0 - 0.78], eback: 24.8, mark: 26.0, nut: 26.9, okng: 27.7, pack: 28.6, eEnd: 29.3 };
+const RBASE = { A: [1.55, Z0], B: [S.bstop + 0.25, Z0 - 0.6], E: [S.estop + 0.25, Z0 - 0.6] }, MZ = Z0 - 0.95, RH = 0.9, RHM = 0.75;   // handling robots (FR5) and MIG robots (FR10) pedestals
 const HOME = { A: li => [RBASE.A[0], RH + 0.35, Z0 + (li ? 0.15 : -0.15)], B: [RBASE.B[0] - 0.4, RH + 0.45, RBASE.B[1] - 0.25], E: [RBASE.E[0] - 0.4, RH + 0.45, RBASE.E[1] - 0.25] };
 
 export function egrModuleLine() {
@@ -149,6 +150,7 @@ export function egrModuleLine() {
   { for (const [x, z] of [[S.mig[0] - 0.35, Z0 - 0.5], [S.mig[3] + 0.35, Z0 - 0.5], [S.mig[0] - 0.35, Z0 + 0.6], [S.mig[3] + 0.35, Z0 + 0.6]]) prof(root, [x, 0.06, z], [x, 2.6, z], 0.06, m.frameDark);   // fume hood on four posts
     const hx = (S.mig[0] + S.mig[3]) / 2; box(root, m.sheet, S.mig[3] - S.mig[0] + 0.5, 0.08, 1.2, hx, 2.6, Z0 + 0.05); box(root, m.sheet, 0.6, 0.3, 0.6, hx, 2.8, Z0 + 0.05); cyl(root, m.sheet, 0.13, 0.8, hx, 3.3, Z0 + 0.05, 'y', 20);
     plane(root, curtain, S.mig[3] - S.mig[0] + 1.2, 1.8, hx, 1.05, Z0 + 0.65, [0, 0, 0]); box(root, m.aluDark, S.mig[3] - S.mig[0] + 1.2, 0.03, 0.03, hx, 1.97, Z0 + 0.65); for (const x of [S.mig[0] - 0.6, S.mig[3] + 0.6]) { prof(root, [x, 0.06, Z0 + 0.65], [x, 2.0, Z0 + 0.65], 0.04, m.frameDark); foot(root, x, Z0 + 0.65); }   // welding screen on the far side
+    { const sx = S.mig[3] + 0.8; for (const z of [Z0 - 2.25, Z0 - 0.4]) { prof(root, [sx, 0.06, z], [sx, 2.0, z], 0.04, m.frameDark); foot(root, sx, z); } box(root, m.aluDark, 0.03, 0.03, 1.85, sx, 1.97, Z0 - 1.325); plane(root, curtain, 1.8, 1.8, sx, 1.05, Z0 - 1.325, [0, Math.PI / 2, 0]); nameplate('차광 스크린', sx + 0.02, 1.75, Z0 - 1.325, Math.PI / 2, 0.3); fp('차광 스크린', sx - 0.05, sx + 0.05, Z0 - 2.3, Z0 - 0.35); }   // welding screen: robot 4 ↔ manual MIG operator
     stopper('Stop_manual', S.manual); const mt = balancer('C_Manual_Torch', S.manual + 0.5, Z0 - 1.45, 1.45, Math.PI * 0.72); cyl(mt, m.black, 0.015, 0.25, 0, 0, 0, 'y', 8); cyl(mt, m.orange, 0.01, 0.05, 0, -0.14, 0, 'y', 8); const ma = G('C_Manual_Arc', root); bin(ma, arcM, xf(new THREE.SphereGeometry(0.014, 10, 8), S.manual + 0.02, PT + 0.03, Z0 - 0.14));
     box(root, m.red, 0.4, 0.6, 0.35, S.manual + 0.5, 0.3, Z0 - 1.95); nameplate('수동 MIG', S.manual + 0.5, 0.45, Z0 - 2.13, Math.PI, 0.3); fp('수동 MIG', S.manual + 0.25, S.manual + 0.75, Z0 - 2.15, Z0 - 1.25); }
   monitor('C_HMI', S.cEnd - 0.4, Z0 - 1.4, 0.4); tower(S.cEnd - 0.2, Z0 - 1.5);
