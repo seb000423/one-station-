@@ -42,10 +42,23 @@ for k in range(NB + 1):
 for z, nm in ((-5, '지붕 북쪽'), (5, '지붕 남쪽')):
     add('roof', nm, 0, z, 0, {'length': W, 'span': 10, 'h': 0, 'bay': r3(W / NB), 'rise': 0.6, 'sheet': True})
 
-# ---------------------------------------------------------------- the line: one baked model, centred on its box (x −1.05 … 26.8, z −2.225 … 4.1 in line coords)
+# ---------------------------------------------------------------- the line: one baked model (pallet conveyor line) + the real catalogue assets around it
+# The line model exports its station table (assets/models/egr-line-v3/egr_module_line.json, written by tools/egr-line-v3/build.mjs); the static
+# real assets (control panels, cabinets, workbench, parts rack, the four workers) are placed from it so they stay aligned with the stations.
 XS, ZS = -15.35, -4.5
 L = lambda x, z: (r3(x + XS), r3(z + ZS))
-model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(13.455, 1.55))   # box −1.05 … 27.96 × −1.16 … 4.26 (build.mjs prints size and min)
+with open(os.path.join(ROOT, 'assets/models/egr-line-v3/egr_module_line.json'), encoding='utf-8') as f: T = json.load(f)
+S, LZ = T['S'], T['Z0']
+model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(13.4, 1.55))   # box −1.46 … 28.26 × −1.16 … 4.26 (build.mjs prints size and min)
+# the four people on the line (the only manual stations, as in the CAD): all stand on the −Z (aisle) side facing the line
+for nm, x, z, rot in (('투입 작업자 (코어 상자 보급)', S['tote'], LZ - 1.45, 0), ('수동 MIG 작업자', S['manual'] - 0.1, LZ - 0.8, 0), ('수동 검사 작업자', S['check'], LZ - 0.85, 0), ('포장 작업자', S['pack'], LZ - 1.95, 0)):
+    model(nm, 'uf_worker', *L(x, z), rot)
+model('검사 보조 테이블 (게이지 · OK/NG 트레이)', 'egr_st05', *L(S['check'], LZ - 1.75), 0)
+model('수동 MIG 부품 랙 (파이프 · 브래킷)', 'egr_rack', *L(S['cf'] - 0.3, LZ - 1.85), 0)
+# control panels behind the line (+Z side, inside the north fence), one per cell, and two PLC cabinets
+for nm, x in (('A셀 제어반', 3.0), ('B셀 제어반', 8.6), ('C셀 제어반 (MIG 4대)', 14.55), ('D셀 제어반', 19.0), ('E셀 제어반', 23.5)):
+    model(nm, 'ctrl1', *L(x, LZ + 2.3), PI2 * 2)
+for nm, x in (('PLC 캐비닛 A', 4.3), ('PLC 캐비닛 E', 24.9)): model(nm, 'line08', *L(x, LZ + 2.3), PI2 * 2)
 
 # (no floor labels: the user found the 36 label cards cluttered, 2026-10-29)
 
@@ -59,7 +72,7 @@ def zone(name, kind, x, z, w=2.2, d=2.0, **p):
     return add('zone', name, x, z, 0, dict({'kind': kind, 'w': w, 'd': d, 'label': name}, **p))
 def route(name, pts, oneway=False):
     return add('route', name, 0, 0, 0, {'points': [[r3(a), r3(b)] for a, b in pts], 'oneway': oneway})
-BOX = (-16.4, 12.61, -6.0, -0.24)           # the line model's footprint in builder coords (x0, x1, z0, z1)
+BOX = (-16.81, 12.91, -5.66, -0.24)           # the line model's footprint in builder coords (x0, x1, z0, z1)
 IN_X = -X0 + 1.6
 zone('코어 Assy 상자 입고 (서 셔터)', 'pickup', IN_X, DOORZ - 0.5, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=160, unit='tote', standH=0.62, load='e3_tote_brazed')   # trucks bring them
 zone('빈 상자 반납 (서 셔터)', 'dropoff', IN_X, DOORZ + 1.3, w=0.7, d=0.6, track=True, stock=0, cap=3, consume=90, unit='tote', standH=0.62, load='e3_tote_600x400')
@@ -71,7 +84,7 @@ zone('출하 팔레트 적재', 'pickup', *PAL, w=1.4, d=1.4, track=True, stock=
 zone('출하 대기 (동 셔터)', 'dropoff', X0 - 2.0, DOORZ, w=1.4, d=1.4, track=True, stock=0, cap=1, consume=80, unit='pallet', layers=2, load='e3_pack_box')
 zone('입고 AGV 대기', 'storage', -9.0, -7.6, w=1.0, d=1.0)
 zone('지게차 대기', 'storage', 9.0, 5.5, w=1.4, d=1.4)
-NLn, SL, CX = -8.6, 7.0, -17.1             # north lane (vehicles), south lane (forklift), west corridor between the wall and cell A
+NLn, SL, CX = -8.6, 7.0, -17.3             # north lane (vehicles), south lane (forklift), west corridor between the wall and cell A
 DK = IN_X + 0.9                            # docking lane east of the two shutter stands (a route node must sit within 1 m outside a zone's edge)
 route('AGV 경로', [(DK, DOORZ + 1.3), (DK, DOORZ - 0.5), (DK, 1.6), (CX, 1.6), (CX, NLn), (STAND[0], NLn), (EMPTY[0], NLn), (-9.0, NLn)])   # two-way: shutter stands → west corridor → north lane → stands; the AGV drives back the same way (the line blocks a loop)
 route('도킹', [(-9.0, NLn), (-9.0, -7.6)])   # the AGV waits on a spur off the lane

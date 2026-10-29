@@ -32,6 +32,7 @@ for (const name of want) {
   const r = await page.evaluate(n => window.buildOne(n), name);
   const glb = path.join(OUT, name + '.glb'), png = path.join(PREV, 'preview_' + name + '.png');
   fs.writeFileSync(glb, Buffer.from(r.glb, 'base64')); fs.writeFileSync(png, Buffer.from(r.png, 'base64'));
+  if (r.table) fs.writeFileSync(path.join(OUT, name + '.json'), JSON.stringify(r.table));   // the model's station table (userData.table), for the layout script
   console.log(`${name}: ${Math.round(r.tris)} tris, ${r.meshes} meshes, ${(fs.statSync(glb).size / 1024).toFixed(0)} KB, size ${r.size.join(' x ')} m, min ${r.min.join(' ')}` + (r.nodes.length ? `\n   moving: ${r.nodes.join(', ')}` : ''));
 }
 await browser.close();

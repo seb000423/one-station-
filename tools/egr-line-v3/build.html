@@ -11,6 +11,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MODELS } from './models.js';
 // the FR5 (assets/models/egr-line-v3/fr5.glb, joints Joint_1 … Joint_6) for the models that put a robot in (models.js reads globalThis.FR5)
 globalThis.FR5 = await new GLTFLoader().loadAsync('/assets/models/egr-line-v3/fr5.glb').then(g => g.scene).catch(() => null);
+globalThis.FR10 = await new GLTFLoader().loadAsync('/assets/models/egr-line-v3/fr10.glb').then(g => g.scene).catch(() => null);   // the MIG robots
 
 const W = 1280, H = 800;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -29,6 +30,7 @@ window.buildOne = async (name) => {
     else if (o.userData.anim) nodes.push(o.name + ' ' + o.userData.anim.type + ' ' + o.userData.anim.axis);
   });
   const clips = model.userData.clips || []; delete model.userData.clips;   // the clips go out as glTF animations only (not again as node extras)
+  const table = model.userData.table || null; delete model.userData.table;   // station coordinates for the layout script (written to <name>.json by build.mjs)
   const glb = await new GLTFExporter().parseAsync(model, { binary: true, animations: clips });
 
   // preview: dark navy backdrop, warm sun-like key light from the upper left, shadow catcher on the floor
@@ -47,7 +49,7 @@ window.buildOne = async (name) => {
   cam.position.copy(c).add(new THREE.Vector3(1.0, 0.62, 1.25).normalize().multiplyScalar(dist)); cam.lookAt(c);
   renderer.render(scene, cam);
   const png = renderer.domElement.toDataURL('image/png').split(',')[1];
-  return { glb: b64(glb), png, tris, meshes, nodes, size: size.toArray().map(v => +v.toFixed(3)), min: bb.min.toArray().map(v => +v.toFixed(3)) };
+  return { glb: b64(glb), png, tris, meshes, nodes, size: size.toArray().map(v => +v.toFixed(3)), min: bb.min.toArray().map(v => +v.toFixed(3)), table };
 };
 window.ready = Object.keys(MODELS);
 </script></body></html>
