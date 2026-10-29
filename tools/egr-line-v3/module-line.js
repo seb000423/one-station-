@@ -124,27 +124,35 @@ export function egrModuleLine() {
 
   // ================================================================ B. end tank assembly & scan laser welding (x 5.9 … 12.0)
   { stopper('Stop_turn', S.turn); const tu = G('B_Turn', root, S.turn, BT - 0.15, Z0); cyl(tu, m.frameDark, 0.14, 0.2, 0, 0, 0, 'y', 20); cyl(root, m.frameDark, 0.1, 0.5, S.turn, 0.35, Z0, 'y', 16); nameplate('팔레트 턴 유닛', S.turn, 0.45, Z0 - 0.11, 0, 0.3); }
-  for (const sz of [-1, 1]) { const fz = Z0 + sz * 1.05, fx = S.tank; box(root, m.sheet, 0.5, 0.86, 0.5, fx, 0.43, fz); for (let k = 0; k < 8; k++) tank(root, fx, 0.95 + k * 0.1, fz); for (const s2 of [-1, 1]) prof(root, [fx + s2 * 0.12, 0.86, fz], [fx + s2 * 0.12, 1.9, fz], 0.03);
-    box(root, blue, 0.14, 0.14, 1.2, fx, 1.95, Z0 + sz * 0.6); prof(root, [fx, 0.06, Z0 + sz * 1.3], [fx, 1.95, Z0 + sz * 1.3], 0.06, m.frameDark);
-    const arm = G('B_TankArm' + (sz < 0 ? '_L' : '_R'), root, fx, 1.88, fz); box(arm, m.aluDark, 0.1, 0.1, 0.16, 0, 0, 0); box(arm, m.alu, 0.04, 0.6, 0.04, 0, -0.32, 0); const t = G('B_TankArm' + (sz < 0 ? '_L' : '_R') + '_Tank', arm, 0, -0.66, 0); box(t, tankM, 0.1, 0.08, 0.05, 0, 0, 0);   // picks the top tank of the magazine, carries it to the core end
-    nameplate(sz < 0 ? '탱크 공급기 1' : '탱크 공급기 2', fx, 0.7, fz - sz * 0.26, sz < 0 ? 0 : Math.PI, 0.36); fp('탱크 공급기 ' + (sz < 0 ? 1 : 2), fx - 0.26, fx + 0.26, fz - 0.26, fz + 0.26); }
-  stopper('Stop_tank', S.tank); gate(S.tank, 0.9, 1.95);
+  // tank feeders: the CAD's tank magazine conveyors (0.74 × 1.87 m, top 1.19 m) run across the line on both sides; a pick-and-place on a Z rail
+  // takes the tank at the magazine's near end (Z0 ± 0.5) and sets it on the core end (Z0 ± 0.17)
+  for (const sz of [-1, 1]) { const fx = S.tank, mz = Z0 + sz * 1.335, nm = sz < 0 ? '_L' : '_R';
+    if (!part('tank-magazine', fx, mz, sz < 0 ? Math.PI : 0)) { box(root, m.sheet, 0.5, 0.86, 0.5, fx, 0.43, mz); for (let k = 0; k < 8; k++) tank(root, fx, 0.95 + k * 0.1, mz); }
+    const px = fx + 0.47, pz = Z0 + sz * 0.95; prof(root, [px, 0.06, pz], [px, 2.12, pz], 0.06, m.frameDark); foot(root, px, pz); box(root, blue, 0.47, 0.1, 0.1, fx + 0.235, 2.12, pz); box(root, blue, 0.12, 0.12, 0.95, fx, 2.12, Z0 + sz * 0.52);   // post, bracket, Z rail
+    const arm = G('B_TankArm' + nm, root, fx, 1.98, Z0 + sz * 0.5); box(arm, m.aluDark, 0.1, 0.1, 0.16, 0, 0.06, 0); box(arm, m.alu, 0.04, 0.6, 0.04, 0, -0.3, 0); box(arm, m.black, 0.12, 0.04, 0.08, 0, -0.62, 0); const t = G('B_TankArm' + nm + '_Tank', arm, 0, -0.66, 0); box(t, tankM, 0.1, 0.08, 0.05, 0, 0, 0);
+    nameplate(sz < 0 ? '탱크 공급기 1' : '탱크 공급기 2', px, 1.5, pz - sz * 0.04, sz < 0 ? 0 : Math.PI, 0.3); fp('탱크 공급기 ' + (sz < 0 ? 1 : 2), fx - 0.37, fx + 0.53, Math.min(mz - 0.94, pz - 0.05), Math.max(mz + 0.94, pz + 0.05)); }
+  stopper('Stop_tank', S.tank);
   for (const [k, px] of S.press.entries()) { stopper('Stop_press' + k, px); const sz = k ? 1 : -1, pz = Z0 + sz * 0.75; box(root, blue, 0.4, 1.3, 0.3, px, 0.65, pz + sz * 0.15); box(root, blue, 0.4, 0.22, 0.75, px, 1.17, pz - sz * 0.15); box(root, m.sheet, 0.42, 0.3, 0.3, px, 1.45, pz + sz * 0.15);
     const ram = G('B_Press_' + k, root, px, PT + YC, pz - sz * 0.42); cyl(ram, m.steel, 0.03, 0.3, 0, 0, 0, 'z', 12); box(ram, m.aluDark, 0.12, 0.12, 0.06, 0, 0, -sz * 0.17);
     nameplate('탱크 프레스 ' + (k + 1), px, 1.35, pz - sz * 0.53 + (sz < 0 ? 0.02 : -0.02), sz < 0 ? 0 : Math.PI, 0.36); fp('탱크 프레스 ' + (k + 1), px - 0.22, px + 0.22, Math.min(pz, pz + sz * 0.3), Math.max(pz, pz + sz * 0.3)); }
   stopper('Stop_vis', S.vis); gate(S.vis, 0.8, 1.7); camera(S.vis, 1.5, Z0, 'B_PressCam', PT + 0.1); nameplate('프레스 비전', S.vis, 1.84, Z0 - 0.05, 0, 0.36); fp('프레스 비전', S.vis - 0.15, S.vis + 0.15, Z0 - 0.45, Z0 + 0.45);
   { stopper('Stop_bstop', S.bstop); const R = robot('B', ...RBASE.B); if (R) { const g = gripper(R.tool, 'B_Grip_Part', Math.PI / 2); lookCore(G('B_Grip_Core', g)); lookPaste(G('B_Grip_Paste', g)); lookTanks(G('B_Grip_Tanks', g)); lookSeam(G('B_Grip_Seam', g)); } fp('핸들링 로봇 B', RBASE.B[0] - 0.25, RBASE.B[0] + 0.25, RBASE.B[1] - 0.25, RBASE.B[1] + 0.25); nameplate('핸들링 로봇 B', RBASE.B[0], 0.5, RBASE.B[1] - 0.19, 0, 0.3);
-    const [cx, cz] = S.bcab; cabin('스캔 레이저 용접', cx - 0.3, cx + 0.3, cz - 0.45, cz + 0.35, 2.1, 'N'); fixture(cx, cz);
-    const sh = slide('B_LaserHead', cx, cz, 2.0, 0.4); box(sh, m.black, 0.2, 0.22, 0.2, 0, -0.12, 0); cyl(sh, m.steel, 0.04, 0.06, 0, -0.26, 0, 'y', 14); const bm = G('B_Laser_Beam', sh); cyl(bm, laserM, 0.004, 0.6, 0, -0.6, 0, 'y', 6);
+    const [cx, cz] = S.bcab; cabin('스캔 레이저 용접', cx - 0.3, cx + 0.3, cz - 0.65, cz + 0.35, 2.1, 'N'); fixture(cx, cz);
+    // the CAD's scan laser head on its stand, lens towards the fixture (+Z), firing across at the tank seam
+    if (!part('laser-scan-head', cx, cz - 0.4)) { box(root, m.black, 0.2, 0.22, 0.2, cx, 0.95, cz - 0.3); }
+    const bm = G('B_Laser_Beam', root); cyl(bm, laserM, 0.003, 0.14, cx, 0.93, cz - 0.125, 'z', 6);
     stopper('Stop_bback', S.bback); }
   { stopper('Stop_bng', S.bng); pusher('B_NG_Pusher', S.bng, Z0 - 0.3, BT + 0.05); rollers(S.bng - 0.25, S.bng + 0.9, Z0 + 0.95, 0.42); nameplate('NG 배출', S.bng + 0.3, BT + 0.25, Z0 + 1.2, 0, 0.36); }
   monitor('B_HMI', 9.0, Z0 - 1.4, 0.4); tower(S.bEnd - 0.2, Z0 - 1.5);
 
   // ================================================================ C. tack welding (x 12.0 … 16.9): flange feeders, four MIG robots, manual MIG
-  for (const [k, sz] of [[0, -1], [1, 1]]) { const fx = S.flange, fz = Z0 + sz * 1.35; cyl(root, m.sheet, 0.28, 0.5, fx, 0.25, fz, 'y', 20); cyl(root, m.stainless, 0.3, 0.2, fx, 0.6, fz, 'y', 24); for (let r = 0.1; r < 0.28; r += 0.07) cyl(root, m.stainless, r, 0.18, fx, 0.6 + r / 3, fz, 'y', 20);
-    box(root, m.aluDark, 0.08, 0.08, 0.6, fx, 0.72, fz - sz * 0.42); for (let i = 0; i < 4; i++) box(root, m.stainless, 0.012, 0.1, 0.15, fx, 0.82, fz - sz * (0.2 + i * 0.12));   // linear track with queued flanges (the arm picks the last one)
+  for (const [k, sz] of [[0, -1], [1, 1]]) { const fx = S.flange, fz = Z0 + sz * 1.35, pz = fz - sz * 0.56;
+    // the CAD's flange index feeder (0.41 × 0.48 m) on a profile stand; the pick-and-place takes the flange off its index table at 0.87 m
+    for (const sx of [-1, 1]) for (const s2 of [-1, 1]) { prof(root, [fx + sx * 0.17, 0.06, pz + s2 * 0.2], [fx + sx * 0.17, 0.56, pz + s2 * 0.2], 0.04); foot(root, fx + sx * 0.17, pz + s2 * 0.2); }
+    box(root, m.aluDark, 0.42, 0.02, 0.48, fx, 0.565, pz);
+    if (!part('flange-index-feeder', fx, pz, sz < 0 ? Math.PI : 0, 0.575)) { cyl(root, m.stainless, 0.2, 0.2, fx, 0.7, pz, 'y', 24); }
     prof(root, [fx + 0.3, 0.06, fz], [fx + 0.3, 1.7, fz], 0.06, m.frameDark); box(root, blue, 0.14, 0.12, 0.9, fx + 0.3, 1.7, fz - sz * 0.45); const pa = G('C_FlangeArm_' + k, root, fx, 1.6, fz - sz * 0.56); box(pa, m.aluDark, 0.3, 0.1, 0.1, 0.15, 0, 0); box(pa, m.alu, 0.04, 0.6, 0.04, 0, -0.3, 0); const f = G('C_FlangeArm_' + k + '_Flange', pa, 0, -0.62, 0); box(f, m.stainless, 0.15, 0.1, 0.012, 0, 0, 0);
-    nameplate('플랜지 공급기 ' + (k + 1), fx, 0.95, fz - sz * 0.31, sz < 0 ? 0 : Math.PI, 0.36); fp('플랜지 공급기 ' + (k + 1), fx - 0.3, fx + 0.36, fz - 0.3, fz + 0.3); }
+    nameplate('플랜지 공급기 ' + (k + 1), fx + 0.3, 1.2, fz - sz * 0.05, sz < 0 ? 0 : Math.PI, 0.3); fp('플랜지 공급기 ' + (k + 1), fx - 0.22, fx + 0.36, Math.min(pz - 0.25, fz - 0.05), Math.max(pz + 0.25, fz + 0.05)); }
   stopper('Stop_flange', S.flange); gate(S.flange, 0.9, 1.6);
   S.mig.forEach((x, i) => { stopper('Stop_mig' + i, x); const R = robot('C' + i, x, MZ, 'FR10', RHM); if (R) { torch(R.tool); const ar = G('C' + i + '_Arc', R.tool); bin(ar, arcM, xf(new THREE.SphereGeometry(0.016, 10, 8), 0, 0, 0.255)); }
     const bz = MZ - 0.75;   // welding power source + wire feeder from the CAD (0.29 × 0.72 m, 0.92 m tall), front to the aisle; wire drum beside it
@@ -290,13 +298,13 @@ function animate(root, robots) {
       finish(); continue; }
     // ---- B: pallet turn → tank feeders → presses → vision → robot takes the core into the laser cabin and back → NG divert → outfeed
     conv(S.turn, 'Stop_ngA'); { const t0 = dwell(5); add('B_Turn', 'ry', [[s + t0 + 1, 0], [s + t0 + 3.5, Math.PI / 2], [s + t0 + 4.2, Math.PI / 2], [s + t0 + 4.21, 0]]); palRy(t0 + 1, 0); palRy(t0 + 3.5, Math.PI / 2); ry(t0 + 1, 0); ry(t0 + 3.5, Math.PI / 2); }
-    conv(S.tank, 'Stop_turn'); { const t0 = dwell(9); for (const sd of ['_L', '_R']) { const sg = sd === '_L' ? -1 : 1; add('B_TankArm' + sd, 'y', [[s + t0, 0], [s + t0 + 1, -(1.22 - 1.75)], [s + t0 + 1.8, -(1.22 - 1.75)], [s + t0 + 2.6, 0], [s + t0 + 4.4, 0], [s + t0 + 5.4, -(1.22 - (PT + YC))], [s + t0 + 6.6, -(1.22 - (PT + YC))], [s + t0 + 7.6, 0]]);   // down to the magazine top, up, across, down to the core end
-      add('B_TankArm' + sd, 'z', [[s + t0 + 2.6, 0], [s + t0 + 4.4, -sg * (1.05 - 0.17)], [s + t0 + 7.6, -sg * (1.05 - 0.17)], [s + t0 + 9, 0]]); add('B_TankArm' + sd + '_Tank', 'vis', [[s + t0 + 1.8, true], [s + t0 + 6.6, false]]); } add(QN + '_Tanks', 'vis', [[s, false], [s + t0 + 6.6, true]]); }
+    conv(S.tank, 'Stop_turn'); { const t0 = dwell(9); for (const sd of ['_L', '_R']) { const sg = sd === '_L' ? -1 : 1; add('B_TankArm' + sd, 'y', [[s + t0, 0], [s + t0 + 1, -0.1], [s + t0 + 1.8, -0.1], [s + t0 + 2.6, 0], [s + t0 + 4.4, 0], [s + t0 + 5.4, -(1.32 - (PT + YC))], [s + t0 + 6.6, -(1.32 - (PT + YC))], [s + t0 + 7.6, 0]]);   // down onto the magazine's end tank, up, along the rail, down onto the core end
+      add('B_TankArm' + sd, 'z', [[s + t0 + 2.6, 0], [s + t0 + 4.4, -sg * 0.33], [s + t0 + 7.6, -sg * 0.33], [s + t0 + 9, 0]]); add('B_TankArm' + sd + '_Tank', 'vis', [[s + t0 + 1.8, true], [s + t0 + 6.6, false]]); } add(QN + '_Tanks', 'vis', [[s, false], [s + t0 + 6.6, true]]); }
     for (const [k2, px] of S.press.entries()) { conv(px, k2 ? 'Stop_press0' : 'Stop_tank'); const t0 = dwell(6), sg = k2 ? 1 : -1; add('B_Press_' + k2, 'z', [[s + t0 + 1, 0], [s + t0 + 2.2, sg * 0.29], [s + t0 + 4, sg * 0.29], [s + t0 + 5, 0]]); }
     conv(S.vis, 'Stop_press1'); { const t0 = dwell(3); flash('B_PressCam', s + t0 + 1.2, s + t0 + 1.6); }
     conv(S.bstop, 'Stop_vis'); { const t0 = ct, rb = s + t0 + 1.5; clamp(t0 + 0.2, true); clamp(t0 + 1.0, false);
       if (RB) { playRobot('B', RB, rb); const e = RB.ev; partOnPallet(rb + e.grip - s, S.bstop); show(rb + e.grip - s, false); flash('B_Grip_Part', rb + e.grip, rb + e.put); flash('B_Grip_Part', rb + e.take, rb + e.release);
-        at(rb + e.put - s, [S.bcab[0], FIXY, S.bcab[1]]); show(rb + e.put - s, true); head('B_LaserHead', rb + e.put + 1, rb + e.take - 1, 0.35); flash('B_Laser_Beam', rb + e.put + 2.2, rb + e.take - 2.2); add(QN + '_Seam', 'vis', [[s, false], [rb + e.take - 2.2, true]]); flash('B_Grip_Seam', rb + e.take, rb + e.release);
+        at(rb + e.put - s, [S.bcab[0], FIXY, S.bcab[1]]); show(rb + e.put - s, true); flash('B_Laser_Beam', rb + e.put + 2.2, rb + e.take - 2.2); add(QN + '_Seam', 'vis', [[s, false], [rb + e.take - 2.2, true]]); flash('B_Grip_Seam', rb + e.take, rb + e.release);
         at(rb + e.take - s, [S.bcab[0], FIXY, S.bcab[1]]); show(rb + e.take - s, false);
         // the empty pallet moves on to the back stop while the robot works, and receives the part there
         release('Stop_bstop'); palAt(t0 + 1.0, S.bstop); palAt(t0 + 1.0 + (S.bback - S.bstop) / CV, S.bback); cx = S.bback;
