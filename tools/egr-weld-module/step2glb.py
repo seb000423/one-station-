@@ -1,5 +1,5 @@
 """STEP -> one GLB per top-level station (XCAF), every node renamed generically, small parts dropped.
-usage: python -I step2glb.py file.stp outdir [lin_defl_mm] [min_part_mm]
+usage: [DEPTH=2] python -I step2glb.py file.stp outdir [lin_defl_mm] [min_part_mm]   (DEPTH=2: one GLB per station inside each cell)
 Prints a JSON list of exported stations (index, original name, glb, bbox) to outdir/stations.json."""
 import sys, os, json, time, re
 from OCP.STEPCAFControl import STEPCAFControl_Reader
@@ -71,9 +71,13 @@ def prune(l, seen):
         else: prune(c, seen)
 
 stations = []
+DEPTH = int(os.environ.get('DEPTH', '1'))   # 1: one GLB per cell (root child); 2: one GLB per station inside a cell (root grandchild)
+def level(r):
+    cs = kids(r)
+    return cs if DEPTH < 2 else [g for c in cs for g in kids(c)]
 for i in range(1, roots.Length() + 1):
     r = roots.Value(i)
-    for j, c in enumerate(kids(r)):
+    for j, c in enumerate(level(r)):
         b = Bnd_Box(); BRepBndLib.Add_s(st.GetShape_s(c), b, False)
         bb = [b.CornerMin().X(), b.CornerMin().Y(), b.CornerMin().Z(), b.CornerMax().X(), b.CornerMax().Y(), b.CornerMax().Z()] if not b.IsVoid() else None
         stations.append(dict(root=i, idx=j, name=lname(c), nkids=len(kids(c)), bbox=bb, label=c))

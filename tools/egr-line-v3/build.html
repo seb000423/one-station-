@@ -11,6 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MODELS } from './models.js';
 // the FR5 (assets/models/egr-line-v3/fr5.glb, joints Joint_1 … Joint_6) for the models that put a robot in (models.js reads globalThis.FR5)
 globalThis.FR5 = await new GLTFLoader().loadAsync('/assets/models/egr-line-v3/fr5.glb').then(g => g.scene).catch(() => null);
+// station sub-assemblies taken from the line's CAD (tools/egr-weld-module/step2glb.py DEPTH=2 → glb-simplify.mjs; generic node names only)
+globalThis.PARTS = Object.fromEntries(await Promise.all(['welding-power-source', 'paste-tank'].map(async k => [k, await new GLTFLoader().loadAsync('/parts/' + k + '.glb').then(g => g.scene).catch(() => null)])));
 globalThis.FR10 = await new GLTFLoader().loadAsync('/assets/models/egr-line-v3/fr10.glb').then(g => g.scene).catch(() => null);   // the MIG robots
 
 const W = 1280, H = 800;
