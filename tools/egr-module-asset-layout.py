@@ -76,7 +76,7 @@ for nm, key, x, w, d, front in (('A셀 제어반', 'ctrl1', 3.0, 1.70, 0.47, 'S'
 # (no floor labels: the user found the 36 label cards cluttered, 2026-10-29)
 
 # ---------------------------------------------------------------- KPI board over cell A (assumed values until the field numbers come in)
-add('kpi', 'KPI 용접 모듈 라인', *L(1.2, 1.3), 0, {'title': 'EGR 쿨러 자동 용접 모듈 라인', 'rows': ['라인 피치|40 s|가정', 'UPH|90 개/h|가정', '라인 인원|4 명 (투입 · 수동 MIG · 수동 검사 · 배출)', '핸들링 로봇|3 대 (도포 · 레이저 · 리크)', 'MIG 로봇|4 대', 'NG 배출|도포 · 레이저 · 리크 판정 후', '검사|핀 비전 · 노즐 비전 · 중량 · 프레스 비전 · C/F · 외관 · 리크'], 'w': 3.6, 'h': 2.1, 'y': 3.0, 'hang': 7.0})
+add('kpi', 'KPI 용접 모듈 라인', 0.0, -D / 2 + 0.35, 0, {'title': 'EGR 쿨러 자동 용접 모듈 라인', 'rows': ['라인 피치|40 s|가정', 'UPH|90 개/h|가정', '라인 인원|4 명 (투입 · 수동 MIG · 수동 검사 · 배출)', '핸들링 로봇|3 대 (도포 · 레이저 · 리크)', 'MIG 로봇|4 대', 'NG 배출|도포 · 레이저 · 리크 판정 후', '검사|핀 비전 · 노즐 비전 · 중량 · 프레스 비전 · C/F · 외관 · 리크'], 'w': 3.6, 'h': 2.1, 'y': 3.0, 'hang': 7.0})
 
 # ---------------------------------------------------------------- material flow around the line: a deck AGV brings totes of brazed core assemblies from the west
 # shutter to the input stand north of cell A (the loading operator in the line model works from there) and returns the empties; a forklift takes
