@@ -16,6 +16,7 @@
   .spnl .sp-eye{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .spnl .sp-time{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap;color:#fff}
   .spnl .sp-row{display:flex;align-items:center;gap:8px;min-width:0}
+  .spnl .sp-title[hidden]{display:none}
   .spnl .sp-title{flex:none;max-width:45%;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .spnl select{flex:1;width:100%;min-width:0;height:24px;background:rgba(255,255,255,.07);color:var(--fg,#ececec);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:0 8px;font:inherit;font-size:11.5px;cursor:pointer}
   .spnl select option{background:#151517;color:#ececec}
@@ -30,9 +31,11 @@
   .spnl .sp-bar.off b{display:none}
   .spnl .sp-speed{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:3px 10px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;font-weight:600;color:var(--accent,#eec539);min-width:0}
   .spnl .sp-speed:hover{border-color:var(--accent,#eec539)}
-  .spnl .sp-rate{display:flex;align-items:center;gap:6px}
-  .spnl .sp-rate input{width:92px;accent-color:var(--accent,#eec539);cursor:pointer}
-  .spnl .sp-rate output{min-width:38px;text-align:right;font-family:var(--mono,ui-monospace,monospace);font-size:12px;font-weight:600;color:var(--accent,#eec539)}
+  .spnl .sp-rate{display:flex;align-items:center;height:28px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:rgba(255,255,255,.06);overflow:hidden}
+  .spnl .sp-rate button{width:26px;height:28px;border:0;background:transparent;font-size:15px;line-height:1;color:rgba(255,255,255,.75)}
+  .spnl .sp-rate button:hover:not(:disabled){color:var(--accent,#eec539);background:rgba(255,255,255,.06)}
+  .spnl .sp-rate button:disabled{opacity:.3;cursor:default}
+  .spnl .sp-rate .sp-val{width:auto;min-width:44px;padding:0 2px;font-family:var(--mono,ui-monospace,monospace);font-size:12px;font-weight:600;color:var(--accent,#eec539);text-align:center}
   .spnl .sp-restart{width:30px;height:30px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:50%;padding:0;color:#fff;display:grid;place-items:center}
   .spnl .sp-restart:hover{border-color:var(--accent,#eec539);color:var(--accent,#eec539)}
   .spnl .sp-restart svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -64,14 +67,15 @@
         <div class="sp-row"><div class="sp-title">대기</div><select class="sp-step none" aria-label="공정 단계 선택" hidden></select></div>
         <div class="sp-bar off" role="slider" aria-label="진행 위치" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><i style="width:0"></i><b style="left:0"></b></div>
       </div>
-      ${base ? `<label class="sp-rate" title="재생 배속: 실제 2.5배부터 0.5배씩"><input type="range" min="${base}" max="20" step="0.5" value="${speed}" aria-label="재생 배속"><output>×${shown(speed)}</output></label>` : `<button type="button" class="sp-speed" title="배속">×${speed}</button>`}
+      ${base ? `<div class="sp-rate" role="group" aria-label="재생 배속"><button type="button" class="sp-dn" aria-label="느리게">−</button><button type="button" class="sp-val" aria-label="기본 배속으로">×${shown(speed)}</button><button type="button" class="sp-up" aria-label="빠르게">+</button></div>` : `<button type="button" class="sp-speed">×${speed}</button>`}
       <button type="button" class="sp-restart" title="처음부터" aria-label="처음부터">${ICON.restart}</button>`;
     parent.appendChild(el);
     const q = s => el.querySelector(s), play = q('.sp-play'), sel = q('.sp-step'), bar = q('.sp-bar');
     q('.sp-eye').textContent = opts.eyebrow || '시뮬레이션';
     play.onclick = () => opts.onToggle && opts.onToggle();
     q('.sp-restart').onclick = () => opts.onRestart && opts.onRestart();
-    if (base) { const r = q('.sp-rate input'), o = q('.sp-rate output'); r.oninput = () => { speed = +r.value; o.textContent = '×' + shown(speed); opts.onSpeed && opts.onSpeed(speed); }; }
+    const MAXR = 20, setRate = v => { speed = Math.min(MAXR, Math.max(base, Math.round(v * 2) / 2)); q('.sp-val').textContent = '×' + shown(speed); q('.sp-dn').disabled = speed <= base; q('.sp-up').disabled = speed >= MAXR; opts.onSpeed && opts.onSpeed(speed); };
+    if (base) { q('.sp-dn').onclick = () => setRate(speed - 0.5); q('.sp-up').onclick = () => setRate(speed + 0.5); q('.sp-val').onclick = () => setRate(base); q('.sp-dn').disabled = speed <= base; }
     else q('.sp-speed').onclick = () => { speed = speeds[(speeds.indexOf(speed) + 1) % speeds.length]; q('.sp-speed').textContent = '×' + speed; opts.onSpeed && opts.onSpeed(speed); };
     sel.onchange = () => { if (sel.value !== '' && opts.onStep) opts.onStep(+sel.value); };
     // drag or click on the bar to seek; arrow keys step 5 %
@@ -91,7 +95,7 @@
       if (s.playing !== last.playing) { play.innerHTML = s.playing ? ICON.pause : ICON.play; play.setAttribute('aria-label', s.playing ? '일시정지' : '재생'); }
       if (s.eyebrow != null && s.eyebrow !== last.eyebrow) q('.sp-eye').textContent = s.eyebrow;
       if (s.title !== last.title) { q('.sp-title').textContent = s.title || '대기'; q('.sp-title').title = s.title || ''; }
-      if (s.speed != null && s.speed !== speed) { speed = s.speed; if (base) { q('.sp-rate input').value = speed; q('.sp-rate output').textContent = '×' + shown(speed); } else q('.sp-speed').textContent = '×' + speed; }
+      if (s.speed != null && s.speed !== speed) { speed = s.speed; if (base) { q('.sp-val').textContent = '×' + shown(speed); } else q('.sp-speed').textContent = '×' + speed; }
       const steps = s.steps || [], key = steps.join('\u0001');
       if (key !== stepKey) {
         stepKey = key;
@@ -99,6 +103,7 @@
         sel.disabled = !steps.length || !opts.onStep;
         sel.classList.toggle('none', !steps.length);
         sel.hidden = !steps.length; // nothing to pick on a scene without cycle steps
+        q('.sp-title').hidden = !!steps.length; // the picker shows the current step itself
       }
       const si = s.step >= 0 && s.step < steps.length ? String(s.step) : '';
       if (document.activeElement !== sel && sel.value !== si) { if (si === '') sel.selectedIndex = -1; else sel.value = si; }
