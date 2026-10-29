@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { G, box, cyl, prof, foot, plane, bin, xf, std, materials, finalize, cycleClip, ikRig, labelTexture } from './models.js';
 
-const PROF_D = 0.3, GRIP_IN = 0.0475, GRIP_OPEN = 0.022, NUT_RY = 2.69;   // gripper inner half-gap on the core fins (94 mm + 1 mm), opening stroke per finger; nutrunner balancer arm angle
+const MAG_N = 7, MAG_P = 0.2, MAG_Y = 1.2, PROF_D = 0.3, GRIP_IN = 0.0475, GRIP_OPEN = 0.022, NUT_RY = 2.69;   // gripper inner half-gap on the core fins (94 mm + 1 mm), opening stroke per finger; nutrunner balancer arm angle
 const BT = 0.85, PAL = 0.03, PT = BT + PAL + 0.012, Z0 = 1.3, YC = 0.045, LOW = 0.45, FIXY = 0.862;   // belt top, pallet thickness, part base on the pallet, lower return level
 const LANES = [Z0 - 0.75, Z0 + 0.75];   // cell A's two roller infeed lanes (cores lie directly on the rollers, top 0.85)
 export const MODULE_T = 400, MODULE_P = 50;
@@ -166,6 +166,7 @@ export function egrModuleLine() {
   for (const sz of [-1, 1]) { const fx = S.tank, mz = Z0 + sz * 1.335, nm = sz < 0 ? '_L' : '_R';
     const mg = part('tank-magazine', fx, mz, sz < 0 ? Math.PI : 0); if (mg) mg.traverse(o => { if (!o.isMesh) return; o.castShadow = false; o.receiveShadow = false; [].concat(o.material).forEach(q => { if (q && q.transparent) { q.color.set(0xdfe6ea); q.opacity = 0.16; } }); });
     if (!mg) { box(root, m.sheet, 0.5, 0.86, 0.5, fx, 0.43, mz); for (let k = 0; k < 8; k++) tank(root, fx, 0.95 + k * 0.1, mz); }
+    for (let j = 0; j < MAG_N; j++) { const t = G('B_Mag' + nm + '_T' + j, root, fx, MAG_Y, Z0 + sz * (0.5 + j * MAG_P)); box(t, tankM, 0.1, 0.08, 0.05, 0, 0, 0); }   // tanks in the magazine pockets: the front one sits at the pick point
     const px = fx + 0.47, pz = Z0 + sz * 0.95; prof(root, [px, 0.06, pz], [px, 2.12, pz], 0.06, m.frameDark); foot(root, px, pz); box(root, blue, 0.47, 0.1, 0.1, fx + 0.235, 2.12, pz); box(root, blue, 0.12, 0.12, 0.95, fx, 2.12, Z0 + sz * 0.52);   // post, bracket, Z rail
     const arm = G('B_TankArm' + nm, root, fx, 1.98, Z0 + sz * 0.5); box(arm, m.aluDark, 0.1, 0.1, 0.16, 0, 0.06, 0); box(arm, m.alu, 0.04, 0.6, 0.04, 0, -0.3, 0); box(arm, m.black, 0.12, 0.04, 0.08, 0, -0.62, 0); const t = G('B_TankArm' + nm + '_Tank', arm, 0, -0.68, 0); box(t, tankM, 0.1, 0.08, 0.05, 0, 0, 0);
     nameplate(sz < 0 ? '탱크 공급기 1' : '탱크 공급기 2', px, 1.5, pz - sz * 0.04, sz < 0 ? 0 : Math.PI, 0.3); fp('탱크 공급기 ' + (sz < 0 ? 1 : 2), fx - 0.37, fx + 0.53, Math.min(mz - 0.94, pz - 0.05), Math.max(mz + 0.94, pz + 0.05)); }
@@ -333,7 +334,7 @@ function animate(root, robots) {
   const NUT = (() => { const ax = S.nut + 0.45 + Math.cos(NUT_RY) * 0.5, az = Z0 + 0.65 - Math.sin(NUT_RY) * 0.5, y = PT + YC + 0.05 + 0.28 - 1.5;   // bit tip on the flange top, 4 bolts
     return [[S.nut - 0.146, Z0 - 0.04], [S.nut - 0.146, Z0 + 0.04], [S.nut + 0.146, Z0 + 0.04], [S.nut + 0.146, Z0 - 0.04]].map(([x, z]) => [x - ax, y, z - az]); })();
 
-  const runParts = pass => { parts = [];
+  const runParts = pass => { parts = []; const MAG = { _L: [...Array(MAG_N).keys()], _R: [...Array(MAG_N).keys()] };   // MAG[side][j] = pocket of tank j (0 = pick point)
   for (let jj = -2; jj < N + 2; jj++) {
     const k = ((jj % N) + N) % N, cyc = Math.floor(jj / N), QN = 'Part_' + (k + 1), PN = 'Pal_' + (k + 1), s = jj * P, li = k % 2, lz = LANES[li], dNG = k === 5, lNG = k === 2;
     const R = { QN, PN, KX: [], KY: [], KZ: [], VIS: [], RY: [], PX: [], PZ: [], PY: [], PRY: [], CL: [], carries: [] }; parts.push(R);
@@ -386,7 +387,11 @@ function animate(root, robots) {
     conv(S.turn, 'Stop_ngA'); turn('B_Turn', Math.PI / 2);
     conv(S.tank, 'Stop_turn'); { const t0 = dwell(9); if (!empty) { for (const sd of ['_L', '_R']) { const sg = sd === '_L' ? -1 : 1;
       add('B_TankArm' + sd, 'y', [[s + t0, 0], [s + t0 + 1, -0.1], [s + t0 + 1.8, -0.1], [s + t0 + 2.6, 0], [s + t0 + 4.4, 0], [s + t0 + 5.4, -(1.30 - (PT + YC))], [s + t0 + 6.6, -(1.30 - (PT + YC))], [s + t0 + 7.6, 0]]);   // down onto the magazine's end tank, up, along the rail, down onto the core end
-      add('B_TankArm' + sd, 'z', [[s + t0 + 2.6, 0], [s + t0 + 4.4, -sg * 0.385], [s + t0 + 7.6, -sg * 0.385], [s + t0 + 9, 0]]); add('B_TankArm' + sd + '_Tank', 'vis', [[s + t0 + 1.8, true], [s + t0 + 6.6, false]]); } add(QN + '_Tanks', 'vis', [[s + t0 + 6.6, true]]); } }
+      add('B_TankArm' + sd, 'z', [[s + t0 + 2.6, 0], [s + t0 + 4.4, -sg * 0.385], [s + t0 + 7.6, -sg * 0.385], [s + t0 + 9, 0]]); add('B_TankArm' + sd + '_Tank', 'vis', [[s + t0 + 1.8, true], [s + t0 + 6.6, false]]);
+      const sl = MAG[sd], off = (j, slot) => sg * MAG_P * (slot - j);   // the arm takes the front tank; the chain then indexes one pitch; the back pocket is refilled
+      for (let j = 0; j < MAG_N; j++) { const nn = 'B_Mag' + sd + '_T' + j;
+        if (sl[j] === 0) { add(nn, 'vis', [[s + t0 + 1.8, false], [s + t0 + 4.4, true]]); add(nn, 'z', [[s + t0 + 3.3, off(j, 0)], [s + t0 + 3.4, off(j, MAG_N - 1)]]); sl[j] = MAG_N - 1; }
+        else { add(nn, 'z', [[s + t0 + 3.0, off(j, sl[j])], [s + t0 + 4.0, off(j, sl[j] - 1)]]); sl[j] -= 1; } } } add(QN + '_Tanks', 'vis', [[s + t0 + 6.6, true]]); } }
     for (const [k2, px] of S.press.entries()) { conv(px, k2 ? 'Stop_press0' : 'Stop_tank'); const t0 = dwell(6), sg = k2 ? 1 : -1; if (!empty) add('B_Press_' + k2, 'z', [[s + t0 + 1, 0], [s + t0 + 2.2, -sg * 0.06], [s + t0 + 4, -sg * 0.06], [s + t0 + 5, 0]]); }   // the ram face lands on the tank
     conv(S.vis, 'Stop_press1'); { const t0 = dwell(3); if (!empty) flash('B_PressCam', s + t0 + 1.2, s + t0 + 1.6); }
     conv(S.bstop, 'Stop_vis');
