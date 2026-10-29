@@ -467,6 +467,7 @@ controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.49;
 controls.minDistance = 0.4; controls.maxDistance = 9;
 
+const ambient = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambient); // rule set v2.0: AmbientLight 0.6 + HemisphereLight + shadowed DirectionalLight (≥ 2048)
 const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x16191e, 0.25); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xffffff, 1.25);
 sun.position.set(3, 6, 4); sun.castShadow = true;
@@ -487,7 +488,7 @@ function fitLights(f) {
   sun.shadow.camera.updateProjectionMatrix();
   if (sun.shadow.mapSize.x !== size) { sun.shadow.mapSize.set(size, size); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   sun.shadow.normalBias = 0.02 + M * 0.002;
-  sun.intensity = 1.6; hemi.intensity = 0.7; fill.intensity = 0.35; fill2.intensity = 0.25;
+  sun.intensity = 0.9; hemi.intensity = 0.25; fill.intensity = 0.1; fill2.intensity = 0.1; ambient.intensity = 0.6;   // ambient 0.6 is fixed by the rule set; the rest toned down to keep the exposure
   fill.position.set(-W * 0.4, 4, -D * 0.4); fill2.position.set(W * 0.4, 4, D * 0.4);
   window.__lightsFitted = true;
 }

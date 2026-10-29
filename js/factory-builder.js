@@ -99,6 +99,11 @@
   const S = () => window.__station;
   const busy = () => { const s = S(); return !(s.sim.phase === 'idle' || s.sim.phase === 'done'); };
   const r2 = v => Math.round(v * 100) / 100;
+  // rule set v2.0 (rules/smart-factory-standard-v2.md): 0.5 m grid snap, origin (0, 0) at the floor's bottom-left corner as seen in the top
+  // view (west wall × south wall, the raw-material inbound side). The scene keeps its centred frame; positions are shown and snapped in this one.
+  const GRID = 0.5, ORG = () => ({ x: -doc.factory.width / 2, z: doc.factory.depth / 2 });
+  const toUser = (x, z) => { const O = ORG(); return { x: r2(x - O.x), y: r2(O.z - z) }; }, fromUser = (ux, uy) => { const O = ORG(); return { x: ux + O.x, z: O.z - uy }; };
+  const snapXZ = (x, z, st = GRID) => { const O = ORG(); return { x: r2(O.x + Math.round((x - O.x) / st) * st), z: r2(O.z - Math.round((O.z - z) / st) * st) }; };
   const clone = o => JSON.parse(JSON.stringify(o));
   const esc = t => String(t).replace(/[<>&"]/g, '');
   let seq = 1;
@@ -229,6 +234,18 @@
   }
 
   /* ---------- scene: factory shell + building elements ---------- */
+  function epoxyTexture() { // a faint mottled roughness map so the epoxy floor is not a flat colour
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'); g.fillStyle = '#7a7a7a'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2600; i++) { const v = 100 + Math.floor(Math.random() * 60); g.fillStyle = `rgba(${v},${v},${v},0.25)`; const r = 1 + Math.random() * 6; g.beginPath(); g.arc(Math.random() * 256, Math.random() * 256, r, 0, Math.PI * 2); g.fill(); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.name = 'epoxy_roughness'; return t;
+  }
+  function originMarker() { // (0, 0) at the floor's bottom-left corner: X along the west → east wall, Y along the south → north wall
+    const grp = new THREE.Group(); grp.name = 'origin-marker'; grp.raycast = () => {};
+    const mat = c => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.5, roughness: 0.4, metalness: 0.1 });
+    const ax = (c, rx, rz, px, pz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(rx, 0.01, rz), mat(c)); m.position.set(px, 0, pz); m.raycast = () => {}; grp.add(m); };
+    ax(0xff5a4f, 1.0, 0.05, 0.5, 0); ax(0x4fd18b, 0.05, 1.0, 0, -0.5);
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 24), mat(0xeec539)); d.raycast = () => {}; grp.add(d); return grp;
+  }
   function buildShell() {
     const s = S(), f = doc.factory;
     if (shell) s.scene.remove(shell);
@@ -237,14 +254,20 @@
     const floor = shell.getObjectByName('Factory_Floor'); if (floor) floor.visible = false; // console 1 keeps its own floor
     s.scene.add(shell);
     s.floor.geometry.dispose(); s.floor.geometry = new THREE.PlaneGeometry(f.width, f.depth);
-    const size = Math.max(f.width, f.depth), cellM = size > 20 ? 1 : 0.5, gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / cellM)), 0x45525a, 0x37434b); // 1 m cells on large floors
+    const size = Math.max(f.width, f.depth), cellM = size > 20 ? 1 : 0.5, gh = new THREE.GridHelper(size, Math.max(1, Math.round(size / cellM)), 0x34343d, 0x2a2a32); // subtle lines on the epoxy floor; 1 m cells on large floors
     s.grid.material.dispose(); s.grid.material = gh.material;
     s.grid.geometry.dispose(); s.grid.geometry = gh.geometry;
     // no distance fog (it darkened the factory when zooming out); a brighter, even space sized to the factory
     s.scene.fog = null;
-    s.scene.background = new THREE.Color(0x1f2a31);
-    s.floor.material.color.set(0x2b373e); s.floor.material.needsUpdate = true;
-    s.renderer.toneMappingExposure = 1.0;
+    s.scene.background = new THREE.Color(0x15151a);
+    // rule 5: epoxy floor, dark grey #1e1e24 with a soft sheen (low roughness picks up the hall lights) and a faint trowel texture
+    Object.assign(s.floor.material, { roughness: 0.55, metalness: 0.0, envMapIntensity: 0.08 }); s.floor.material.color.set(0x1e1e24);
+    if (!s.floor.material.roughnessMap) s.floor.material.roughnessMap = epoxyTexture();
+    s.floor.material.roughnessMap.repeat.set(f.width / 4, f.depth / 4); s.floor.material.needsUpdate = true;
+    s.grid.material.transparent = true; s.grid.material.opacity = 0.55; s.grid.material.depthWrite = false;
+    const O = ORG(), old = s.scene.getObjectByName('origin-marker'); if (old) s.scene.remove(old);
+    const om = originMarker(); om.position.set(O.x + 0.02, 0.006, O.z - 0.02); s.scene.add(om);
+    s.renderer.toneMappingExposure = 0.8;   // with the rule-set ambient (0.6) the hall reads as a dark epoxy floor under even light
     const M = Math.max(f.width, f.depth, f.height);
     s.camera.far = Math.max(80, M * 8); s.camera.updateProjectionMatrix();
     if (s.fitLights) s.fitLights(f);
@@ -278,15 +301,28 @@
         if (helper) helper.update(); refreshTransformFields();
         const o = selectedId && byId(selectedId), g = o && !innerSel && groupOf(o.id);
         if (g && o.type === 'conveyor') { const sn = FF().snap(doc, Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); if (sn) { g.position.set(sn.x, 0, sn.z); g.rotation.set(0, sn.rot, 0); if (helper) helper.update(); } snapNote = sn ? sn.text : ''; }
-        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); helper.material.color.set(why ? 0xff3b30 : 0xeec539); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
+        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
       });
       s.scene.add(tc);
       proxy = new THREE.Object3D(); proxy.name = 'inner-proxy';
-      const mk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.35, depthTest: false }));
+      const mk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), new THREE.MeshStandardMaterial({ color: SEL_OK, emissive: SEL_OK, emissiveIntensity: 0.6, transparent: true, opacity: 0.3, depthTest: false }));
       mk.renderOrder = 10; proxy.add(mk);
     });
   }
-  function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? 0.1 : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null); }
+  // selection marker (rule 5): an orange outline box around the object plus a translucent orange footprint area (opacity 0.3) on the floor;
+  // both turn red while the object is somewhere it may not stand (a collision / keep-out). BoxHelper-like: .update() refits it, .material colours it.
+  const SEL_OK = 0xff8a1f, SEL_BAD = 0xff3b30;
+  function selHelper(g) {
+    const grp = new THREE.Group(); grp.name = 'selection'; grp.renderOrder = 9;
+    const line = new THREE.BoxHelper(g, SEL_OK); line.material.depthTest = false; line.material.transparent = true; line.material.opacity = 0.95; grp.add(line);
+    const area = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ color: SEL_OK, emissive: SEL_OK, emissiveIntensity: 0.6, transparent: true, opacity: 0.3, depthWrite: false, roughness: 0.6, metalness: 0 }));
+    area.rotation.x = -Math.PI / 2; area.renderOrder = 8; grp.add(area);
+    const box = new THREE.Box3();
+    grp.update = () => { line.update(); box.setFromObject(g); if (box.isEmpty()) { area.visible = false; return; } area.visible = true; const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3()); area.scale.set(Math.max(0.05, sz.x + 0.2), Math.max(0.05, sz.z + 0.2), 1); area.position.set(c.x, 0.012, c.z); };
+    grp.material = line.material; grp.area = area; grp.raycast = () => {}; line.raycast = () => {}; area.raycast = () => {}; grp.update(); return grp;
+  }
+  function selColor(bad) { if (!helper) return; const c = bad ? SEL_BAD : SEL_OK; helper.material.color.set(c); if (helper.area) { helper.area.material.color.set(c); helper.area.material.emissive.set(c); } }
+  function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? GRID : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null); }
   function setMode(m) { if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate; if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); } }
   function select(id, inner) {
     const s = S(); selectedId = id || null; innerSel = null;
@@ -301,7 +337,7 @@
         innerSel = inner; const L = s.layoutParams(); s.CELL.add(proxy); proxy.position.set(...INNER[inner].at(L)); tc.attach(proxy);
       } else tc.attach(g);
       setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate');
-      helper = new THREE.BoxHelper(g, 0xeec539); s.scene.add(helper);
+      helper = selHelper(g); s.scene.add(helper);
     }
     renderTree(); renderProps();
     const tsel = $('#fbTarget'); if (tsel) { tsel.value = selectedId || ''; viewButtons(); }
@@ -313,9 +349,9 @@
       if (innerSel === 'jig' || innerSel === 'rail') L[innerSel].z = v(p.z, ZMIN, ZMAX); else L[innerSel] = { x: v(p.x, XMIN, XMAX), z: v(p.z, ZMIN, ZMAX) };
       s.applyLayout(L); o.params = engineCellParams(); store(); select(o.id, innerSel); return;
     }
-    const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, next = Object.assign({}, o, { x: exact ? g.position.x : r2(g.position.x), z: exact ? g.position.z : r2(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 });
+    const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, q = snap && !exact ? snapXZ(g.position.x, g.position.z) : { x: r2(g.position.x), z: r2(g.position.z) }, next = Object.assign({}, o, { x: exact ? g.position.x : q.x, z: exact ? g.position.z : q.z, rot: Math.round(g.rotation.y * 1e4) / 1e4 });
     const why = blockedBy(next);
-    if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { helper.material.color.set(0xeec539); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
+    if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { selColor(null); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
     o.x = next.x; o.z = next.z; o.rot = next.rot; if (stackable(o)) { const y = surfaceY(o.x, o.z, o.id); if (y > 0.01) o.y = y; else delete o.y; } placeObjectGroup(o); fitFloor(o);
     store(); if (helper) helper.update(); renderProps(); renderTree();
     if (o.type === 'conveyor') conveyorNote(o, snapNote); snapNote = '';
@@ -344,7 +380,7 @@
     const s = S(), r = s.renderer.domElement.getBoundingClientRect(), ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), s.camera);
     const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p)) return null;
-    const st = snap ? 0.1 : 0.01; p.x = Math.round(p.x / st) * st; p.z = Math.round(p.z / st) * st; return p;
+    const q = snapXZ(p.x, p.z, snap ? GRID : 0.01); p.x = q.x; p.z = q.z; return p;
   };
   /* ---------- path drawing (AMR 경로 / 작업자 경로): click points, double-click / Enter / right-click to finish ---------- */
   let drawing = null; // { type, obj (when extending), pts: [[x, z]], preview }
@@ -862,7 +898,7 @@
       <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example" title="예시 공정(공장 + 창고)을 엽니다. 지금 배치는 Ctrl+Z로 되돌릴 수 있습니다">예시 공정 보기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
-        <label title="켜면 이동 0.1 m, 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.1m·15°</label></div>
+        <label title="켜면 이동 0.5 m 그리드(바닥 좌측 하단 원점 기준), 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.5m·15°</label></div>
       <div class="sep"></div>
       <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button><button type="button" data-v="roofs" title="지붕 (트러스 · 지붕판 · 조명)을 숨기거나 보입니다">지붕 숨기기</button><select id="fbLabelMode" title="화면 라벨: 구역 이름 · 재고 · 상태"><option value="all">라벨: 모두</option><option value="stock">라벨: 재고 · 상태</option><option value="name">라벨: 바닥 이름만</option><option value="off">라벨: 끄기</option></select>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
@@ -1093,7 +1129,7 @@
     const U = window.FactoryUnity, mc = o.type === 'ufmodel' && U && U.CATALOG[(U.ALIAS || {})[(o.params || {}).model] || (o.params || {}).model];
     let html = `<div class="kind">${icon(o.type)}${mc ? esc(mc.cat || '공정 설비') + ' · ' + esc(mc.label) : TYPE_LABEL[o.type]}</div>${mc ? `<p class="hint" style="margin:2px 0 6px">실제 크기 ${mc.size[0]} × ${mc.size[2]} m · 높이 ${mc.size[1]} m${mc.clip ? ' · 재생하면 동작합니다 (시뮬레이션 시계)' : ''}</p>${mc.spec ? `<p class="hint" style="margin:0 0 6px"><b>가반하중 ${mc.spec.payload} kg · 작업 반경 ${mc.spec.reach} mm</b>${mc.spec.use ? ' · ' + esc(mc.spec.use) : ''}</p>` : ''}` : ''}
       <label>이름<input type="text" data-n value="${esc(o.name)}" maxlength="40"></label>
-      <div class="row">${field('x', 'X (m)', r2(o.x), 0.1, -999, 999)}${field('z', 'Z (m)', r2(o.z), 0.1, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
+      <div class="row">${field('x', 'X (m) · 서쪽 벽부터', toUser(o.x, o.z).x, GRID, -999, 999)}${field('z', 'Y (m) · 남쪽 벽부터', toUser(o.x, o.z).y, GRID, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
     if (!isCell) {
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
       // a model's 모델 choice lists the same category only (a column swaps for another building part, not a robot)
@@ -1145,7 +1181,7 @@
       if (i.type === 'number' && Number.isNaN(raw)) return renderProps();
       const next = clone(o);
       if (k === 'rot') next.rot = THREE.MathUtils.degToRad(raw);
-      else if (k === 'x' || k === 'z') next[k] = raw;
+      else if (k === 'x' || k === 'z') { const u = toUser(o.x, o.z), w = fromUser(k === 'x' ? raw : u.x, k === 'z' ? raw : u.y); next.x = r2(w.x); next.z = r2(w.z); }
       else { next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); next.params[k.slice(2)] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw; }
       const why = blockedBy(next); if (why) { note(`바꿀 수 없습니다: ${why}`, true); return renderProps(); }
       pushUndo();
@@ -1185,7 +1221,7 @@
   function refreshTransformFields() {
     if (!propSec || innerSel) return; const g = selectedId && groupOf(selectedId); if (!g) return;
     const set = (k, v) => { const i = propSec.querySelector(`[data-k=${k}]`); if (i && document.activeElement !== i) i.value = v; };
-    set('x', r2(g.position.x)); set('z', r2(g.position.z)); set('rot', Math.round(THREE.MathUtils.radToDeg(g.rotation.y)));
+    const u = toUser(g.position.x, g.position.z); set('x', u.x); set('z', u.y); set('rot', Math.round(THREE.MathUtils.radToDeg(g.rotation.y)));
   }
   async function checkCycle() {
     if (busy()) return note('사이클 중에는 검사할 수 없습니다', true);
@@ -1569,6 +1605,6 @@
     return true;
   }
 
-  window.FactoryBuilder = { factory: () => ({ ...doc.factory }), doc: () => (syncActive(), clone(doc)), exportAll, loadDoc, docFromLegacy, busy, place: (place, x, z) => placeAt(place, { x, z }), look: (from, at) => camTo(new THREE.Vector3(...from), new THREE.Vector3(...at), 0.01) }; // place: what a palette tile + floor click does; look: camera (scripts, tests)
+  window.FactoryBuilder = { factory: () => ({ ...doc.factory }), doc: () => (syncActive(), clone(doc)), exportAll, loadDoc, docFromLegacy, busy, place: (place, x, z) => placeAt(place, { x, z }), look: (from, at) => camTo(new THREE.Vector3(...from), new THREE.Vector3(...at), 0.01), select: name => { const o = doc.objects.find(x => x.name === name); if (o) select(o.id); return !!o; } }; // place: what a palette tile + floor click does; look: camera (scripts, tests)
   if (window.__station) init(); else addEventListener('load', init);
 })();
