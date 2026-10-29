@@ -589,10 +589,20 @@ main{display:block;position:absolute;inset:0}
   function tuneLights(v) {
     if (!v || v.__oneStationLights) return;
     try {
-      if (v.ambientLight) v.ambientLight.intensity = 1.0;
-      if (v.dirLight) { v.dirLight.intensity = 2.0; v.dirLight.castShadow = true; }
-      if (v.scene && v.scene.background && v.scene.background.set) v.scene.background.set(0x1f2a31);
-      const gm = v.groundMesh && v.groundMesh.material; if (gm && gm.color) { gm.color.set(0x2e3a40); gm.needsUpdate = true; }
+      // rule set v2.0 (rules/smart-factory-standard-v2.md): AmbientLight 0.6 + a HemisphereLight + a shadowed key light (2048 px), no
+      // blown-out highlights, dark epoxy floor #1e1e24. realvirtual's own lights are reused; the hemisphere light is made from its Light class.
+      if (v.ambientLight) v.ambientLight.intensity = 0.6;
+      if (v.dirLight) { v.dirLight.intensity = 1.2; v.dirLight.castShadow = true; const sh = v.dirLight.shadow; if (sh && sh.mapSize && sh.mapSize.x < 2048) { sh.mapSize.set(2048, 2048); if (sh.map) { sh.map.dispose(); sh.map = null; } } }
+      try {
+        if (v.scene && v.ambientLight && !v.scene.getObjectByName('one_hemi')) {
+          const Light = Object.getPrototypeOf(Object.getPrototypeOf(v.ambientLight)).constructor, h = new Light(0xdfe8ff, 0.35);
+          h.isHemisphereLight = true; h.type = 'HemisphereLight'; h.name = 'one_hemi'; h.groundColor = h.color.clone().set(0x1e1e24); h.position.set(0, 1, 0); h.updateMatrix(); v.scene.add(h);
+        }
+      } catch (e) {}
+      if (v.renderer && v.renderer.toneMapping && v.renderer.toneMappingExposure > 0.9) v.renderer.toneMappingExposure = 0.9;
+      if (v.scene && v.scene.background && v.scene.background.set) v.scene.background.set(0x15151a);
+      const gmesh = v.groundMesh || v._groundMesh, gm = gmesh && gmesh.material; if (gm && gm.color) { gm.color.set(0x1e1e24); if ('roughness' in gm) gm.roughness = 0.55; gm.needsUpdate = true; }
+      if ('_groundColor' in v && v._groundColor && v._groundColor.set) v._groundColor.set(0x1e1e24);
       v.__oneStationLights = true; frame.classList.add('ready');
       if (v.markRenderDirty) v.markRenderDirty();
       if (v.markShadowsDirty) v.markShadowsDirty();
@@ -611,8 +621,20 @@ main{display:block;position:absolute;inset:0}
   /* ---------- HUD + results at a recorded frame (same rendering as console 1) ---------- */
   const at = (segs, f) => { let lo = 0, hi = segs.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (segs[m][0] <= f) lo = m; else hi = m - 1; } return segs[lo][1]; };
   const fmtT = t => { const m = Math.floor(t / 60), s = t - m * 60; return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0'); };
+  // a factory without station cells (a baked line model): the status card shows the line's recorded cycle instead of a cell's
+  function lineHud(f) {
+    const spf = ROOT.simPerFrame || 0.16, N = ROOT.frames || FRAMES(), T = N * spf, t = f * spf, p = playback(), on = isPlaying(p);
+    const st = $('.hud.tl .status .eyebrow'); if (st && !st.dataset.line) { st.textContent = '라인 사이클 · ' + ((ROOT.objects || []).find(o => o.type === 'ufmodel' && /라인/.test(o.name || '')) || { name: '공장' }).name.split(' (')[0]; st.dataset.line = '1'; }
+    $('#phase').textContent = on ? '라인 가동' : '일시정지'; $('#phase').dataset.p = on ? 'running' : 'idle';
+    $('#prog').textContent = `${Math.round(t)} / ${Math.round(T)} s`;
+    $('#progBar').style.width = (T ? (t / T) * 100 : 0) + '%';
+    $('#clock').textContent = fmtT(t);
+    $('#rlines').innerHTML = ''; $('#ikwarn').hidden = true;
+    $('#tw').innerHTML = ['red', 'amber', 'green'].map(k => `<i class="${k} ${k === (on ? 'green' : 'amber') ? 'on' : ''}"></i>`).join('');
+    const sc = $('[data-view="scale"]'); if (sc) sc.hidden = true;
+  }
   function render(f) {
-    if (!TL) { if (ROOT && f !== lastF) { lastF = f; renderMotion(f); } return; } // a factory without station cells still has AMRs / workers
+    if (!TL) { if (ROOT && f !== lastF) { lastF = f; lineHud(f); renderMotion(f); } return; } // a factory without station cells still has AMRs / workers
     if (f === lastF) return; lastF = f;
     const phase = at(TL.phase, f), results = at(TL.results, f), N = TL.parts, step = at(TL.step, f);
     const judged = results.filter(r => r.ok != null), ok = judged.filter(r => r.ok).length, ng = judged.length - ok, anyNg = results.some(r => r.ok === false);
@@ -647,7 +669,7 @@ main{display:block;position:absolute;inset:0}
       $('#ngNote').textContent = notes.length ? 'NOK 원인 (시뮬레이션): ' + notes.join(' · ') : '';
     }
   }
-  setInterval(() => { if (TL) render(currentFrame()); panelTick(); }, 100);
+  setInterval(() => { if (TL || ROOT) render(currentFrame()); panelTick(); }, 100);
 
   /* ---------- sim panel (js/sim-panel.js) on realvirtual's playback ----------
      Speeds use ONE BUILDER's scale: the recording runs at SIM 4x, so x4 is playback 1x. Pause holds

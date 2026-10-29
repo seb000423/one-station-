@@ -54,9 +54,7 @@ L = lambda x, z: (r3(x + XS), r3(z + ZS))
 model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(BB['min'][0] + BB['size'][0] / 2, BB['min'][2] + BB['size'][2] / 2))
 MODEL_X0, MODEL_X1 = BB['min'][0] + XS, BB['min'][0] + BB['size'][0] + XS
 FENCE_S = LZ - 2.4                                          # the operator-side (−Z) guard fence, line z
-# the four people on the line (the only manual stations, as in the CAD), inside the guard on the operator side, facing the line (+z at rot 0)
-for nm, x, z in (('투입 작업자 (코어 상자 보급)', S['tote'], LZ - 1.45), ('수동 MIG 작업자', S['manual'] - 0.1, LZ - 0.8), ('수동 검사 작업자', S['check'], LZ - 0.85), ('포장 작업자', S['pack'], LZ - 1.95)):
-    model(nm, 'uf_worker', *L(x, z), 0)
+# (the four operators are baked into the line model with their process motions: tote change, manual MIG, inspection, carton to the shipping pallet)
 # inspection tunnels over the conveyor (C/F tester, laser marking): the catalogue's scanner gate at 0.7 scale, opening along the line
 for nm, x in (('C/F 검사 터널', S['cf']), ('레이저 마킹 터널', S['mark'])):
     add('ufmodel', nm, *L(x, LZ), 0, {'model': 'rv_scanner', 'scale': 0.7, 'cycle': 12})

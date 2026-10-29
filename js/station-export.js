@@ -288,12 +288,27 @@
     // quantized attributes (meshopt / KHR_mesh_quantization models: Int8 / Int16) are not exportable by GLTFExporter r147: back to floats
     root.traverse(o => {
       if (!o.isMesh) return;
-      const q = Object.entries(o.geometry.attributes).filter(([, a]) => a.array instanceof Int8Array || a.array instanceof Int16Array); if (!q.length) return;
+      const q = Object.entries(o.geometry.attributes).filter(([, a]) => a.array instanceof Int8Array || a.array instanceof Int16Array || (a.normalized && (a.array instanceof Uint8Array || a.array instanceof Uint16Array))); if (!q.length) return;
       o.geometry = o.geometry.clone();
       for (const [k, a] of q) { const f = new Float32Array(a.count * a.itemSize), get = [a.getX, a.getY, a.getZ, a.getW]; // getX… undo the normalisation
         for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = get[c].call(a, i);
         o.geometry.setAttribute(k, new THREE.BufferAttribute(f, a.itemSize)); }
     });
+    // a node carries one realvirtual Drive. A node recorded on several axes (a baked clip that moves a group along X and Z, or turns and
+    // moves it) keeps its rotation (else its first axis); every further linear axis moves a wrapper inserted ABOVE the node (same parent
+    // frame, so the recorded deltas apply unchanged) and a further rotation turns a wrapper inserted below it (about the node's own axes).
+    const byNode = new Map(); cells.flatMap(c => c.rec.drives).concat(extra).forEach(d => { if (!d.node) return; if (!byNode.has(d.node)) byNode.set(d.node, []); byNode.get(d.node).push(d); });
+    for (const [node, ds] of byNode) {
+      if (ds.length < 2) continue;
+      const keep = ds.find(d => d.dir.startsWith('Rotation')) || ds[0];
+      for (const d of ds) {
+        if (d === keep) continue;
+        const w = new THREE.Group(); w.name = node.name + '_' + d.dir;
+        if (d.dir.startsWith('Linear')) { const p = node.parent; p.add(w); p.remove(node); w.add(node); }
+        else { while (node.children.length) w.add(node.children[0]); node.add(w); }
+        d.node = w;
+      }
+    }
     // unique, path-safe names everywhere: the glTF loader renames duplicates, which would break drive paths
     const seen = new Set();
     root.traverse(o => {
