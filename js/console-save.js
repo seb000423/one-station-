@@ -120,7 +120,7 @@ async function loadDialog() {
   catch (e) { return say('저장 목록을 불러올 수 없습니다 (' + e.message + ')', true); }
   say(saves.length ? '' : '아직 저장본이 없습니다.');
   const list = form.querySelector('.saves');
-  list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b><span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? `셀 ${m.cells} · 객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
+  list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b><span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? (m.cells ? `원스테이션 셀 ${m.cells} · ` : '') + `객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
   list.querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
     const s = saves.find(x => x.id === b.dataset.id);
     try {
