@@ -47,7 +47,7 @@ window.buildOne = async (name) => {
   cam.position.copy(c).add(new THREE.Vector3(1.0, 0.62, 1.25).normalize().multiplyScalar(dist)); cam.lookAt(c);
   renderer.render(scene, cam);
   const png = renderer.domElement.toDataURL('image/png').split(',')[1];
-  return { glb: b64(glb), png, tris, meshes, nodes, size: size.toArray().map(v => +v.toFixed(3)) };
+  return { glb: b64(glb), png, tris, meshes, nodes, size: size.toArray().map(v => +v.toFixed(3)), min: bb.min.toArray().map(v => +v.toFixed(3)) };
 };
 window.ready = Object.keys(MODELS);
 </script></body></html>
