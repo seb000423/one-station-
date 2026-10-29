@@ -604,6 +604,8 @@ main{display:block;position:absolute;inset:0}
       const gmesh = v.groundMesh || v._groundMesh, gm = gmesh && gmesh.material; if (gm && gm.color) { gm.color.set(0x1e1e24); if ('roughness' in gm) gm.roughness = 0.55; gm.needsUpdate = true; }
       if ('_groundColor' in v && v._groundColor && v._groundColor.set) v._groundColor.set(0x1e1e24);
       v.__oneStationLights = true; frame.classList.add('ready');
+      // land on the whole factory (전체), not realvirtual's fit of everything in the file
+      setTimeout(() => { const b = document.querySelector('[data-view="all"]'); if (b) b.click(); }, 400);
       if (v.markRenderDirty) v.markRenderDirty();
       if (v.markShadowsDirty) v.markShadowsDirty();
     } catch (e) {}
