@@ -36,7 +36,7 @@ export function egrModuleLine() {
     for (let k = 0; k < 9; k++) { const a = k * 2.4, r = 0.05 + (k % 3) * 0.025, sp = new THREE.CylinderGeometry(0.0015, 0.0015, r, 4); sp.translate(0, r / 2, 0); sp.rotateZ(0.6 + (k % 4) * 0.25); sp.rotateY(a); const q = P(0, 0, tz); sp.translate(...q); bin(g, sparkM, sp); } };
   const laserM = std('laser_beam', 0xff3030, 0.0, 0.3, { emissive: 0xff2020, emissiveIntensity: 3.5 });
   const magenta = std('paste_tank', 0xc24a9c, 0.3, 0.5), glass = std('polycarbonate', 0xd3e4ee, 0.0, 0.06, { transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
-  const cardboard = std('cardboard', 0xb88a55, 0.0, 0.8), blue = std('machine_paint', 0xc4c8c6, 0.3, 0.5), palM = std('pallet_alu', 0xa9b2bb, 0.85, 0.35), beltM = std('pallet_belt', 0x2a2d31, 0.0, 0.75), curtain = std('weld_curtain', 0xc8461e, 0.0, 0.55, { transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
+  const cardboard = std('cardboard', 0xb88a55, 0.0, 0.8), blue = std('machine_paint', 0xa9aeac, 0.3, 0.5), palM = std('pallet_alu', 0xa9b2bb, 0.85, 0.35), beltM = std('pallet_belt', 0x2a2d31, 0.0, 0.75), curtain = std('weld_curtain', 0xc8461e, 0.0, 0.55, { transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
   const robots = {}, FOOT = [], TABLE = { S, RBASE, MZ, Z0, BT, LOW, LANES };
   const fp = (name, x0, x1, z0, z1) => FOOT.push([name, x0, x1, z0, z1]);
   const plates = {}, plateMat = text => plates[text] || (plates[text] = std('plate_' + text, 0xffffff, 0.1, 0.5, { map: labelTexture(text, '#1f2a36', '#ffffff') }));
@@ -100,6 +100,7 @@ export function egrModuleLine() {
   // a CAD station sub-assembly (globalThis.PARTS, loaded by build.html): centred on (x, z), standing on y, turned ry
   const part = (key, x, z, ry = 0, y = 0) => { const src = (globalThis.PARTS || {})[key]; if (!src) return null; const o = src.clone(true), w = new THREE.Group(); w.add(o); w.rotation.y = ry; w.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(w); w.position.set(x - (b.min.x + b.max.x) / 2, y - b.min.y, z - (b.min.z + b.max.z) / 2); w.name = 'CAD_' + key.replace(/-/g, '_');
+    w.traverse(o => { if (o.isMesh) o.material = [].concat(o.material).map(q => { if (!q || !q.color || q.transparent) return q; const hsl = {}; q.color.getHSL(hsl); if (hsl.l <= 0.72) return q; const c = q.clone(); c.color.setHSL(hsl.h, hsl.s * 0.8, 0.72); return c; }).reduce((a, q, i, arr) => arr.length === 1 ? q : arr, null); });   // no pure-white CAD surfaces
     w.traverse(o => { if (o.isMesh && [].concat(o.material).some(q => q && q.transparent)) { o.castShadow = false; o.receiveShadow = false; [].concat(o.material).forEach(q => { if (q && q.transparent) q.depthWrite = false; }); } });   // clear covers: no shadow speckle
     root.add(w); return w; };
   const fixture = (x, z, alongX) => { const w = alongX ? 0.42 : 0.3, d = alongX ? 0.26 : 0.36; box(root, m.aluDark, w, 0.03, d, x, FIXY - 0.015, z); for (const sx of [-1, 1]) prof(root, [x + sx * (w / 2 - 0.03), 0.4, z], [x + sx * (w / 2 - 0.03), FIXY - 0.03, z], 0.04);   // cabin fixture: plate top at FIXY

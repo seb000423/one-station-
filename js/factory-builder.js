@@ -906,7 +906,7 @@
     $('.view').appendChild(bar);
     // simulation controls: the shared cycle panel at the bottom centre of the 3D view (js/sim-panel.js)
     simBox = window.SimPanel.mount($('.view'), {
-      eyebrow: '시뮬레이션', speeds: [1, 4, 16, 32], speed,
+      eyebrow: '시뮬레이션', base: SIM_BASE, speed,   // ×1 on the panel = SIM_BASE real speed
       onToggle: () => playing ? simPause() : simStart(), onRestart: simRestart, onSpeed: setSpeed,
       onStep: i => { const c = cycle(); if (c && c.steps[i]) seekTo(c.loop * c.P + c.steps[i].t0); },
       onSeek: f => { const c = cycle(); if (c) seekTo(c.loop * c.P + f * c.P); }
@@ -1438,7 +1438,8 @@
   }
 
   /* ---------- range circles + safety ---------- */
-  let playing = false, clock = 0, speed = 4, safetyLayer = null;
+  const SIM_BASE = 2.5;   // the panel's ×1: 2.5 × real time (×1.0 … ×8.0 in 0.5 steps)
+  let playing = false, clock = 0, speed = SIM_BASE, safetyLayer = null;
   // ▶ 시작: everything runs (cells' cycles, robots, conveyors, AMRs, workers) at the chosen speed
   function simStart() {
     if (clock === 0 || !mirror.src) mirrorStart();

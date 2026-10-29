@@ -49,7 +49,7 @@ function materials() {
     stainless: std('stainless', 0xc2c7cc, 1.0, 0.3),
     black: std('black_paint', 0x1c1e21, 0.25, 0.55),
     rubber: std('rubber', 0x111214, 0.0, 0.85),
-    sheet: std('sheet_grey', 0xb4bac1, 0.15, 0.55),
+    sheet: std('sheet_grey', 0xa6acb2, 0.15, 0.55),
     orange: std('orange_red', 0xe0461d, 0.25, 0.42),
     yellow: std('safety_yellow', 0xeec539, 0.2, 0.45),
     red: std('signal_red', 0xc8242b, 0.2, 0.45),

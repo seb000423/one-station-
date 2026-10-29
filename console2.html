@@ -674,8 +674,8 @@ main{display:block;position:absolute;inset:0}
   /* ---------- sim panel (js/sim-panel.js) on realvirtual's playback ----------
      Speeds use ONE BUILDER's scale: the recording runs at SIM 4x, so x4 is playback 1x. Pause holds
      realvirtual's whole fixed loop with our own pause reason; speed scales the playback's frame advance. */
-  const REC_SPEED = 4;
-  let rate = 1;
+  const REC_SPEED = 4, SIM_BASE = 2.5;   // recorded at SIM 4×; the panel's ×1 plays it at 2.5×
+  let rate = SIM_BASE / REC_SPEED;
   function playback() {
     if (!viewer || !viewer.playback) { viewer = findViewer(); tuneLights(viewer); }
     const p = viewer && viewer.playback;
@@ -699,7 +699,7 @@ main{display:block;position:absolute;inset:0}
     return { mover, names: segs.map(x => x[1]), at: f => { let k = -1; const v = at(mover.state, f); segs.forEach((x, i) => { if (x[1] === v) k = i; }); return k; }, first: i => segs[i] ? segs[i][0] : null, label: f => at(mover.state, f) };
   }
   const panel = window.SimPanel.mount($('.view'), {
-    eyebrow: 'ONE BUILDER 녹화 사이클', speeds: [1, 4, 16, 32], speed: REC_SPEED,
+    eyebrow: 'ONE BUILDER 녹화 사이클', base: SIM_BASE, speed: SIM_BASE,   // ×1 on the panel = 2.5 × real time, as in ONE BUILDER
     onToggle: () => { const p = playback(); if (!p) return; if (isPlaying(p)) viewer.setSimulationPaused('one-monitor', true); else resume(p); panelTick(); },
     onRestart: () => { const p = playback(); if (!p) return; p.seekToPercent(0); resume(p); dirty(); panelTick(); },
     onSpeed: v => { rate = v / REC_SPEED; },
