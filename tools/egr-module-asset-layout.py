@@ -47,22 +47,54 @@ XS, ZS = -15.35, -4.5
 L = lambda x, z: (r3(x + XS), r3(z + ZS))
 model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(12.9375, 1.09))   # box −1.05 … 26.925 × −1.925 … 4.104 (build.mjs prints size and min)
 
-# ---------------------------------------------------------------- station labels on the floor, on the aisle side (−Z), in flow order
-LAB = -2.9
+# ---------------------------------------------------------------- station labels on the floor, south of the line (+Z, the side the default view looks from), in flow order
+LAB = 4.35
 A = [('1 코어 Assy 투입 컨베이어 (2레인)', 0.5, 1.6), ('2 센터링 · 방향 검사', 0.55, 1.2), ('3 핀 비전 · 바코드', 0.9, 1.0), ('4 핸들링 로봇', 1.45, 0.9), ('5 레이저 프로파일', 1.75, 1.0), ('6 페이스트 도포', 1.9, 1.0), ('7 노즐 비전 · 8 중량 검사', 2.0, 1.4), ('9 NG 컨베이어', 2.5, 1.0)]
 B = [('11 코어 셔틀', 3.0, 1.0), ('12 탱크 공급기', 3.3, 1.0), ('13 탱크 프레스 ×2', 4.2, 1.2), ('14 프레스 비전', 5.0, 1.0), ('15 이재기 · 버퍼', 5.0, 1.2), ('16 스캔 레이저 용접', 6.5, 1.4), ('17 레이저 NG 컨베이어', 5.85, 1.4)]
 C = [('18 플랜지 공급기 ×2', 7.9, 1.4), ('19 지그 트랜스퍼 (11 지그)', 8.9, 1.6), ('20 MIG 용접 로봇 ×4', 9.3, 1.4), ('21 용접 전원 · 와이어 드럼', 9.3, 1.6), ('22 수동 MIG 작업대', 10.9, 1.2), ('23 배출 피치 컨베이어', 11.2, 1.4)]
 Dd = [('24 2차 C/F 검사', 13.0, 1.2), ('25 외부 페이스트 도포', 14.8, 1.4), ('26 페이스트 탱크 ×4', 14.8, 1.2), ('27 수동 검사대', 16.6, 1.0), ('28 배출 컨베이어', 17.8, 1.2)]
 E = [('29 리크 투입 컨베이어', 19.8, 1.4), ('30 바코드 · 턴테이블', 20.7, 1.2), ('31 외관 검사', 21.3, 1.0), ('32 리크 테스트 지그 + 로봇', 22.5, 1.6), ('33 레이저 마킹', 23.4, 1.0), ('34 가스켓 · 볼트 조립', 24.5, 1.4), ('35 OK / NG 지그 · NG 보관', 25.7, 1.6), ('36 배출 리프트', 26.4, 1.0)]
 rows = {}
-for cell, items, dz in (('A', A, 0), ('B', B, 0), ('C', C, -0.7), ('D', Dd, 0.6), ('E', E, 0.6)):
+for cell, items, dz in (('A', A, 0), ('B', B, 0), ('C', C, 0.5), ('D', Dd, 0), ('E', E, -0.8)):
     for nm, x, w in items:
         z = LAB + dz
-        while any(abs(x - px) < (w + pw) / 2 + 0.1 for px, pw in rows.get(z, [])): z -= 0.5   # stagger labels that would overlap
+        while any(abs(x - px) < (w + pw) / 2 + 0.1 for px, pw in rows.get(z, [])): z += 0.5   # stagger labels that would overlap (southwards)
         rows.setdefault(z, []).append((x, w)); station(f'{cell} · {nm}', *L(x, z), w=w)
 
 # ---------------------------------------------------------------- KPI board over cell A (assumed values until the field numbers come in)
 add('kpi', 'KPI 용접 모듈 라인', *L(1.2, 1.3), 0, {'title': 'EGR 쿨러 자동 용접 모듈 라인', 'rows': ['라인 피치|40 s|가정', 'UPH|90 개/h|가정', '라인 인원|4 명 (투입 · 수동 MIG · 수동 검사 · 배출)', '핸들링 로봇|3 대 (도포 · 레이저 · 리크)', 'MIG 로봇|4 대', 'NG 배출|도포 · 레이저 · 리크 판정 후', '검사|핀 비전 · 노즐 비전 · 중량 · 프레스 비전 · C/F · 외관 · 리크'], 'w': 3.6, 'h': 2.1, 'y': 3.0, 'hang': 7.0})
+
+# ---------------------------------------------------------------- material flow around the line: a deck AGV brings totes of brazed core assemblies from the west
+# shutter to the input stand north of cell A (the loading operator in the line model works from there) and returns the empties; a forklift takes
+# the full shipping pallet east of the leak cell to the east shutter. Vehicles drive north of the line (people work on its −Z side inside the fences).
+def zone(name, kind, x, z, w=2.2, d=2.0, **p):
+    return add('zone', name, x, z, 0, dict({'kind': kind, 'w': w, 'd': d, 'label': name}, **p))
+def route(name, pts, oneway=False):
+    return add('route', name, 0, 0, 0, {'points': [[r3(a), r3(b)] for a, b in pts], 'oneway': oneway})
+BOX = (-16.4, 11.575, -6.4, -0.4)           # the line model's footprint in builder coords (x0, x1, z0, z1)
+IN_X = -X0 + 1.6
+zone('코어 Assy 상자 입고 (서 셔터)', 'pickup', IN_X, DOORZ - 0.5, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=160, unit='tote', standH=0.62, load='e3_tote_brazed')   # trucks bring them
+zone('빈 상자 반납 (서 셔터)', 'dropoff', IN_X, DOORZ + 1.3, w=0.7, d=0.6, track=True, stock=0, cap=3, consume=90, unit='tote', standH=0.62, load='e3_tote_600x400')
+STAND, EMPTY = (-16.1, -7.3), (-15.0, -7.3)   # north of cell A's totes, 0.9 m outside the model box
+zone('코어 Assy 투입대', 'dropoff', *STAND, w=0.7, d=0.6, track=True, stock=1, cap=2, consume=400, unit='tote', standH=0.62, load='e3_tote_brazed')   # the loading operator empties a tote of 8 per cycle
+zone('빈 상자 (투입대 옆)', 'pickup', *EMPTY, w=0.7, d=0.6, track=True, stock=0, cap=2, supply=400, unit='tote', standH=0.62, load='e3_tote_600x400')
+PAL = (13.2, -3.0)                         # east of the leak cell's exit, clear of column C5 (x 12, z 0)
+zone('출하 팔레트 적재', 'pickup', *PAL, w=1.4, d=1.4, track=True, stock=24, cap=64, supply=50, unitKg=1.5, thresholdKg=96, unit='pallet', perBox=8, layers=2, load='e3_pack_box')
+zone('출하 대기 (동 셔터)', 'dropoff', X0 - 2.0, DOORZ, w=1.4, d=1.4, track=True, stock=0, cap=1, consume=80, unit='pallet', layers=2, load='e3_pack_box')
+zone('입고 AGV 대기', 'storage', -9.0, -7.6, w=1.0, d=1.0)
+zone('지게차 대기', 'storage', 9.0, 5.5, w=1.4, d=1.4)
+NLn, SL, CX = -8.6, 7.0, -17.1             # north lane (vehicles), south lane (forklift), west corridor between the wall and cell A
+DK = IN_X + 0.9                            # docking lane east of the two shutter stands (a route node must sit within 1 m outside a zone's edge)
+route('AGV 경로', [(DK, DOORZ + 1.3), (DK, DOORZ - 0.5), (DK, 1.6), (CX, 1.6), (CX, NLn), (STAND[0], NLn), (EMPTY[0], NLn), (-9.0, NLn)])   # two-way: shutter stands → west corridor → north lane → stands; the AGV drives back the same way (the line blocks a loop)
+route('도킹', [(-9.0, NLn), (-9.0, -7.6)])   # the AGV waits on a spur off the lane
+for x in (STAND[0], EMPTY[0]): route('도킹', [(x, NLn), (x, STAND[1] - 0.8)])   # two-way spurs to 0.5 m north of the stands; the AGV backs out
+route('지게차 경로', [(PAL[0], PAL[1] + 0.7 + 0.46), (PAL[0], SL), (X0 - 2.0, SL), (X0 - 2.0, DOORZ + 1.16), (X0 - 2.0, SL), (9.0, SL), (9.0, 5.5)])   # forks enter a pallet 1.16 m ahead of the stop
+ref = {o['name']: 'zone:' + o['id'] for o in objects if o['type'] == 'zone'}
+stop = lambda at, act, dwell=8: {'at': ref[at], 'act': act, 'dwell': dwell}
+add('amr', '입고 AGV', -9.0, -7.6, 0, {'model': 'e3_amr_deck_bot', 'length': 1.0, 'width': 0.75, 'speed': 1.2, 'payload': 120, 'dwell': 5, 'load': 'e3_tote_brazed', 'loads': ['e3_tote_brazed', 'e3_tote_600x400'],
+                                    'stops': [stop('입고 AGV 대기', 'wait', 1), stop('코어 Assy 상자 입고 (서 셔터)', 'load', 5), stop('코어 Assy 투입대', 'unload', 5), stop('빈 상자 (투입대 옆)', 'load', 5), stop('빈 상자 반납 (서 셔터)', 'unload', 5)]})
+add('amr', '출하 지게차', 9.0, 5.5, 0, {'model': 'uw_forklift', 'length': 2.4, 'width': 1.2, 'speed': 1.1, 'payload': 1500, 'dwell': 10, 'load': 'e3_pack_box', 'layers': 2,
+                                    'stops': [stop('지게차 대기', 'wait', 1), stop('출하 팔레트 적재', 'load'), stop('출하 대기 (동 셔터)', 'unload', 12)]})
 
 doc = {'version': 2, 'factory': {'width': W, 'depth': D, 'height': H}, 'objects': objects}
 out = os.path.join(ROOT, 'assets/layouts/egr-module-asset.json')
