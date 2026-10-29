@@ -50,12 +50,12 @@
   const fmt = t => { if (!(t >= 0)) return '--:--'; t = Math.floor(t); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60, p = v => String(v).padStart(2, '0'); return (h ? h + ':' + p(m) : p(m)) + ':' + p(s); };
 
   // opts: { eyebrow, speeds: [..], speed, onToggle(), onRestart(), onSpeed(v), onStep(i), onSeek(frac 0..1) }
-  // rate mode (opts.base): a slider in displayed steps of 0.5 (×0.5 … ×8); ×1 shown = opts.base real speed; onSpeed gets the real speed
+  // rate mode (opts.base): a slider over the real speed from opts.base up to 20× in steps of 0.5; it reads ×1.0 at opts.base (×1.2, ×1.4 … = real / base); onSpeed gets the real speed
   function mount(parent, opts = {}) {
     if (!document.getElementById('spnlCss')) { const st = document.createElement('style'); st.id = 'spnlCss'; st.textContent = css; document.head.appendChild(st); }
     const speeds = opts.speeds || [1, 4, 16, 32], base = opts.base || 0;
     let speed = opts.speed || (base || speeds[0]), stepKey = '', seekable = false;
-    const shown = v => (Math.round(v / base * 2) / 2).toFixed(1);
+    const shown = v => (v / base).toFixed(1);
     const el = document.createElement('div'); el.className = 'spnl'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', '시뮬레이션 진행 상태');
     el.innerHTML = `
       <button type="button" class="sp-play" aria-label="재생">${ICON.play}</button>
@@ -64,14 +64,14 @@
         <div class="sp-row"><div class="sp-title">대기</div><select class="sp-step none" aria-label="공정 단계 선택" hidden></select></div>
         <div class="sp-bar off" role="slider" aria-label="진행 위치" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0"><i style="width:0"></i><b style="left:0"></b></div>
       </div>
-      ${base ? `<label class="sp-rate" title="재생 배속 (0.5 단위)"><input type="range" min="0.5" max="8" step="0.5" value="${shown(speed)}" aria-label="재생 배속"><output>×${shown(speed)}</output></label>` : `<button type="button" class="sp-speed" title="배속">×${speed}</button>`}
+      ${base ? `<label class="sp-rate" title="재생 배속: 실제 2.5배부터 0.5배씩"><input type="range" min="${base}" max="20" step="0.5" value="${speed}" aria-label="재생 배속"><output>×${shown(speed)}</output></label>` : `<button type="button" class="sp-speed" title="배속">×${speed}</button>`}
       <button type="button" class="sp-restart" title="처음부터" aria-label="처음부터">${ICON.restart}</button>`;
     parent.appendChild(el);
     const q = s => el.querySelector(s), play = q('.sp-play'), sel = q('.sp-step'), bar = q('.sp-bar');
     q('.sp-eye').textContent = opts.eyebrow || '시뮬레이션';
     play.onclick = () => opts.onToggle && opts.onToggle();
     q('.sp-restart').onclick = () => opts.onRestart && opts.onRestart();
-    if (base) { const r = q('.sp-rate input'), o = q('.sp-rate output'); r.oninput = () => { speed = +r.value * base; o.textContent = '×' + (+r.value).toFixed(1); opts.onSpeed && opts.onSpeed(speed); }; }
+    if (base) { const r = q('.sp-rate input'), o = q('.sp-rate output'); r.oninput = () => { speed = +r.value; o.textContent = '×' + shown(speed); opts.onSpeed && opts.onSpeed(speed); }; }
     else q('.sp-speed').onclick = () => { speed = speeds[(speeds.indexOf(speed) + 1) % speeds.length]; q('.sp-speed').textContent = '×' + speed; opts.onSpeed && opts.onSpeed(speed); };
     sel.onchange = () => { if (sel.value !== '' && opts.onStep) opts.onStep(+sel.value); };
     // drag or click on the bar to seek; arrow keys step 5 %
@@ -91,7 +91,7 @@
       if (s.playing !== last.playing) { play.innerHTML = s.playing ? ICON.pause : ICON.play; play.setAttribute('aria-label', s.playing ? '일시정지' : '재생'); }
       if (s.eyebrow != null && s.eyebrow !== last.eyebrow) q('.sp-eye').textContent = s.eyebrow;
       if (s.title !== last.title) { q('.sp-title').textContent = s.title || '대기'; q('.sp-title').title = s.title || ''; }
-      if (s.speed != null && s.speed !== speed) { speed = s.speed; if (base) { q('.sp-rate input').value = shown(speed); q('.sp-rate output').textContent = '×' + shown(speed); } else q('.sp-speed').textContent = '×' + speed; }
+      if (s.speed != null && s.speed !== speed) { speed = s.speed; if (base) { q('.sp-rate input').value = speed; q('.sp-rate output').textContent = '×' + shown(speed); } else q('.sp-speed').textContent = '×' + speed; }
       const steps = s.steps || [], key = steps.join('\u0001');
       if (key !== stepKey) {
         stepKey = key;
