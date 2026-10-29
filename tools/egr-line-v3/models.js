@@ -20,7 +20,8 @@ function meshTexture() { // one 50 mm cell of welded wire mesh, white wires on t
 function labelTexture(text, bg, fg) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
   const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, 256, 128);
-  g.fillStyle = fg; g.font = 'bold 84px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 68);
+  g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 84px sans-serif'; const w = g.measureText(text).width, px = w > 236 ? Math.floor(84 * 236 / w) : 84;   // long names shrink to fit (never cut)
+  g.font = `bold ${px}px sans-serif`; g.fillText(text, 128, 68);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.name = 'label_' + text; return t;
 }
 function hazardTexture() { // yellow / black diagonal stripes
@@ -611,14 +612,19 @@ function floorTile(aisle) { // 6 × 6 m polished concrete tile; the aisle varian
 // sampled into drives for console 2 by js/factory-unity.js). keys: [node, 'x'|'y'|'z' translate offset or 'rx'|'ry'|'rz' rotation (rad),
 // [[t, value], …]] relative to the node's rest pose; linear in between; the clip loops.
 function cycleClip(root, name, T, keys, fps = 10) {
-  const tracks = [];
+  // one track per node and property: channels x / y / z of a node form ONE position track and rx / ry / rz ONE rotation track (two tracks on the
+  // same property would be blended by the mixer: a node keyed on x and z moved only half as far)
+  const tracks = [], ease = u => u * u * (3 - 2 * u), groups = new Map();
+  const curve = pts => t => { let k = 0; while (k < pts.length - 2 && pts[k + 1][0] <= t) k++; const [t0, v0] = pts[k], [t1, v1] = pts[Math.min(k + 1, pts.length - 1)]; const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1; return v0 + (v1 - v0) * ease(u); };
   for (const [nodeName, ch, pts] of keys) {
     const node = root.getObjectByName(nodeName); if (!node) throw new Error('no node ' + nodeName);
-    const at = t => { let k = 0; while (k < pts.length - 2 && pts[k + 1][0] <= t) k++; const [t0, v0] = pts[k], [t1, v1] = pts[Math.min(k + 1, pts.length - 1)]; const u = t1 > t0 ? Math.min(1, Math.max(0, (t - t0) / (t1 - t0))) : 1; const e = u * u * (3 - 2 * u); return v0 + (v1 - v0) * e; };
-    const n = Math.round(T * fps) + 1, times = Float32Array.from({ length: n }, (_, i) => i / fps);
     if (ch === 'vis') { const ts = pts.map(q => q[0]), v = pts.flatMap(q => { const k = q[1] ? 1 : 1e-4; return [k, k, k]; }); tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.scale', ts, v, THREE.InterpolateDiscrete)); continue; }
-    if (/^[xyz]$/.test(ch)) { const v = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const q = node.position.clone(); q[ch] += at(times[i]); q.toArray(v, i * 3); } tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.position', times, v)); }
-    else { const ax = ch[1], v = new Float32Array(n * 4), e = new THREE.Euler(); for (let i = 0; i < n; i++) { e.copy(node.rotation); e[ax] += at(times[i]); new THREE.Quaternion().setFromEuler(e).toArray(v, i * 4); } tracks.push(new THREE.QuaternionKeyframeTrack(nodeName + '.quaternion', times, v)); }
+    const prop = /^[xyz]$/.test(ch) ? 'position' : 'quaternion', gk = nodeName + '.' + prop; if (!groups.has(gk)) groups.set(gk, { node, nodeName, prop, chans: [] }); groups.get(gk).chans.push([ch, curve(pts)]);
+  }
+  for (const { node, nodeName, prop, chans } of groups.values()) {
+    const F = typeof fps === 'function' ? fps(nodeName) : fps, n = Math.round(T * F) + 1, times = Float32Array.from({ length: n }, (_, i) => i / F);   // fps may be per node
+    if (prop === 'position') { const v = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const q = node.position.clone(); for (const [c, f] of chans) q[c] += f(times[i]); q.toArray(v, i * 3); } tracks.push(new THREE.VectorKeyframeTrack(nodeName + '.position', times, v)); }
+    else { const v = new Float32Array(n * 4), e = new THREE.Euler(); for (let i = 0; i < n; i++) { e.copy(node.rotation); for (const [c, f] of chans) e[c[1]] += f(times[i]); new THREE.Quaternion().setFromEuler(e).toArray(v, i * 4); } tracks.push(new THREE.QuaternionKeyframeTrack(nodeName + '.quaternion', times, v)); }
   }
   (root.userData.clips || (root.userData.clips = [])).push(new THREE.AnimationClip(name, T, tracks));
   return root;
