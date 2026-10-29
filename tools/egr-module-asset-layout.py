@@ -45,7 +45,7 @@ for z, nm in ((-5, '지붕 북쪽'), (5, '지붕 남쪽')):
 # ---------------------------------------------------------------- the line: one baked model, centred on its box (x −1.05 … 26.8, z −2.225 … 4.1 in line coords)
 XS, ZS = -15.35, -4.5
 L = lambda x, z: (r3(x + XS), r3(z + ZS))
-model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(12.9375, 1.09))   # box −1.05 … 26.925 × −1.925 … 4.104 (build.mjs prints size and min)
+model('EGR 용접 모듈 라인 (A 투입 · 도포 → B 엔드 탱크 · 레이저 → C 택 용접 → D C/F · 외부 도포 → E 리크 테스트)', 'e3_egr_module_line', *L(13.455, 1.3815))   # box −1.05 … 27.96 × −1.497 … 4.26 (build.mjs prints size and min)
 
 # (no floor labels: the user found the 36 label cards cluttered, 2026-10-29)
 
@@ -59,14 +59,14 @@ def zone(name, kind, x, z, w=2.2, d=2.0, **p):
     return add('zone', name, x, z, 0, dict({'kind': kind, 'w': w, 'd': d, 'label': name}, **p))
 def route(name, pts, oneway=False):
     return add('route', name, 0, 0, 0, {'points': [[r3(a), r3(b)] for a, b in pts], 'oneway': oneway})
-BOX = (-16.4, 11.575, -6.4, -0.4)           # the line model's footprint in builder coords (x0, x1, z0, z1)
+BOX = (-16.4, 12.61, -6.0, -0.24)           # the line model's footprint in builder coords (x0, x1, z0, z1)
 IN_X = -X0 + 1.6
 zone('코어 Assy 상자 입고 (서 셔터)', 'pickup', IN_X, DOORZ - 0.5, w=0.7, d=0.6, track=True, stock=2, cap=3, supply=160, unit='tote', standH=0.62, load='e3_tote_brazed')   # trucks bring them
 zone('빈 상자 반납 (서 셔터)', 'dropoff', IN_X, DOORZ + 1.3, w=0.7, d=0.6, track=True, stock=0, cap=3, consume=90, unit='tote', standH=0.62, load='e3_tote_600x400')
 STAND, EMPTY = (-16.1, -7.3), (-15.0, -7.3)   # north of cell A's totes, 0.9 m outside the model box
 zone('코어 Assy 투입대', 'dropoff', *STAND, w=0.7, d=0.6, track=True, stock=1, cap=2, consume=400, unit='tote', standH=0.62, load='e3_tote_brazed')   # the loading operator empties a tote of 8 per cycle
 zone('빈 상자 (투입대 옆)', 'pickup', *EMPTY, w=0.7, d=0.6, track=True, stock=0, cap=2, supply=400, unit='tote', standH=0.62, load='e3_tote_600x400')
-PAL = (13.2, -3.0)                         # east of the leak cell's exit, clear of column C5 (x 12, z 0)
+PAL = (14.3, -3.0)                         # east of the leak cell's exit, clear of column C5 (x 12, z 0)
 zone('출하 팔레트 적재', 'pickup', *PAL, w=1.4, d=1.4, track=True, stock=24, cap=64, supply=50, unitKg=1.5, thresholdKg=96, unit='pallet', perBox=8, layers=2, load='e3_pack_box')
 zone('출하 대기 (동 셔터)', 'dropoff', X0 - 2.0, DOORZ, w=1.4, d=1.4, track=True, stock=0, cap=1, consume=80, unit='pallet', layers=2, load='e3_pack_box')
 zone('입고 AGV 대기', 'storage', -9.0, -7.6, w=1.0, d=1.0)

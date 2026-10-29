@@ -1571,4 +1571,4 @@ export const MODELS = {
 };
 
 // helpers shared with tools/egr-line-v3/module-line.js (the welding module line rebuilt from these parts)
-export { G, box, cyl, tor, prof, foot, plane, bin, xf, std, anim, materials, finalize, cycleClip, opWorker, ikRig, fencePanel, egrCoolerGeo };
+export { G, box, cyl, tor, prof, foot, plane, bin, xf, std, anim, materials, finalize, cycleClip, opWorker, ikRig, fencePanel, egrCoolerGeo, labelTexture };
