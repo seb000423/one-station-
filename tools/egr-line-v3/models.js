@@ -1,5 +1,5 @@
 // Custom equipment for the EGR cooler line v3 (Ni paste dispensing → belt → stacking → AMR), modelled in three.js
-// and exported as GLB by tools/egr-line-v3/build.mjs. Look: the VEXPLOR reference video (_ref_vexplor/) —
+// and exported as GLB by tools/egr-line-v3/build.mjs. Look: the VEXPLOR reference video (../one_station_ref/, outside the repo) —
 // grey-blue anodised 45 mm aluminium profile, silver rollers, black mesh, glass, orange-red accents — with ONE STATION's
 // yellow (#EEC539) for safety details. Metres, Y up, origin at the base centre (floor level) of each model.
 // Static geometry is merged per material per node; movable parts are their own named nodes (Crane_Carriage,

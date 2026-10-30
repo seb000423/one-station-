@@ -1,5 +1,5 @@
 // Builds the EGR line v3 custom equipment: runs build.html (three.js models.js → GLTFExporter) in headless Chrome
-// through Playwright, writes assets/models/egr-line-v3/<name>.glb and a preview PNG per model to _ref_vexplor/.
+// through Playwright, writes assets/models/egr-line-v3/<name>.glb and a preview PNG per model to ../one_station_ref/ (outside the repo).
 // three.js and Playwright come from the realvirtual-WEB checkout (THREE_PKG / PW_PKG override the paths).
 // Usage (repo root):  PATH=$HOME/.local/bin:$PATH node tools/egr-line-v3/build.mjs [name ...]
 import { createRequire } from 'node:module';
@@ -11,7 +11,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url)), ROOT = path.join(HERE
 const RV = path.join(ROOT, '..', 'realvirtual-WEB', 'node_modules');
 const THREE_DIR = process.env.THREE_PKG || path.join(RV, 'three');
 const { chromium } = createRequire(import.meta.url)(process.env.PW_PKG || path.join(RV, 'playwright'));
-const OUT = path.join(ROOT, 'assets', 'models', 'egr-line-v3'), PREV = path.join(ROOT, '_ref_vexplor');
+const OUT = path.join(ROOT, 'assets', 'models', 'egr-line-v3'), PREV = path.join(ROOT, '..', 'one_station_ref');   // previews stay outside the repo
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(PREV, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
