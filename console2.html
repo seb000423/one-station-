@@ -195,6 +195,7 @@ main{display:block;position:absolute;inset:0}
 .pill.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
 .pill.primary:hover{filter:brightness(1.08)}
 .pill.on{border-color:var(--accent);color:var(--accent)}
+.pill.primary.on{background:transparent;color:var(--accent)}
 .pill.ghost{background:none;border-color:transparent;color:var(--mute)}
 .pill.ghost:hover{color:var(--fg)}
 .pill:focus-visible{outline:1px solid var(--accent);outline-offset:2px}
@@ -207,6 +208,8 @@ main{display:block;position:absolute;inset:0}
 .view .card{background:rgba(0,0,0,.88);border-color:rgba(255,255,255,.08);border-radius:5px}
 .view .status{padding:11px 13px;gap:8px}
 #clock{font-size:17px}
+.app.no-target .hud,.app.no-target .spnl{display:none!important}
+.app.no-target .side .sec:not(:first-child){display:none}
 .offline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--navy);z-index:8}
 .offline .card{max-width:440px;padding:24px;line-height:1.7}
 .offline h2{margin:0 0 8px;font-size:16px}
@@ -274,10 +277,10 @@ main{display:block;position:absolute;inset:0}
 <div class="app">
   <header class="top">
     <a class="brand" href="index.html" title="처음 화면으로"><b>ONE</b>MONITOR <span>/ 실시간 관제</span></a>
-    <div class="crumbs"><span class="live" id="live"><i></i>재생 대기</span><span id="crumbTarget">기본 스테이션</span></div>
+    <div class="crumbs"><span class="live" id="live"><i></i>재생 대기</span><span id="crumbTarget">선택 안 함</span></div>
     <nav class="pills">
-      <button type="button" class="pill primary" id="openTarget">모니터링 대상</button>
-      <button type="button" class="pill" id="toggleData" aria-expanded="false" aria-controls="dataDrawer">공정 데이터</button>
+      <button type="button" class="pill primary" id="openTarget" aria-controls="dataDrawer" aria-expanded="false">모니터링 목록</button>
+      <button type="button" class="pill" id="toggleData" hidden aria-expanded="false" aria-controls="dataDrawer">공정 데이터</button>
       <a class="pill ghost" href="console.html">ONE BUILDER ↗</a>
     </nav>
   </header>
@@ -307,6 +310,13 @@ main{display:block;position:absolute;inset:0}
           <li><b>1</b>지그 로딩·센서</li><li><b>2</b>START·도어 닫힘</li><li><b>3</b>픽업</li><li><b>4</b>DMC 판독</li><li><b>5</b>계량 (전)</li><li><b>6</b>Ni 페이스트 도포</li><li><b>7</b>계량 (후)</li><li><b>8</b>지그 복귀</li><li><b>9</b>판정·도어 열림</li>
         </ol>
       </div>
+      <div class="offline" id="pickFirst" hidden>
+        <div class="card">
+          <h2>모니터링할 저장본을 고르세요</h2>
+          <p>ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장한 공정이 오른쪽 목록에 있습니다.</p>
+          <button type="button" id="pickOpen">모니터링 목록 열기</button>
+        </div>
+      </div>
       <div class="offline" id="offline" hidden>
         <div class="card">
           <h2>realvirtual 스테이션을 불러오지 못했습니다</h2>
@@ -317,12 +327,12 @@ main{display:block;position:absolute;inset:0}
     </section>
 
     <aside class="side" id="dataDrawer" aria-label="공정 데이터">
-      <div class="dhead"><b>공정 데이터</b><button type="button" id="closeData" aria-label="닫기">×</button></div>
+      <div class="dhead"><b>모니터링 목록</b><button type="button" id="closeData" aria-label="닫기">×</button></div>
       <div class="scroll">
         <div class="sec">
           <div class="field">
             <div class="lbl">모니터링 대상 <small id="saveInfo"></small></div>
-            <div class="savepick"><select id="savePick" aria-label="저장된 스테이션"><option value="">기본 스테이션 (튜브형 · 지그 6개)</option></select><button type="button" id="saveDel" hidden>삭제</button></div>
+            <div class="savepick"><select id="savePick" aria-label="저장된 스테이션"><option value="">— 저장본 선택 —</option></select><button type="button" id="saveDel" hidden>삭제</button></div>
           </div>
           <div id="saveList" aria-label="저장 목록"></div>
           <div class="field" id="cellPickWrap" hidden>
@@ -480,9 +490,13 @@ main{display:block;position:absolute;inset:0}
   let saves = [];
   const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
   const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };
+  // nothing on screen: no 3D view, no panels, just the hint to pick a save
+  function showNone() { setTarget(DEFAULT); frame.src = 'about:blank'; frame.classList.remove('ready'); off.hidden = true; $('#pickFirst').hidden = false; $('.app').classList.add('no-target');
+    $('#savePick').value = ''; $('#saveDel').hidden = true; $('#crumbTarget').textContent = '선택 안 함'; $('#saveInfo').textContent = ''; const u = new URL(location.href); u.searchParams.delete('save'); history.replaceState(null, '', u); renderList(); }
   function choose(id) {
-    const s = saves.find(x => x.id === id);
-    setTarget(s ? { glb: s.glb, timeline: s.timeline } : DEFAULT);
+    const s = saves.find(x => x.id === id); if (!s) return showNone();
+    $('#pickFirst').hidden = true; $('.app').classList.remove('no-target');
+    setTarget({ glb: s.glb, timeline: s.timeline });
     $('#savePick').value = s ? s.id : '';
     $('#saveDel').hidden = !s;
     $('#crumbTarget').textContent = s ? s.name : '기본 스테이션';
@@ -492,19 +506,20 @@ main{display:block;position:absolute;inset:0}
     renderList();
     load();
   }
+  $('#pickOpen').addEventListener('click', () => $('#openTarget').click());
   async function loadSaves() {
     try {
       const r = await fetch('api/saves', { cache: 'no-store' });
       if (!r.ok) return;
       saves = (await r.json()).saves || [];
-      $('#savePick').innerHTML = '<option value="">기본 스테이션 (튜브형 · 지그 6개)</option>' + saves.map(s => `<option value="${s.id}">${label(s).replace(/[<>&"]/g, '')}</option>`).join('');
+      $('#savePick').innerHTML = '<option value="">— 저장본 선택 —</option>' + saves.map(s => `<option value="${s.id}">${label(s).replace(/[<>&"]/g, '')}</option>`).join('');
       renderList();
     } catch (e) { /* no API (local file / not deployed): default station only */ }
   }
   const esc = t => String(t).replace(/[<>&"]/g, '');
   function renderList() {
     const cur = $('#savePick').value, card = (id, name, sub) => `<div class="card"><button type="button" data-id="${id}" class="pick ${id === cur ? 'on' : ''}"><b>${esc(name)}</b><span>${esc(sub)}</span></button>${id ? `<button type="button" class="del" data-del="${id}" title="삭제 (불러오지 않음)" aria-label="${esc(name)} 삭제">×</button>` : ''}</div>`;
-    $('#saveList').innerHTML = card('', '기본 스테이션', '튜브형 · 지그 6개 · 기본 배치') + (saves.length ? saves.map(s => {
+    $('#saveList').innerHTML = (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
       return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · ' + (m.cells ? '원스테이션 셀 ' + m.cells + ' · ' : '') + '객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '));
     }).join('') : '<p class="empty">아직 저장본이 없습니다. ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장하면 여기에 나타납니다.</p>');
@@ -521,7 +536,7 @@ main{display:block;position:absolute;inset:0}
     if (!r.ok) { delPw = ''; return alert('삭제 실패: ' + ((await r.json().catch(() => ({}))).error || r.status)); }
     delPw = password;   // asked once per visit
     const onScreen = $('#savePick').value === id; saves = saves.filter(x => x.id !== id);
-    $('#savePick').querySelector(`option[value="${id}"]`)?.remove(); if (onScreen) { $('#savePick').value = ''; $('#saveDel').hidden = true; }
+    $('#savePick').querySelector(`option[value="${id}"]`)?.remove(); if (onScreen) return showNone();
     renderList(); }
   $('#saveDel').addEventListener('click', () => delSave($('#savePick').value));
 
@@ -738,7 +753,7 @@ main{display:block;position:absolute;inset:0}
   const drawer = open => { $('.app').classList.toggle('data-open', open); $('#toggleData').classList.toggle('on', open); $('#toggleData').setAttribute('aria-expanded', open); };
   $('#toggleData').addEventListener('click', () => drawer(!$('.app').classList.contains('data-open')));
   $('#closeData').addEventListener('click', () => drawer(false));
-  $('#openTarget').addEventListener('click', () => { drawer(true); $('.side .scroll').scrollTop = 0; $('#savePick').focus(); });
+  $('#openTarget').addEventListener('click', () => { const open = !$('.app').classList.contains('data-open'); drawer(open); $('#openTarget').classList.toggle('on', open); $('#openTarget').setAttribute('aria-expanded', open); if (open) $('.side .scroll').scrollTop = 0; });
   addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
 
   /* ---------- camera views (console 1's presets, applied to realvirtual's camera) ---------- */
@@ -769,7 +784,7 @@ main{display:block;position:absolute;inset:0}
 
   setTarget(DEFAULT);
   const wanted = new URL(location.href).searchParams.get('save');
-  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else load(); });
+  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else { showNone(); $('#openTarget').click(); } });   // no save asked for: the list opens, nothing loads
 })();
 </script>
 </body>
