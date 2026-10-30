@@ -154,7 +154,8 @@
     if (!motionCache || key !== motionKey) { motionCache = withZones(FM().plans(doc)); motionKey = key; buildSafetyLayer(); if (window.FactoryFlow) buildFlowLayer(); }
     return motionCache;
   }
-  function store() { syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
+  let shellEmpty = null;
+  function store() { if (shellEmpty !== null && shellEmpty !== !doc.objects.length) buildShell(); syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
   // a document with only the supported types; returns how many objects were dropped
   function sanitize(d) {
     const U = window.FactoryUnity, known = o => o.type !== 'ufmodel' || !U || !(o.params || {}).model || (o.params.items && o.params.items.length) || U.CATALOG[(U.ALIAS || {})[o.params.model] || o.params.model]; // models removed from the catalog (e.g. the Unity 2.3 / 4.6 m belts) are dropped
@@ -249,7 +250,7 @@
   function buildShell() {
     const s = S(), f = doc.factory;
     if (shell) s.scene.remove(shell);
-    shell = window.FactoryElements.buildShell(f, { walls: true }); shell.name = 'factory-shell';
+    shellEmpty = !doc.objects.length; shell = window.FactoryElements.buildShell(f, { walls: !shellEmpty, frame: !shellEmpty }); shell.name = 'factory-shell';   // an empty workspace is just the floor grid; the factory outline comes with the first object
     shell.traverse(o => { o.raycast = () => {}; }); // the shell is not pickable
     const floor = shell.getObjectByName('Factory_Floor'); if (floor) floor.visible = false; // console 1 keeps its own floor
     s.scene.add(shell);
@@ -1353,10 +1354,11 @@
     const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
     world = new THREE.Group(); world.name = 'factory-objects'; s.scene.add(world);
     buildPanel(); document.querySelector('.app').classList.add('fb-on');
-    doc = initialDoc();
-    const first = !doc; if (first) doc = emptyDoc();
+    // ONE BUILDER always opens on an empty floor grid, ready to place things; the example opens only from 예시 공정 보기 and earlier
+    // work from 불러오기 (the last local workspace stays one click away: 불러오기 → 이전 작업)
+    const prev = initialDoc(); if (prev && prev.objects.length) { try { localStorage.setItem(STORE + '.last', JSON.stringify(prev)); } catch (e) {} }
+    doc = emptyDoc();
     rebuildAll();
-    if (first) loadExample({ noUndo: true });
     ensureGizmo().then(() => select(null)).catch(e => note(e.message, true));
     // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive
     // AMRs and workers can wear Asset Store models too (forklift, pallet robot, worker: js/factory-unity-groups.js)

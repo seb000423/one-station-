@@ -107,10 +107,13 @@ async function loadDialog() {
   </form>`);
   // bundled example layouts (assets/layouts/index.json → [{ file, name, note }]), shown above the saves
   const ex = form.querySelector('.examples');
+  let last = null; try { last = JSON.parse(localStorage.getItem('one-station-factory-v3.last') || 'null'); } catch (e) {}   // the workspace left in this browser (ONE BUILDER opens empty)
   fetch('assets/layouts/index.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(items => {
+    if (last && last.objects && last.objects.length) items = [{ file: '', name: '이전 작업 (이 브라우저)', note: '마지막으로 편집하던 배치 · 객체 ' + last.objects.length + '개', last: true }].concat(items);
     if (!items.length) return;
     ex.innerHTML = '<h4 style="margin:0;font-size:12px;color:var(--mute)">예제</h4>' + items.map(x => `<button type="button" data-file="${esc(x.file)}"><b>${esc(x.name)}</b><span>${esc(x.note || '')}</span></button>`).join('');
     ex.querySelectorAll('[data-file]').forEach(b => b.onclick = async () => {
+      if (!b.dataset.file && last) { window.FactoryBuilder.loadDoc(last); close(); return; }
       try { say('불러오는 중…'); const r = await fetch('assets/layouts/' + b.dataset.file, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); window.FactoryBuilder.loadDoc(await r.json()); close(); }
       catch (e) { say('예제 불러오기 실패: ' + e.message, true); }
     });

@@ -420,15 +420,15 @@
   }
 
   // floor, perimeter (see-through) walls, corner columns, ceiling outline
-  function buildShell(f, { walls = true } = {}) {
+  function buildShell(f, { walls = true, frame = true } = {}) {   // frame: ceiling beams and corner posts (an empty workspace has neither)
     const { width: W, depth: D, height: H } = f, g = new THREE.Group(); g.name = 'Factory';
     box(g, 'Factory_Floor', W, 0.004, D, M.floor, 0, 0.002, 0).castShadow = false;
     [[W, 0.06, 0, -D / 2], [W, 0.06, 0, D / 2], [0.06, D, -W / 2, 0], [0.06, D, W / 2, 0]].forEach(([w, d, x, z], i) => {
       box(g, 'Factory_Edge_' + i, w, 0.02, d, M.yellow, x, 0.01, z).castShadow = false;
-      box(g, 'Factory_Ceiling_' + i, Math.max(w, 0.08), 0.08, Math.max(d, 0.08), M.steel, x, H, z);
+      if (frame) box(g, 'Factory_Ceiling_' + i, Math.max(w, 0.08), 0.08, Math.max(d, 0.08), M.steel, x, H, z);
       if (walls) box(g, 'Factory_Wall_' + i, w, H, d, M.glass, x, H / 2, z).castShadow = false;
     });
-    [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]].forEach(([x, z], i) => box(g, 'Factory_Corner_' + i, 0.16, H, 0.16, M.steel, x, H / 2, z));
+    if (frame) [[-W / 2, -D / 2], [W / 2, -D / 2], [-W / 2, D / 2], [W / 2, D / 2]].forEach(([x, z], i) => box(g, 'Factory_Corner_' + i, 0.16, H, 0.16, M.steel, x, H / 2, z));
     return g;
   }
 
