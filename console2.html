@@ -672,6 +672,13 @@ main{display:block;position:absolute;inset:0}
     }
   }
   setInterval(() => { if (TL || ROOT) render(currentFrame()); panelTick(); }, 100);
+  // objects a recording parks out of sight (moved under the floor while 'hidden') are never drawn, in any save (older ones parked them
+  // 50 m down) and from any camera: a mesh whose whole bounding sphere is below the floor is switched off until it comes back up
+  setInterval(() => { try { if (!viewer || !viewer.scene) return; const V = new viewer.camera.position.constructor();
+    viewer.scene.traverse(o => { if (!o.isMesh || !o.geometry) return; const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere(); const bs = g.boundingSphere; if (!bs) return;
+      V.copy(bs.center).applyMatrix4(o.matrixWorld); const sc = o.matrixWorld.getMaxScaleOnAxis ? o.matrixWorld.getMaxScaleOnAxis() : 1, below = V.y + bs.radius * sc < -0.2;
+      if (below && o.visible) { o.visible = false; o.userData.__oneUnder = true; } else if (!below && o.userData.__oneUnder) { o.visible = true; o.userData.__oneUnder = false; } });
+  } catch (e) {} }, 200);
 
   /* ---------- sim panel (js/sim-panel.js) on realvirtual's playback ----------
      Speeds use ONE BUILDER's scale: the recording runs at SIM 4x, so x4 is playback 1x. Pause holds
