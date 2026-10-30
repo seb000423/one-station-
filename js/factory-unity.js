@@ -35,7 +35,7 @@
     uf_building: { label: '공장 건물', group: UF, cat: '건물', size: [67.37, 9.55, 67.34], parts: [['uf_building', 0, 0, 0]] },
     uf_cart: { label: '운반 카트', group: UF, cat: '물류', size: [0.56, 1.01, 0.94], parts: [['uf_cart', 0, 0, 0]] },
     uf_wagon: { label: '부품 왜건', group: UF, cat: '물류', size: [0.59, 1.08, 1.56], parts: [['uf_wagon', 0, 0, 0]] },
-    rv_scanner: { label: '검사 터널 (스캐너 게이트)', group: RVL, cat: '검사 · 비전', size: [2.02, 2.20, 1.95], parts: [['rv_scanner', 0, 0, 0]] },
+    rv_scanner: { label: '검사 터널 (스캐너 게이트)', group: RVL, cat: '검사 · 비전', size: [2.02, 2.20, 1.95], parts: [['rv_scanner', 0, 0, 0]], pass: { axis: 'x', w: 1.4, h: 1.9 } }, // pass: a conveyor may run through (along local axis, opening w × h m)
     uf_worker: { label: '작업자 (공장)', group: UF, cat: '사람', size: [0.80, 1.82, 0.40], parts: [['uf_worker', 0, 0, 0]] },
     uf_tablet: { label: '태블릿 (공장)', group: UF, cat: '부품 · 소품', size: [0.31, 0.22, 0.01], parts: [['uf_tablet', 0, 0, 0]] },
     uw_building: { label: '창고 건물', group: UW, cat: '건물', size: [37.66, 9.80, 65.03], parts: [['uw_building', 0, 0, 0]] },
@@ -88,7 +88,7 @@
     e3_injection_cell: { label: '사출 셀 (인서트 사출기 · 취출 로봇)', group: E3, cat: 'EGR 라인', size: [4.67, 3.25, 3.6], parts: [['e3_injection_cell', 0, 0, 0]], clip: 'Inject_Cycle', clipLen: 24 },
     e3_press_line_2level: { label: '2층 컨베이어 + 프레스 라인', group: E3, cat: 'EGR 라인', size: [8.0, 3.27, 1.65], parts: [['e3_press_line_2level', 0, 0, 0]], clip: 'Press_Cycle', clipLen: 36 },
     e3_dispense_cell: { label: 'Ni 페이스트 도포 셀', group: E3, cat: 'EGR 라인', size: [2.43, 2.52, 1.72], parts: [['e3_dispense_cell', 0, 0, 0]], clip: 'Dispense_Cycle', clipLen: 24 },
-    e3_vision_gantry: { label: '비전 카메라 게이트', group: E3, cat: 'EGR 라인', size: [1.66, 2.0, 0.62], parts: [['e3_vision_gantry', 0, 0, 0]] },
+    e3_vision_gantry: { label: '비전 카메라 게이트', group: E3, cat: 'EGR 라인', size: [1.66, 2.0, 0.62], parts: [['e3_vision_gantry', 0, 0, 0]], pass: { axis: 'z', w: 1.45, h: 1.4 } },
     e3_ng_chute: { label: 'NG 배출 슈트', group: E3, cat: 'EGR 라인', size: [1.05, 0.97, 0.54], parts: [['e3_ng_chute', 0, 0, 0]] },
     e3_roller_conveyor_1m: { label: '롤러 컨베이어 1 m', group: E3, cat: 'EGR 라인', size: [1.0, 0.87, 0.64], parts: [['e3_roller_conveyor_1m', 0, 0, 0]], flowAxis: 'x' },
     e3_roller_conveyor_2m: { label: '롤러 컨베이어 2 m', group: E3, cat: 'EGR 라인', size: [2.01, 0.87, 0.71], parts: [['e3_roller_conveyor_2m', 0, 0, 0]], flowAxis: 'x' },

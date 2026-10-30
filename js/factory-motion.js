@@ -104,8 +104,21 @@
   // Unity building shells and model groups (js/factory-unity-groups.js) hold other equipment inside their footprint
   // backdrops neither block nor get blocked: building shells and hall parts, roofs, and small parts that sit on other things (totes, parts)
   const backdrop = o => o.type === 'roof' || o.type === 'tote' || (o.type === 'ufmodel' && !!o.params && (!!o.params.items || /building|^e3_(hall_|floor_|bay_sign|tote|egr_cooler)/.test(o.params.model || '')));
+  // a straight conveyor may run through a gate (scanner tunnel, camera gantry: catalogue entry .pass = { axis, w, h }) when it lies along
+  // the gate's pass axis, fits the opening's width with its side guards, and its top stays under the opening's height
+  function passesThrough(o, q) {
+    const c = o.type === 'conveyor' ? o : q.type === 'conveyor' ? q : null, g = c === o ? q : o, U = window.FactoryUnity;
+    if (!c || g.type !== 'ufmodel' || !U) return false;
+    const e = U.CATALOG[(U.ALIAS || {})[P(g).model] || P(g).model], pass = e && e.pass; if (!pass) return false;
+    const p = P(c), s = Math.max(0.1, P(g).scale || 1); if ((p.shape || 'straight') !== 'straight') return false;
+    const ga = (g.rot || 0) + (pass.axis === 'z' ? Math.PI / 2 : 0), ca = c.rot || 0;
+    if (Math.abs(Math.sin(ga - ca)) > 0.05) return false; // not along the pass axis
+    const nx = Math.sin(ga), nz = Math.cos(ga), off = Math.abs((c.x - g.x) * nx + (c.z - g.z) * nz); // across the opening (local X = (cos, −sin), across = (sin, cos))
+    return off + (p.width + 0.1) / 2 <= pass.w * s / 2 + 1e-6 && p.height + 0.035 <= pass.h * s;
+  }
   function clash(o, q) {
     if (backdrop(o) || backdrop(q)) return false;
+    if (passesThrough(o, q)) return false;
     const mo = MOVER[o.type], mq = MOVER[q.type];
     if (mo && mq) return o.type === 'walkway' && q.type === 'walkway' ? false : false; // movers share space (workers on walkways, AMRs crossing)
     if (mo || mq) {
