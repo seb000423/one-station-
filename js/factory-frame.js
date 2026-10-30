@@ -15,13 +15,20 @@
     clear: lin(mat(0xc3cad1, { metalness: 0.7, roughness: 0.3 })), black: lin(mat(0x2a2d31, { metalness: 0.55, roughness: 0.36 })),
     bracket: lin(mat(0x8e979f, { metalness: 0.65, roughness: 0.35 })), plate: lin(mat(0xb9c0c7, { metalness: 0.6, roughness: 0.34 })),
     guard: lin(mat(0xdfe9f0, { metalness: 0, roughness: 0.08, transparent: true, opacity: 0.28, depthWrite: false })),
+    diecast: lin(mat(0x3a3f45, { metalness: 0.55, roughness: 0.4 })), hole: lin(mat(0x15171a, { metalness: 0.3, roughness: 0.6 })),
     steel: lin(mat(0xd4d8dc, { metalness: 0.8, roughness: 0.25 })), rubber: lin(mat(0x141518, { metalness: 0, roughness: 0.85 }))
   };
   // section: sy = height of a lying profile (Y), sz = its width (Z); m = slot module (one slot per m of face)
+  // common metric series (20 / 30 / 40 / 45 mm modules, slot opening 6 / 8 / 8 / 10 mm); key = height × width of a lying profile
   const SECTIONS = {
-    '4040': { sy: 0.04, sz: 0.04, m: 0.04, label: '40×40' }, '4545': { sy: 0.045, sz: 0.045, m: 0.045, label: '45×45' },
-    '8040': { sy: 0.08, sz: 0.04, m: 0.04, label: '80×40' }, '9045': { sy: 0.09, sz: 0.045, m: 0.045, label: '90×45' }
+    '2020': { sy: 0.02, sz: 0.02, m: 0.02, label: '20×20' }, '2040': { sy: 0.04, sz: 0.02, m: 0.02, label: '20×40' },
+    '3030': { sy: 0.03, sz: 0.03, m: 0.03, label: '30×30' }, '3060': { sy: 0.06, sz: 0.03, m: 0.03, label: '30×60' },
+    '4040': { sy: 0.04, sz: 0.04, m: 0.04, label: '40×40' }, '8040': { sy: 0.08, sz: 0.04, m: 0.04, label: '40×80' }, '8080': { sy: 0.08, sz: 0.08, m: 0.04, label: '80×80' },
+    '4545': { sy: 0.045, sz: 0.045, m: 0.045, label: '45×45' }, '9045': { sy: 0.09, sz: 0.045, m: 0.045, label: '45×90' }, '9090': { sy: 0.09, sz: 0.09, m: 0.045, label: '90×90' }
   };
+  const SLOT = { 0.02: 0.006, 0.03: 0.008, 0.04: 0.008, 0.045: 0.01 };
+  // joints between profiles: kind per end (params.joint[i]); sizes follow the profile's series, a bracket's leg can be set (params.leg, m)
+  const JOINTS = { bracket: '코너 브래킷 (L)', gusset: '거셋 브래킷 (대형)', anchor: '앵커 체결 (숨김)', cube: '큐브 코너 커넥터', plate: '조인트 플레이트 (L · T)' };
   const SEC = p => SECTIONS[p.section] || SECTIONS['4545'];
   const footH = p => (p.kind === 'caster' ? 0.125 : p.h || 0.08);
 
@@ -31,7 +38,7 @@
   // extruded 1 m along +X from x = 0 (the mesh is scaled to the cut length)
   function sectionGeo(key) {
     return keyed('prof' + key, () => {
-      const S = SECTIONS[key], W = S.sz, H = S.sy, m = S.m, ch = m * 0.05, ow = m * 0.2, iw = m * 0.44, lip = m * 0.06, dep = m * 0.21, pts = [];
+      const S = SECTIONS[key], W = S.sz, H = S.sy, m = S.m, ch = m * 0.05, ow = SLOT[m] || m * 0.2, iw = Math.max(m * 0.44, ow * 1.8), lip = m * 0.06, dep = m * 0.21, pts = [];
       const side = (ax, ay, bx, by) => {
         const len = Math.hypot(bx - ax, by - ay), tx = (bx - ax) / len, ty = (by - ay) / len, nx = -ty, ny = tx, P = (s, d) => pts.push(new THREE.Vector2(ax + tx * s + nx * d, ay + ty * s + ny * d));
         const n = Math.max(1, Math.round(len / m));
@@ -52,33 +59,61 @@
   const add = (g, n, geo, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(geo, m); o.name = n; o.position.set(x, y, z); o.castShadow = o.receiveShadow = !m.transparent; g.add(o); return o; };
   // corner bracket in its own frame: X = along the profile (inward from the end), Y = out of the profile's side face,
   // Z = across; leg 1 lies on the profile's side, leg 2 on the face the end meets, with a gusset between them
-  function bracketGroup(leg, bw) {
-    const g = new THREE.Group(), tb = 0.004; g.name = 'Bracket';
+  function bracketGroup(leg, bw, tb = 0.004) {
+    const g = new THREE.Group(); g.name = 'Bracket';
     add(g, 'Bracket_Leg', boxGeo(leg, tb, bw), K.bracket, leg / 2, tb / 2, 0);
     add(g, 'Bracket_Leg', boxGeo(tb, leg, bw), K.bracket, tb / 2, leg / 2, 0);
-    const gus = keyed(`gus${leg.toFixed(4)}`, () => { const s = new THREE.Shape([new THREE.Vector2(tb, tb), new THREE.Vector2(leg * 0.9, tb), new THREE.Vector2(tb, leg * 0.9)]); const e = new THREE.ExtrudeGeometry(s, { depth: tb, bevelEnabled: false }); e.translate(0, 0, -tb / 2); return e; });
+    const gus = keyed(`gus${leg.toFixed(4)},${tb}`, () => { const s = new THREE.Shape([new THREE.Vector2(tb, tb), new THREE.Vector2(leg * 0.9, tb), new THREE.Vector2(tb, leg * 0.9)]); const e = new THREE.ExtrudeGeometry(s, { depth: tb, bevelEnabled: false }); e.translate(0, 0, -tb / 2); return e; });
     add(g, 'Bracket_Gusset', gus, K.bracket);
     return g;
   }
+
+  // die-cast corner block: a solid chamfered wedge in the corner (same frame as bracketGroup)
+  function cubeGroup(leg, bw) {
+    const g = new THREE.Group(); g.name = 'Corner_Cube';
+    const geo = keyed(`cube${leg.toFixed(4)},${bw.toFixed(4)}`, () => { const s = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(leg, 0), new THREE.Vector2(leg, leg * 0.3), new THREE.Vector2(leg * 0.3, leg), new THREE.Vector2(0, leg)]); const e = new THREE.ExtrudeGeometry(s, { depth: bw, bevelEnabled: false }); e.translate(0, 0, -bw / 2); return e; });
+    add(g, 'Corner_Cube', geo, K.diecast); return g;
+  }
+  // joint plate outline in the (along the profile, along the other profile) plane: the strip over the profile end and the strip over the face
+  const jointPlateGeo = (dep, leg, hs, r0, r1) => keyed(`jp${[dep, leg, hs, r0, r1].map(v => v.toFixed(4)).join(',')}`, () => {
+    const P2 = (x, y) => new THREE.Vector2(x, y), sh = new THREE.Shape([P2(-dep, -r0), P2(0, -r0), P2(0, -hs), P2(leg, -hs), P2(leg, hs), P2(0, hs), P2(0, r1), P2(-dep, r1)]);
+    return new THREE.ExtrudeGeometry(sh, { depth: 0.005, bevelEnabled: false });
+  });
+  const jointOf = (p, i) => p['joint' + i] || 'bracket';
+  const legOf = (p, kind) => (p.leg > 0 && (kind === 'bracket' || kind === 'gusset' || kind === 'cube') ? p.leg : SEC(p).m * (kind === 'gusset' ? 2 : kind === 'plate' ? 1.5 : kind === 'cube' ? 0.8 : 0.95));
 
   // ---------------------------------------------------------------- part types
   // profile: origin = the start end's section centre; axis 'x' lies along local X (yaw = rot), 'y' stands up from the origin
   TYPES.profile = {
     label: '알루미늄 프로파일', group: 'frame',
-    defaults: () => ({ section: '4545', length: 0.6, axis: 'y', finish: 'clear', ends: [null, null] }),
+    defaults: () => ({ section: '4545', length: 0.6, axis: 'y', finish: 'clear', ends: [null, null], joint0: 'bracket', joint1: 'bracket', leg: 0 }),
     build: (g, p) => {
       const S = SEC(p), L = Math.max(0.01, p.length), up = p.axis === 'y';
       const m = add(g, 'Profile_' + (p.section || '4545'), sectionGeo(p.section in SECTIONS ? p.section : '4545'), p.finish === 'black' ? K.black : K.clear);
       m.scale.x = L; if (up) m.rotation.z = Math.PI / 2; // standing: X → Y; the section's height then lies along X
       const A = up ? new V3(0, 1, 0) : new V3(1, 0, 0), half = up ? new V3(S.sy / 2, 0, S.sz / 2) : new V3(0, S.sy / 2, S.sz / 2);
+      const hx = v => Math.abs(v.x) * half.x + Math.abs(v.y) * half.y + Math.abs(v.z) * half.z; // half width of the section along v
+      const put = (o, a, s, w, at) => { o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, s, w)); o.position.copy(at); g.add(o); };
       (p.ends || []).forEach((e, i) => {
         if (!e || !e.t) return;
-        const t = new V3(...e.t).normalize(); if (Math.abs(t.dot(A)) > 0.1) return; // colinear joint: no bracket
-        const a = A.clone().multiplyScalar(i ? -1 : 1), end = i ? A.clone().multiplyScalar(L) : new V3();
+        const t = new V3(...e.t).normalize(); if (Math.abs(t.dot(A)) > 0.1) return; // colinear joint: nothing to show
+        const kind = jointOf(p, i), a = A.clone().multiplyScalar(i ? -1 : 1), end = i ? A.clone().multiplyScalar(L) : new V3(), leg = legOf(p, kind);
+        if (kind === 'plate') { // a flat plate on both outer faces, over the end and the face it meets (T mid-span, L at the other profile's end)
+          const room = e.room || [S.m * 2, S.m * 2], dep = e.depth || S.m;
+          for (const sg of [1, -1]) {
+            const tt = t.clone().multiplyScalar(sg), w = new V3().crossVectors(a, tt), hs = hx(t), r0 = Math.min(leg + hs, sg > 0 ? room[0] : room[1]), r1 = Math.min(leg + hs, sg > 0 ? room[1] : room[0]);
+            put(new THREE.Mesh(jointPlateGeo(dep, leg, hs, r0, r1), K.bracket), a, tt, w, end.clone().addScaledVector(w, hx(w)));
+          }
+          return;
+        }
+        if (kind === 'anchor') { // hidden anchor fastener: only its access hole shows on the side
+          const s = (e.sides || [1])[0] > 0 ? t : t.clone().negate(), h = add(g, 'Anchor_Hole', cylGeo(S.m * 0.13, S.m * 0.13, 0.001, 16), K.hole);
+          h.quaternion.setFromUnitVectors(new V3(0, 1, 0), s); h.position.copy(end).addScaledVector(a, S.m / 2).addScaledVector(s, hx(s) + 0.0006); return;
+        }
         for (const sgn of e.sides || [1, -1]) {
-          const s = t.clone().multiplyScalar(sgn), w = new V3().crossVectors(a, s), hs = Math.abs(s.x) * half.x + Math.abs(s.y) * half.y + Math.abs(s.z) * half.z;
-          const bw = 2 * (Math.abs(w.x) * half.x + Math.abs(w.y) * half.y + Math.abs(w.z) * half.z) * 0.8, b = bracketGroup(S.m * 0.95, bw);
-          b.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, s, w)); b.position.copy(end).addScaledVector(s, hs); g.add(b);
+          const s = t.clone().multiplyScalar(sgn), w = new V3().crossVectors(a, s), bw = 2 * hx(w) * 0.8;
+          const b = kind === 'cube' ? cubeGroup(leg, bw) : bracketGroup(leg, bw, kind === 'gusset' ? 0.006 : 0.004);
+          put(b, a, s, w, end.clone().addScaledVector(s, hx(s)));
         }
       });
     },
@@ -133,7 +168,7 @@
   function explode(p) {
     const S = SECTIONS[p.section] || SECTIONS['4545'], fh = p.feet === 'none' ? 0 : p.feet === 'caster' ? 0.125 : 0.08, pt = p.top ? 0.01 : 0;
     const W = p.w, D = p.d, postL = Math.max(0.1, p.h - fh - pt), sx = S.sy, sz = S.sz, out = [];
-    const prof = (x, y, z, rot, length, axis) => out.push({ type: 'profile', x, y, z, rot, params: { section: p.section, length: +length.toFixed(4), axis, finish: p.finish || 'clear', ends: [null, null] } });
+    const prof = (x, y, z, rot, length, axis) => out.push({ type: 'profile', x, y, z, rot, params: { section: p.section, length: +length.toFixed(4), axis, finish: p.finish || 'clear', ends: [null, null], joint0: p.joint || 'bracket', joint1: p.joint || 'bracket' } });
     for (const [i, j] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
       const x = i * (W / 2 - sx / 2), z = j * (D / 2 - sz / 2);
       prof(x, fh, z, 0, postL, 'y');
@@ -149,9 +184,16 @@
   }
   TYPES.frameset = {
     label: '프레임 세트', group: 'frame',
-    defaults: () => ({ w: 1.2, d: 0.8, h: 0.9, section: '4545', feet: 'level', top: true, lower: true, finish: 'clear' }),
+    defaults: () => ({ w: 1.2, d: 0.8, h: 0.9, section: '4545', feet: 'level', top: true, lower: true, finish: 'clear', joint: 'bracket' }),
     build: (g, p) => { for (const q of explode(p)) { const c = FE.build(q, null); g.add(c); } },
     footprint: p => [p.w, p.d]
+  };
+
+  TYPES.mine = {
+    label: '내 설비', group: 'frame',
+    defaults: () => ({ parts: [] }),
+    build: (g, p) => { for (const q of p.parts || []) g.add(FE.build(q, null)); },
+    footprint: () => [0.5, 0.5]
   };
 
   // ---------------------------------------------------------------- boxes, snapping, joints, assemblies
@@ -164,7 +206,7 @@
     let h, c;
     if (o.type === 'profile') { const S = SEC(p), L = p.length; if (p.axis === 'y') { h = [S.sy / 2, L / 2, S.sz / 2]; c = O.clone().addScaledVector(Y, L / 2); } else { h = [L / 2, S.sy / 2, S.sz / 2]; c = O.clone().addScaledVector(X, L / 2); } }
     else if (o.type === 'plate') { if (p.orient === 'v') { h = [p.w / 2, p.d / 2, p.t / 2]; c = O.clone().addScaledVector(Y, p.d / 2).addScaledVector(Z, p.t / 2); } else { h = [p.w / 2, p.t / 2, p.d / 2]; c = O.clone().addScaledVector(Y, p.t / 2); } }
-    else { const fh = footH(p); h = [0.03, fh / 2, 0.03]; c = O.clone().addScaledVector(Y, fh / 2); }
+    else { const fh = footH(p); h = [0.0225, fh / 2, 0.0225]; /* the mounting plate; the pad below may stick out a little */ c = O.clone().addScaledVector(Y, fh / 2); }
     return { o, c, ax, h };
   }
   const extent = (B, e) => B.ax.reduce((s, a, i) => s + Math.abs(a.dot(e)) * B.h[i], 0); // half size of box B along unit vector e
@@ -239,7 +281,8 @@
               const W = new V3().crossVectors(a, sv), Bk = { c, ax: [a, sv, W], h: [leg / 2 - 0.001, leg / 2 - 0.001, 0.01] };
               return !doc.objects.some(x => isFrame(x) && x.id !== o.id && x.id !== q.id && (() => { const X2 = boxOf(x); return near(Bk, X2, 0) && seps(Bk, X2).every(v => v < 0) && seps(X2, Bk).every(v => v < 0); })());
             });
-            ends[i] = { t: [r(bd.dot(X)), r(bd.dot(Y)), r(bd.dot(Z))], to: q.id }; if (sides.length < 2) ends[i].sides = sides; break;
+            const cb = B.c.dot(bd) - fc.dot(bd), hb = extent(B, bd);
+            ends[i] = { t: [r(bd.dot(X)), r(bd.dot(Y)), r(bd.dot(Z))], to: q.id, depth: r(2 * B.h[j]), room: [r(hb - cb), r(hb + cb)] }; if (sides.length < 2) ends[i].sides = sides; break;
           }
         }
       });
@@ -289,6 +332,28 @@
     const cx = (lo[0] + hi[0]) / 2, cz = (lo[1] + hi[1]) / 2, r = v => Math.round(v * 1e4) / 1e4;
     return { x: r(X.x * cx + Z.x * cz), z: r(X.z * cx + Z.z * cz), w: r(hi[0] - lo[0]), d: r(hi[1] - lo[1]) };
   }
+  // stretch an assembly along unit vector e by delta at plane (e·x = plane): parts beyond the plane move, parts across it grow.
+  // Profiles grow along their axis, plates along their matching side; returns the changed copies (null when a crossing part cannot grow that way)
+  function stretch(doc, ids, e, plane, delta) {
+    const out = [], r = v => Math.round(v * 1e4) / 1e4;
+    for (const id of ids) {
+      const o = doc.objects.find(x => x.id === id); if (!o || !isFrame(o)) continue;
+      const B = boxOf(o), c = B.c.dot(e), h = extent(B, e), q = JSON.parse(JSON.stringify(o)), p = Object.assign(P(o), q.params);
+      const move = k => { q.x = r(q.x + e.x * k); q.y = r((q.y || 0) + e.y * k); q.z = r(q.z + e.z * k); };
+      if (c - h >= plane - 1e-6) move(delta);
+      else if (c + h > plane + 1e-6) {
+        const k = B.ax.findIndex(a => Math.abs(Math.abs(a.dot(e)) - 1) < 1e-3); if (k < 0) return null;
+        const along = B.ax[k].dot(e) > 0 ? 1 : -1;
+        if (o.type === 'profile') { if ((p.axis === 'y' ? 1 : 0) !== k) return null; p.length = r(p.length + delta); if (along < 0) move(delta); }
+        else if (o.type === 'plate') { const key = k === 0 ? 'w' : p.orient === 'v' ? (k === 1 ? 'd' : null) : (k === 2 ? 'd' : null); if (!key) return null; p[key] = r(p[key] + delta); if (!(p.orient === 'v' && k === 1)) move(delta / 2); }
+        else return null;
+        if ((o.type === 'profile' ? p.length : Math.min(p.w, p.d)) < 0.02) return null;
+        q.params = p;
+      } else continue;
+      out.push(q);
+    }
+    return out;
+  }
   // cut list: profiles by section and length, plates by kind and size, feet by kind
   function bom(doc, ids) {
     const rows = new Map(), put = (k, label) => { const r = rows.get(k) || { label, n: 0 }; r.n++; rows.set(k, r); };
@@ -298,10 +363,16 @@
       else if (o.type === 'plate') put('t' + p.kind + p.w + p.d + p.t, `${{ alu: '알루미늄 판', guard: '투명 가드', mesh: '메시 가드' }[p.kind] || '판'} ${Math.round(p.w * 1000)}×${Math.round(p.d * 1000)}×${Math.round(p.t * 1000)} mm`);
       else put('f' + p.kind, p.kind === 'caster' ? '캐스터 (잠금)' : '레벨링 발');
     }
-    const j = joints(doc); let br = 0; for (const [id, ends] of j) if (!ids || ids.includes(id)) br += ends.filter(e => e && e.t).length * 2;
-    if (br) rows.set('bracket', { label: '코너 브래킷 (자동)', n: br });
+    for (const o of doc.objects) {
+      if (o.type !== 'profile' || (ids && !ids.includes(o.id))) continue; const p = P(o), A = p.axis === 'y' ? [0, 1, 0] : [1, 0, 0];
+      (p.ends || []).forEach((e, i) => {
+        if (!e || !e.t || Math.abs(e.t[0] * A[0] + e.t[1] * A[1] + e.t[2] * A[2]) > 0.1) return;
+        const kind = jointOf(p, i), n = kind === 'anchor' ? 1 : kind === 'plate' ? 2 : (e.sides || [1, -1]).length, series = Math.round(SEC(p).m * 1000);
+        const k = 'j' + kind + series + legOf(p, kind), r = rows.get(k) || { label: `${JOINTS[kind]} · ${series} 계열${['bracket', 'gusset', 'cube'].includes(kind) ? ` · 다리 ${Math.round(legOf(p, kind) * 1000)} mm` : ''}`, n: 0 }; r.n += n; rows.set(k, r);
+      });
+    }
     return [...rows.values()];
   }
 
-  window.FactoryFrame = { SECTIONS, FRAME, isFrame, boxOf, snap, overlaps, components, joints, poseOnHit, fitPlate, explode, bom, footH, STEP };
+  window.FactoryFrame = { SECTIONS, JOINTS, FRAME, isFrame, boxOf, extent, axesOf, touching, stretch, snap, overlaps, components, joints, poseOnHit, fitPlate, explode, bom, footH, STEP };
 })();

@@ -35,7 +35,7 @@
   // conveyor, rack, tote, fence and roof are back as real-scale parametric parts (js/factory-kit.js)
   const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi', 'profile', 'plate', 'foot'];
   // machine-building parts (js/factory-frame.js): profiles, plates, feet; a 프레임 세트 is placed as those parts
-  Object.assign(TYPE_LABEL, { profile: '알루미늄 프로파일', plate: '판 · 가드', foot: '발 · 캐스터', frameset: '프레임 세트' });
+  Object.assign(TYPE_LABEL, { profile: '알루미늄 프로파일', plate: '판 · 가드', foot: '발 · 캐스터', frameset: '프레임 세트', mine: '내 설비' });
   const FR = () => window.FactoryFrame, isFrame = o => !!(window.FactoryFrame && FactoryFrame.isFrame(o));
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'bench', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
@@ -94,7 +94,9 @@
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
     walkroute: [],
-    profile: [['section', '단면 (mm)', 'select', [['4040', '40×40'], ['4545', '45×45'], ['8040', '80×40'], ['9045', '90×45']]], ['length', '길이 (m, 5 mm 단위)', 0.005, 0.02, 12], ['axis', '방향', 'select', [['y', '세로 (기둥)'], ['x', '가로 (보)']]], ['finish', '표면', 'select', [['clear', '은색 아노다이징'], ['black', '블랙 아노다이징']]]],
+    profile: [['section', '단면 (mm)', 'select', [['2020', '20×20'], ['2040', '20×40'], ['3030', '30×30'], ['3060', '30×60'], ['4040', '40×40'], ['8040', '40×80'], ['8080', '80×80'], ['4545', '45×45'], ['9045', '45×90'], ['9090', '90×90']]], ['length', '길이 (m, 5 mm 단위)', 0.005, 0.02, 12], ['axis', '방향', 'select', [['y', '세로 (기둥)'], ['x', '가로 (보)']]], ['finish', '표면', 'select', [['clear', '은색 아노다이징'], ['black', '블랙 아노다이징']]],
+      ['joint0', '접합품 · 시작 끝', 'select', [['bracket', '코너 브래킷 (L)'], ['gusset', '거셋 브래킷 (대형)'], ['anchor', '앵커 체결 (숨김)'], ['cube', '큐브 코너 커넥터'], ['plate', '조인트 플레이트 (L · T)']], null, p => !!(p.ends && p.ends[0])], ['joint1', '접합품 · 끝 끝', 'select', [['bracket', '코너 브래킷 (L)'], ['gusset', '거셋 브래킷 (대형)'], ['anchor', '앵커 체결 (숨김)'], ['cube', '큐브 코너 커넥터'], ['plate', '조인트 플레이트 (L · T)']], null, p => !!(p.ends && p.ends[1])],
+      ['leg', '브래킷 다리 (m, 0 = 계열 기본)', 0.005, 0, 0.3, p => (p.ends || []).some(Boolean)]],
     plate: [['kind', '종류', 'select', [['alu', '알루미늄 판'], ['guard', '투명 가드 (PC)'], ['mesh', '메시 가드']]], ['orient', '방향', 'select', [['h', '눕힘 (상판 · 선반)'], ['v', '세움 (가드 · 패널)']]], ['w', '가로 (m)', 0.005, 0.05, 6], ['d', '세로 · 높이 (m)', 0.005, 0.05, 6], ['t', '두께 (m)', 0.001, 0.002, 0.05]],
     foot: [['kind', '종류', 'select', [['level', '레벨링 발'], ['caster', '캐스터 (잠금, 125 mm)']]], ['h', '높이 (m)', 0.005, 0.05, 0.2, p => p.kind !== 'caster']]
   };
@@ -337,6 +339,55 @@
   const partSel = () => !asm && isFrame(selectedId && byId(selectedId));
   function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? (partSel() ? FR().STEP : GRID) : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(partSel() ? 90 : 15) : null); }
   function setMode(m) { if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate || partSel(); if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); } }
+  /* ---------- profile length by dragging an end handle (5 mm steps); small parts held only by that end go along ---------- */
+  let resizing = null;
+  const profAxis = o => FR().axesOf(o.rot)[(o.params || {}).axis === 'y' ? 1 : 0];
+  function addHandles() {
+    const o = !asm && selectedId && byId(selectedId), g = o && views.get(o.id); if (!o || o.type !== 'profile' || !g) return;
+    const L = (o.params || {}).length || 0.6, up = (o.params || {}).axis === 'y', A = up ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    g.children.filter(c => c.name === 'Resize_Pad').forEach(c => g.remove(c));
+    [0, 1].forEach(i => {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.02, 20, 14), new THREE.MeshStandardMaterial({ color: 0xeec539, emissive: 0xeec539, emissiveIntensity: 0.6, depthTest: false, transparent: true, opacity: 0.95 }));
+      m.name = 'Resize_Pad'; m.renderOrder = 12; m.userData.end = i; m.castShadow = false; m.position.copy(A).multiplyScalar(i ? L + 0.04 : -0.04); g.add(m);
+    });
+  }
+  const rayAt = e => { const s = S(), r = s.renderer.domElement.getBoundingClientRect(), rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), s.camera); return rc; };
+  // where the pointer's ray passes closest to the line P0 + s·d
+  const alongLine = (rc, P0, d) => { const R = rc.ray, w0 = P0.clone().sub(R.origin), b = d.dot(R.direction), den = 1 - b * b; return den < 1e-4 ? null : (b * R.direction.dot(w0) - d.dot(w0)) / den; };
+  function resizeDown(e) {
+    if (e.button !== 0 || placing || drawing || busy()) return;
+    const o = !asm && selectedId && byId(selectedId), g = o && o.type === 'profile' && views.get(o.id); if (!g) return;
+    const pads = g.children.filter(c => c.name === 'Resize_Pad'), h = rayAt(e).intersectObjects(pads, false)[0]; if (!h) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    const end = h.object.userData.end, d = profAxis(o), P0 = new THREE.Vector3(o.x, o.y || 0, o.z), s0 = alongLine(rayAt(e), P0, d); if (s0 === null) return;
+    const L = o.params.length, out = d.clone().multiplyScalar(end ? 1 : -1), endPt = P0.clone().addScaledVector(d, end ? L : 0), A = FR().boxOf(o);
+    const followers = doc.objects.filter(q => isFrame(q) && q.id !== o.id && FR().touching(A, FR().boxOf(q)) && FR().boxOf(q).c.clone().sub(endPt).dot(out) > 0
+      && !doc.objects.some(r => isFrame(r) && r.id !== o.id && r.id !== q.id && FR().touching(FR().boxOf(q), FR().boxOf(r))));
+    pushUndo(); if (tc) tc.detach(); if (helper) { S().scene.remove(helper); helper = null; } S().controls.enabled = false;
+    resizing = { o, end, d, P0, s0, L, orig: clone(o), followers: followers.map(q => [q, clone(q)]), moved: 0 };
+    S().renderer.domElement.setPointerCapture(e.pointerId);
+  }
+  function resizeMove(e) {
+    if (!resizing) return; e.stopImmediatePropagation();
+    const R = resizing, s1 = alongLine(rayAt(e), R.P0, R.d); if (s1 === null) return;
+    const STEP = snap ? FR().STEP : 0.001, dv = Math.round((s1 - R.s0) / STEP) * STEP, len = r2k(Math.max(0.02, R.end ? R.L + dv : R.L - dv)), shift = R.end ? len - R.L : R.L - len; // the moved end's travel along its outward direction
+    const o = R.o; o.params = Object.assign({}, o.params, { length: len });
+    if (!R.end) { o.x = r2k(R.orig.x - R.d.x * shift); o.y = r2k((R.orig.y || 0) - R.d.y * shift); o.z = r2k(R.orig.z - R.d.z * shift); }
+    const sgn = R.end ? 1 : -1; for (const [q, q0] of R.followers) { q.x = r2k(q0.x + R.d.x * shift * sgn); q.y = r2k((q0.y || 0) + R.d.y * shift * sgn); q.z = r2k(q0.z + R.d.z * shift * sgn); buildView(q); placeObjectGroup(q); }
+    buildView(o); placeObjectGroup(o); selectedId = o.id; addHandles(); R.moved = shift;
+    note(`${o.name}: 길이 ${Math.round(len * 1000)} mm${R.followers.length ? ` · 끝에 붙은 ${R.followers.map(([q]) => q.name).join(', ')} 함께 이동` : ''}`);
+  }
+  function resizeUp(e) {
+    if (!resizing) return; e.stopImmediatePropagation(); const R = resizing; resizing = null; S().controls.enabled = true;
+    try { S().renderer.domElement.releasePointerCapture(e.pointerId); } catch (x) {}
+    const skip = new Set(R.followers.map(([q]) => q.id).concat(R.o.id)), hit = [R.o].concat(R.followers.map(([q]) => q)).flatMap(q => FR().overlaps(doc, q, skip));
+    if (hit.length || FM().outside(doc, R.o)) {
+      undoStack.pop(); Object.assign(R.o, R.orig); R.followers.forEach(([q, q0]) => { Object.assign(q, q0); buildView(q); placeObjectGroup(q); }); buildView(R.o); placeObjectGroup(R.o); select(R.o.id);
+      return note(`원래 길이로 되돌렸습니다: ${[...new Set(hit)].join(', ') || '공장 밖'}와(과) 겹칩니다`, true);
+    }
+    if (!R.moved) undoStack.pop();
+    frameRefresh(); store(); select(R.o.id);
+  }
   function releaseAsm() {
     if (!asm) return; const pv = asm.pivot; asm = null;
     if (tc && tc.object === pv) tc.detach();
@@ -362,6 +413,7 @@
       } else tc.attach(g);
       setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate'); setSnap(snap);
       helper = selHelper(g); s.scene.add(helper);
+      addHandles();
     }
     renderTree(); renderProps();
     const tsel = $('#fbTarget'); if (tsel) { tsel.value = selectedId || ''; viewButtons(); }
@@ -436,7 +488,7 @@
     if (!t || !FR() || !FR().FRAME.includes(t)) return floorPoint(e);
     const s = S(), r = s.renderer.domElement.getBoundingClientRect(), rc = new THREE.Raycaster();
     rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), s.camera);
-    const meshes = []; for (const [id, g] of views) if (isFrame(byId(id))) g.traverse(m => { if (m.isMesh && m.visible) meshes.push(m); });
+    const meshes = []; for (const [id, g] of views) if (isFrame(byId(id))) g.traverse(m => { if (m.isMesh && m.visible && m.name !== 'Resize_Pad') meshes.push(m); });
     const h = rc.intersectObjects(meshes, false)[0];
     if (h && h.face) {
       let n = h.object; while (n && !(n.userData && n.userData.objId)) n = n.parent;
@@ -528,6 +580,7 @@
     const { type, model, variant } = splitPlace(place);
     const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
     if (type === 'frameset') { Object.assign(c.params, framesetParams); return c; }
+    if (type === 'mine') { const m = mineList()[+model]; c.params = { parts: m ? clone(m.parts) : [] }; c.name = m ? m.name : '내 설비'; return c; }
     if (FR() && FR().FRAME.includes(type)) { // profile:4545:y, plate:guard:v, foot:caster
       if (type === 'profile') Object.assign(c.params, model ? { section: model } : {}, variant ? { axis: variant } : {});
       if (type === 'plate') { if (model) c.params.kind = model; if (variant) c.params.orient = variant; if (variant === 'v') Object.assign(c.params, { w: 0.6, d: 0.8, t: model === 'alu' ? 0.004 : 0.004 }); }
@@ -558,7 +611,7 @@
   }
   function placeAt(place, p) {
     const cand = candidate(place, p), type = cand.type, why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
-    if (type === 'frameset') return placeFrameset(cand);
+    if (type === 'frameset' || type === 'mine') return placeFrameset(cand);
     pushUndo();
     if (isFrame(cand)) {
       if (cand.lift > 0 && cand.liftOf) for (const id of FR().components(doc, cand.liftOf)) { const q = byId(id); q.y = r2k((q.y || 0) + cand.lift); placeObjectGroup(q); }
@@ -580,20 +633,20 @@
   function frameRefresh() {
     if (!FR()) return; if (asm) select(null); const J = FR().joints(doc);
     for (const [id, ends] of J) {
-      const o = byId(id), want = ends.map(e => (e ? Object.assign({ t: e.t }, e.sides ? { sides: e.sides } : {}) : null)), had = JSON.stringify(((o.params || {}).ends) || [null, null]);
+      const o = byId(id), want = ends.map(e => (e ? Object.assign({ t: e.t, depth: e.depth, room: e.room }, e.sides ? { sides: e.sides } : {}) : null)), had = JSON.stringify(((o.params || {}).ends) || [null, null]);
       if (had !== JSON.stringify(want)) { o.params = Object.assign({}, o.params, { ends: want }); buildView(o); placeObjectGroup(o); }
     }
   }
   // a 프레임 세트 tile asks for the size, then is placed (0.5 m grid) as separate parts that already join
   function framesetParts(c) {
     const cs = Math.cos(c.rot || 0), sn = Math.sin(c.rot || 0);
-    return FR().explode(c.params).map((q, i) => Object.assign(q, { id: '__fs' + i, name: TYPE_LABEL[q.type], x: r2k(c.x + q.x * cs + q.z * sn), z: r2k(c.z - q.x * sn + q.z * cs), rot: (q.rot || 0) + (c.rot || 0) }));
+    return (c.type === 'mine' ? clone(c.params.parts) : FR().explode(c.params)).map((q, i) => Object.assign(q, { id: '__fs' + i, name: TYPE_LABEL[q.type], x: r2k(c.x + q.x * cs + q.z * sn), z: r2k(c.z - q.x * sn + q.z * cs), rot: (q.rot || 0) + (c.rot || 0) }));
   }
   function placeFrameset(c) {
     pushUndo(); const ids = [];
     for (const q of framesetParts(c)) { const o = Object.assign(q, { id: newId(), name: nextName(q.type) }); doc.objects.push(o); buildView(o); ids.push(o.id); }
     frameRefresh(); select(ids[0], null, true); store();
-    note(`프레임 세트를 놓았습니다 · 부품 ${ids.length}개 (조립품 전체 선택됨 — 부품 하나를 고치려면 그 부품을 클릭)`);
+    note(`${c.type === 'mine' ? c.name : '프레임 세트'}을(를) 놓았습니다 · 부품 ${ids.length}개 (조립품 전체 선택됨 — 부품 하나를 고치려면 그 부품을 클릭)`);
   }
   function framesetDialog(go) {
     const p = Object.assign(window.FactoryElements.defaults('frameset'), framesetParams), wrap = document.createElement('div'); wrap.className = 'fbModal';
@@ -601,7 +654,7 @@
     const sel = (k, l, opts) => `<label>${l}<select data-f="${k}">${opts.map(([v, t]) => `<option value="${v}" ${String(p[k]) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
     wrap.innerHTML = `<div class="card fsCard"><h3>프레임 세트</h3><p class="hint">바깥 치수로 기둥 4개, 위·아래 보, 발, 상판을 만듭니다. 놓은 뒤에는 부품마다 길이를 바꾸거나 떼어낼 수 있습니다.</p>
       <div class="fsGrid">${num('w', '가로 (m)', 0.005, 0.2, 6)}${num('d', '세로 (m)', 0.005, 0.2, 6)}${num('h', '높이 (m, 상판 윗면)', 0.005, 0.2, 3)}
-      ${sel('section', '프로파일 단면', [['4040', '40×40'], ['4545', '45×45'], ['8040', '80×40'], ['9045', '90×45']])}${sel('feet', '바닥', [['level', '레벨링 발'], ['caster', '캐스터'], ['none', '없음 (바닥 고정)']])}${sel('finish', '표면', [['clear', '은색'], ['black', '블랙']])}</div>
+      ${sel('section', '프로파일 단면', [['2020', '20×20'], ['2040', '20×40'], ['3030', '30×30'], ['3060', '30×60'], ['4040', '40×40'], ['8040', '40×80'], ['8080', '80×80'], ['4545', '45×45'], ['9045', '45×90'], ['9090', '90×90']])}${sel('joint', '접합품', [['bracket', '코너 브래킷 (L)'], ['gusset', '거셋 브래킷 (대형)'], ['anchor', '앵커 체결 (숨김)'], ['cube', '큐브 코너 커넥터'], ['plate', '조인트 플레이트 (L · T)']])}${sel('feet', '바닥', [['level', '레벨링 발'], ['caster', '캐스터'], ['none', '없음 (바닥 고정)']])}${sel('finish', '표면', [['clear', '은색'], ['black', '블랙']])}</div>
       <label class="chk"><input type="checkbox" data-f="top" ${p.top ? 'checked' : ''}> 알루미늄 상판</label><label class="chk"><input type="checkbox" data-f="lower" ${p.lower ? 'checked' : ''}> 아래 보 (선반 높이)</label>
       <div class="acts"><button type="button" data-c="cancel">취소</button><button type="button" data-c="ok" class="primary">바닥에 놓기</button></div></div>`;
     document.body.appendChild(wrap);
@@ -695,7 +748,7 @@
   }
   // where o may not stand: overlapping another object's size / work area, or outside the factory
   function blockedBy(o) {
-    if (o.type === 'frameset') { const parts = framesetParts(o), tmp = { factory: doc.factory, objects: doc.objects.concat(parts) }; for (const q of parts) { const hit = FR().overlaps(tmp, q, new Set(parts.map(x => x.id))); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; } return ''; }
+    if (o.type === 'frameset' || o.type === 'mine') { const parts = framesetParts(o), tmp = { factory: doc.factory, objects: doc.objects.concat(parts) }; for (const q of parts) { const hit = FR().overlaps(tmp, q, new Set(parts.map(x => x.id))); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; } return ''; }
     if (isFrame(o)) { if (FM().outside(doc, o)) return '공장 밖으로 나갑니다'; const hit = FR().overlaps(doc, o, asm ? new Set(asm.ids) : null); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : ''; }
     if (FM().outside(doc, o) && !FM().backdrop(o)) return '공장 밖으로 나갑니다'; // a building shell grows the floor instead (fitFloor)
     const hit = FM().collisions(doc, o); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : '';
@@ -793,7 +846,8 @@
     profile: '<rect x="8" y="2" width="8" height="20" rx="1"/><path d="M11 2v3M13 2v3M8 11h3M13 11h3M11 19v3M13 19v3"/>',
     plate: '<path d="M3 15 9 9h12l-6 6z"/><path d="M3 15v2l12 0 6-6V9"/>',
     foot: '<path d="M12 3v12M9 7h6M6 21h12l-2-4H8z"/>',
-    frameset: '<path d="M5 21V8M19 21V8M5 8h14M5 17h14M3 8l4-4h14l-2 4M19 4v0"/><path d="M21 4v13l-2 4"/>'
+    frameset: '<path d="M5 21V8M19 21V8M5 8h14M5 17h14M3 8l4-4h14l-2 4M19 4v0"/><path d="M21 4v13l-2 4"/>',
+    mine: '<path d="M5 21V9M19 21V9M5 9h14M5 16h14"/><path d="m12 2 1.5 3 3.3.5-2.4 2.3.6 3.2-3-1.6-3 1.6.6-3.2L7.2 5.5l3.3-.5z"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   // palette: four tabs (건물 / 설비 / 동선·구역 / 이동체); each opens on a grid of category icons, a category opens its part
@@ -817,6 +871,7 @@
     amr: ICON.amr, agv: '<rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V5h12v6M6 8h12"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/>',
     forklift: '<path d="M4 17V8h6l3 5v4M17 4v14M17 18h4M10 8V5"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/>', worker: ICON.worker, cart: '<path d="M4 6h3l2 9h10l2-7H8"/><circle cx="10" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/>'
   };
+  CI.mine = ICON.mine;
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
@@ -849,14 +904,19 @@
   };
   // 프레임: machine-building parts that join (js/factory-frame.js); a tile is type:preset:variant
   PAL.frame = [['frameset', '프레임 세트', [['frameset', '프레임 세트 (가로 · 세로 · 높이)', 'type']]],
-    ['profile', '알루미늄 프로파일', [['profile:4545:y', '45×45 기둥 (세로)', 'type'], ['profile:4545:x', '45×45 보 (가로)', 'type'], ['profile:4040:y', '40×40 기둥 (세로)', 'type'], ['profile:4040:x', '40×40 보 (가로)', 'type'], ['profile:8040:x', '80×40 보 (가로)', 'type'], ['profile:9045:y', '90×45 기둥 (세로)', 'type'], ['profile:9045:x', '90×45 보 (가로)', 'type']]],
+    ['profile', '알루미늄 프로파일', [['profile:4545:y', '45×45 기둥 (세로)', 'type'], ['profile:4545:x', '45×45 보 (가로)', 'type'], ['profile:4040:y', '40×40 기둥 (세로)', 'type'], ['profile:4040:x', '40×40 보 (가로)', 'type'], ['profile:8040:x', '40×80 보 (가로)', 'type'], ['profile:8080:y', '80×80 기둥 (세로)', 'type'], ['profile:9045:x', '45×90 보 (가로)', 'type'], ['profile:9090:y', '90×90 기둥 (세로)', 'type'], ['profile:3030:y', '30×30 기둥 (세로)', 'type'], ['profile:3030:x', '30×30 보 (가로)', 'type'], ['profile:2020:x', '20×20 보 (가로)', 'type']]],
     ['plate', '판 · 가드', [['plate:alu:h', '알루미늄 상판', 'type'], ['plate:guard:v', '투명 가드 패널', 'type'], ['plate:mesh:v', '메시 가드 패널', 'type'], ['plate:alu:v', '알루미늄 측판', 'type']]],
-    ['foot', '발 · 캐스터', [['foot:level', '레벨링 발', 'type'], ['foot:caster', '캐스터 (잠금)', 'type']]]];
+    ['foot', '발 · 캐스터', [['foot:level', '레벨링 발', 'type'], ['foot:caster', '캐스터 (잠금)', 'type']]], ['mine', '내 설비', []]];
+  // 내 설비: assemblies saved from the assembly card, in this browser (parts relative to the assembly's floor centre)
+  const MINE = 'one-station-frame-mine';
+  const mineList = () => { try { return JSON.parse(localStorage.getItem(MINE) || '[]'); } catch (e) { return []; } };
+  const mineSave = L => { try { localStorage.setItem(MINE, JSON.stringify(L)); return true; } catch (e) { return false; } };
   const palCat = {}; // tab → open category (null = the icon grid)
   function paletteTiles(tab) {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
     const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group));
+    if (tab === 'frame') PAL.frame.find(c => c[0] === 'mine')[2] = mineList().map((m, i) => ['mine:' + i, `${m.name} (부품 ${m.parts.length}개)`, 'type']);
     const moverThumb = { 'amr:e3_amr_deck_bot': 'e3_amr_deck_bot', 'amr:uw_palletrobot': 'uw_palletrobot', 'amr:e3_omron_agv': 'e3_omron_agv', 'amr:uw_forklift': 'uw_forklift' };
     const tileOf = ([place, label, img], g) => {
       if (img === 'type') return `<button type="button" class="tile kit typ" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(place.split(':')[0])}</i><span>${esc(label)}</span></button>`;
@@ -1091,6 +1151,10 @@
       if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); allG.hidden = !q; rest.forEach(e => { e.hidden = !!q; }); allG.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); };
       pal.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { palCat[tab] = b.dataset.cat; showTab(tab); });
       const back = pal.querySelector('[data-back]'); if (back) back.onclick = () => { palCat[tab] = null; showTab(tab); };
+      pal.querySelectorAll('[data-place^="mine:"]').forEach(b => b.addEventListener('contextmenu', e => { // right-click: delete a saved assembly
+        e.preventDefault(); const L = mineList(), i = +b.dataset.place.split(':')[1]; if (!L[i] || !confirm(`내 설비 "${L[i].name}"을(를) 지울까요?`)) return;
+        L.splice(i, 1); mineSave(L); showTab(tab); note('내 설비에서 지웠습니다');
+      }));
       pal.querySelectorAll('[data-place]').forEach(b => {
         b.addEventListener('click', () => startPlacing(b.dataset.place));
         b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', b.dataset.place); startPlacing(b.dataset.place); });
@@ -1383,14 +1447,57 @@
     act('innerReset', () => { if (busy()) return; pushUndo(); const L = clone(S().LAYOUT_DEFAULT); L.cell = { x: o.x, z: o.z, rot: o.rot || 0 }; S().applyLayout(L); o.params = engineCellParams(); store(); select(o.id); });
   }
   // an assembly: its parts, cut list, and move / copy / delete as one
+  // the assembly's extent along its own axes (those of its first profile): [lo, hi] per axis, part boxes (not the feet's pads)
+  function asmFrame(ids) {
+    const first = ids.map(byId).find(q => q.type === 'profile') || byId(ids[0]), ax = FR().axesOf(first.rot), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const id of ids) { const B = FR().boxOf(byId(id)); ax.forEach((e, k) => { const c = B.c.dot(e), h = FR().extent(B, e); lo[k] = Math.min(lo[k], c - h); hi[k] = Math.max(hi[k], c + h); }); }
+    return { ax, lo, hi, size: ax.map((e, k) => hi[k] - lo[k]) };
+  }
   function renderAsmProps(o) {
-    const rows = FR().bom(doc, asm.ids), b = new THREE.Box3(); asm.ids.forEach(id => { const B = FR().boxOf(byId(id)), e = new THREE.Vector3(...[0, 1, 2].map(k => B.ax.reduce((s2, a, i) => s2 + Math.abs(a.getComponent(k)) * B.h[i], 0))); b.expandByPoint(B.c.clone().sub(e)).expandByPoint(B.c.clone().add(e)); }); const sz = b.getSize(new THREE.Vector3()); // part boxes, not the feet's pads
+    const rows = FR().bom(doc, asm.ids), F = asmFrame(asm.ids), mm = v => Math.round(v * 1000);
     propSec.innerHTML = `<div class="kind">${icon('frameset')}조립품</div><h3>프레임 조립품 · 부품 ${asm.ids.length}개</h3>
-      <p class="hint">바깥 치수 ${Math.round(sz.x * 1000)} × ${Math.round(sz.z * 1000)} mm · 높이 ${Math.round(sz.y * 1000)} mm. 3D 화살표로 통째로 옮기고 (0.5 m 그리드) R 키로 돌립니다. 부품 하나를 고치려면 그 부품을 클릭하세요.</p>
+      <div class="row">${field('sx', '가로 (m)', r2k(F.size[0]), 0.005, 0.05, 20)}${field('sz', '세로 (m)', r2k(F.size[2]), 0.005, 0.05, 20)}${field('sy', '높이 (m)', r2k(F.size[1]), 0.005, 0.05, 10)}</div>
+      <p class="hint">치수를 바꾸면 가운데를 기준으로 그 방향의 기둥·보·판이 늘거나 줄고, 반대편 부품이 함께 옮겨집니다. 3D 화살표로 통째로 옮기고 (0.5 m 그리드) R 키로 돌립니다. 부품 하나를 고치려면 그 부품을 클릭하세요.</p>
+      <label>접합품 일괄 변경<select data-joint><option value="">— 선택 —</option>${Object.entries(FR().JOINTS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
       <h4>자재 목록</h4><table class="bom">${rows.map(r => `<tr><td>${esc(r.label)}</td><td>${r.n}</td></tr>`).join('')}</table>
+      <div class="acts"><button type="button" data-a="csv">자재 목록 CSV</button><button type="button" data-a="mine">내 설비로 저장</button></div>
       <div class="acts"><button type="button" data-a="look">보기</button><button type="button" data-a="dup">조립품 복제</button><button type="button" data-a="del">조립품 삭제</button></div>`;
     const act = (a, fn) => { const x = propSec.querySelector(`[data-a=${a}]`); if (x) x.onclick = fn; };
     act('look', () => focusObject(o.id)); act('dup', duplicate); act('del', remove);
+    propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
+      const k = { sx: 0, sy: 1, sz: 2 }[i.dataset.k], v = Math.min(+i.max, Math.max(+i.min, parseFloat(i.value))); if (Number.isNaN(v)) return renderProps();
+      const delta = r2k(v - F.size[k]); if (Math.abs(delta) < 1e-4) return;
+      const ids = asm.ids, changed = FR().stretch(doc, ids, F.ax[k], (F.lo[k] + F.hi[k]) / 2, delta);
+      if (!changed) { note('이 방향으로 늘릴 수 없는 부품이 가운데를 지납니다 (비스듬한 부품 등)', true); return renderProps(); }
+      const tmp = { factory: doc.factory, objects: doc.objects.map(q => changed.find(c => c.id === q.id) || q) }, mine = new Set(ids);
+      const bad = changed.find(c => FM().outside(doc, c) || FR().overlaps(tmp, c, mine).length || (c.type === 'profile' && c.params.length < 0.02));
+      if (bad) { note(`바꿀 수 없습니다: ${bad.name}이(가) 다른 부품과 겹치거나 너무 짧아집니다`, true); return renderProps(); }
+      pushUndo(); releaseAsm(); changed.forEach(c => { Object.assign(byId(c.id), c); buildView(byId(c.id)); });
+      ids.forEach(id => placeObjectGroup(byId(id))); frameRefresh(); store(); select(o.id, null, true);
+      note(`조립품 ${['가로', '높이', '세로'][k]}를 ${mm(v)} mm로 바꿨습니다 (부품 ${changed.length}개)`);
+    }));
+    const js = propSec.querySelector('[data-joint]'); if (js) js.onchange = () => {
+      if (!js.value) return; pushUndo(); const ids = asm.ids; releaseAsm();
+      ids.map(byId).filter(q => q.type === 'profile').forEach(q => { q.params = Object.assign({}, q.params, { joint0: js.value, joint1: js.value }); buildView(q); placeObjectGroup(q); });
+      store(); select(o.id, null, true); note(`접합품을 모두 ${FR().JOINTS[js.value]}(으)로 바꿨습니다`);
+    };
+    act('csv', () => {
+      const lines = [['품목', '수량']].concat(rows.map(r => [r.label, r.n])), sec = {};
+      asm.ids.map(byId).filter(q => q.type === 'profile').forEach(q => { const p = Object.assign(window.FactoryElements.defaults('profile'), q.params), l = FR().SECTIONS[p.section].label; sec[l] = (sec[l] || 0) + p.length; });
+      Object.entries(sec).forEach(([l, m]) => lines.push([`프로파일 ${l} 총 길이 (m)`, Math.round(m * 1000) / 1000]));
+      lines.push([`바깥 치수 (mm)`, `${mm(F.size[0])} x ${mm(F.size[2])} x ${mm(F.size[1])}`]);
+      const csv = '\ufeff' + lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n'), a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'frame-bom.csv'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      note('자재 목록을 frame-bom.csv로 내려받았습니다');
+    });
+    act('mine', () => {
+      const name = (prompt('내 설비 이름', `프레임 ${mm(F.size[0])}×${mm(F.size[2])}×${mm(F.size[1])}`) || '').trim(); if (!name) return;
+      const c = new THREE.Vector3(); F.ax.forEach((e, k) => { if (k !== 1) c.addScaledVector(e, (F.lo[k] + F.hi[k]) / 2); });
+      const parts = asm.ids.map(byId).map(q => { const r = clone(q); delete r.id; delete r.name; r.x = r2k(q.x - c.x); r.z = r2k(q.z - c.z); r.y = r2k((q.y || 0) - Math.max(0, F.lo[1])); return r; });
+      const L = mineList(); L.push({ name, parts }); if (!mineSave(L)) return note('브라우저 저장 공간에 저장하지 못했습니다', true);
+      if (tab === 'frame') { palCat.frame = 'mine'; panel.querySelector('[data-tab=frame]').click(); }
+      note(`"${name}"을(를) 프레임 탭 › 내 설비에 저장했습니다 (이 브라우저에 저장, 오른쪽 클릭으로 삭제)`);
+    });
   }
   function refreshTransformFields() {
     if (!propSec || innerSel) return; const g = selectedId && groupOf(selectedId); if (!g) return;
@@ -1544,6 +1651,7 @@
     if (window.FactoryAssets) FactoryAssets.preload(Object.keys(USES));
     renderTree(); renderProps();
     const el = s.renderer.domElement;
+    el.addEventListener('pointerdown', resizeDown, true); el.addEventListener('pointermove', resizeMove, true); el.addEventListener('pointerup', resizeUp, true); // before the orbit / gizmo controls
     el.addEventListener('pointerdown', e => { onPick.down = [e.clientX, e.clientY, e.button]; });
     el.addEventListener('pointermove', moveGhost);
     el.addEventListener('pointerup', e => {
