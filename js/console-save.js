@@ -15,8 +15,8 @@ const css = `
 .savedlg form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px 20px;width:min(420px,100%);display:grid;gap:10px;font-size:13px;max-height:90vh;overflow:auto}
 .savedlg h3{margin:0;font-size:14px}
 .savedlg label{display:grid;gap:4px;color:var(--mute);font-size:12px}
-.savedlg input{background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:8px 10px;border-radius:3px;font:inherit}
-.savedlg input:focus{outline:none;border-color:var(--accent)}
+.savedlg input,.savedlg textarea{background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:8px 10px;border-radius:3px;font:inherit}
+.savedlg input:focus,.savedlg textarea:focus{outline:none;border-color:var(--accent)}
 .savedlg .row{display:flex;gap:6px;justify-content:flex-end}
 .savedlg button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:8px 14px;border-radius:3px;cursor:pointer;font:inherit}
 .savedlg button[type=submit]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
@@ -27,7 +27,9 @@ const css = `
 .savedlg .hint{color:var(--dim);font-size:11.5px;line-height:1.5;margin:0}
 .savedlg .list{display:grid;gap:4px}
 .savedlg .list button{display:grid;gap:2px;text-align:left;padding:8px 10px}
-.savedlg .list button span{font-size:11px;color:var(--mute);font-family:var(--mono)}`;
+.savedlg .list button span{font-size:11px;color:var(--mute);font-family:var(--mono)}
+.savedlg .list button span.note{font-family:inherit;color:var(--fg);opacity:.8;font-size:12px;line-height:1.45}
+.savedlg textarea{resize:vertical;min-height:44px}`;
 
 function newId() {
   const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -49,6 +51,7 @@ function saveDialog() {
     <h3>팩토리 저장</h3>
     <p class="hint">공장 크기, 건물 요소 ${d.objects.length - cells}개, 원스테이션 셀 ${cells}개를 저장합니다. 셀마다 지금 설정으로 사이클 1회를 녹화합니다 (셀당 몇 초). ONE MONITOR에서 이 이름으로 불러와 모니터링하고, ONE BUILDER에서 다시 불러와 이어서 편집할 수 있습니다.</p>
     <label>이름<input name="name" maxlength="60" required autocomplete="off"></label>
+    <label><span>설명 <small>(선택)</small></span><textarea name="note" maxlength="200" rows="2" placeholder="예: 셀 3개 · 레이저 용접 라인 1차안"></textarea></label>
     <label>저장 비밀번호<input name="password" type="password" required autocomplete="current-password"></label>
     <div class="msg"></div>
     <div class="row"><button type="button" data-close>닫기</button><button type="submit">저장</button></div>
@@ -57,7 +60,7 @@ function saveDialog() {
   form.name.focus();
   form.onsubmit = async e => {
     e.preventDefault();
-    const name = form.name.value.trim(), password = form.password.value; if (!name) return;
+    const name = form.name.value.trim(), note = form.note.value.trim(), password = form.password.value; if (!name) return;
     const buttons = form.querySelectorAll('button'); buttons.forEach(b => b.disabled = true);
     try {
       // fail fast, before recording, when the server cannot take saves
@@ -76,7 +79,7 @@ function saveDialog() {
       const last = tl => { const r = tl.results; return r[r.length - 1][1]; };
       const cellSum = timeline.cells.map(c => ({ name: c.name, variant: c.timeline.panel.variant, slots: c.timeline.panel.slots, parts: c.timeline.parts, cycleTotal: c.timeline.cycleTotal, ok: last(c.timeline).filter(r => r.ok === true).length, ng: last(c.timeline).filter(r => r.ok === false).length }));
       const first = timeline.cells[0] && timeline.cells[0].timeline.panel;
-      const meta = { name, created: new Date().toISOString(), kind: 'factory', summary: {
+      const meta = { name, note, created: new Date().toISOString(), kind: 'factory', summary: {
         factory: doc.factory, objects: doc.objects.length, cells: cellSum.length, cellSummary: cellSum,
         // the first cell's figures keep the older single-station list readable
         variant: first && first.variant, slots: first && first.slots, parts: cellSum[0] && cellSum[0].parts, cycleTotal: cellSum[0] && cellSum[0].cycleTotal,
@@ -111,7 +114,7 @@ async function loadDialog() {
   fetch('assets/layouts/index.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(items => {
     if (last && last.objects && last.objects.length) items = [{ file: '', name: '이전 작업 (이 브라우저)', note: '마지막으로 편집하던 배치 · 객체 ' + last.objects.length + '개', last: true }].concat(items);
     if (!items.length) return;
-    ex.innerHTML = '<h4 style="margin:0;font-size:12px;color:var(--mute)">예제</h4>' + items.map(x => `<button type="button" data-file="${esc(x.file)}"><b>${esc(x.name)}</b><span>${esc(x.note || '')}</span></button>`).join('');
+    ex.innerHTML = '<h4 style="margin:0;font-size:12px;color:var(--mute)">예제</h4>' + items.map(x => `<button type="button" data-file="${esc(x.file)}"><b>${esc(x.name)}</b><span class="${x.last ? '' : 'note'}">${esc(x.note || '')}</span></button>`).join('');
     ex.querySelectorAll('[data-file]').forEach(b => b.onclick = async () => {
       if (!b.dataset.file && last) { window.FactoryBuilder.loadDoc(last); close(); return; }
       try { say('불러오는 중…'); const r = await fetch('assets/layouts/' + b.dataset.file, { cache: 'no-store' }); if (!r.ok) throw new Error(r.status); window.FactoryBuilder.loadDoc(await r.json()); close(); }
@@ -123,7 +126,7 @@ async function loadDialog() {
   catch (e) { return say('저장 목록을 불러올 수 없습니다 (' + e.message + ')', true); }
   say(saves.length ? '' : '아직 저장본이 없습니다.');
   const list = form.querySelector('.saves');
-  list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b><span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? (m.cells ? `원스테이션 셀 ${m.cells} · ` : '') + `객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
+  list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b>${s.note ? `<span class="note">${esc(s.note)}</span>` : ''}<span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? (m.cells ? `원스테이션 셀 ${m.cells} · ` : '') + `객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
   list.querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
     const s = saves.find(x => x.id === b.dataset.id);
     try {

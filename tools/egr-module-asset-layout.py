@@ -132,6 +132,6 @@ out = os.path.join(ROOT, 'assets/layouts/egr-module-asset.json')
 with open(out, 'w', encoding='utf-8') as f: json.dump(doc, f, ensure_ascii=False, separators=(',', ':'))
 idx = os.path.join(ROOT, 'assets/layouts/index.json')
 with open(idx, encoding='utf-8') as f: examples = [e for e in json.load(f) if e['file'] != 'egr-module-asset.json']
-examples.insert(0, {'file': 'egr-module-asset.json', 'name': '테스트1', 'note': 'CAD 라인과 같은 셀 5개 · 스테이션 35개를 자체 에셋으로 재구성 · 코어 Assy 투입 · 도포 → 엔드 탱크 프레스 · 레이저 용접 → 택 용접 (MIG 로봇 4대 · 수동 MIG) → C/F 검사 · 외부 도포 → 리크 테스트 · 마킹 · 가스켓 · OK/NG'})
+examples.insert(0, {'file': 'egr-module-asset.json', 'name': '테스트1', 'note': '예시 공정 · 셀 5개 · 스테이션 35개 · 투입 → 도포 · 프레스 → 레이저 · 택 용접 → 검사 · 리크 테스트 → 마킹 · 출하'})
 with open(idx, 'w', encoding='utf-8') as f: json.dump(examples, f, ensure_ascii=False)
 print(out, len(objects), 'objects')
