@@ -784,7 +784,7 @@ main{display:block;position:absolute;inset:0}
 
   setTarget(DEFAULT);
   const wanted = new URL(location.href).searchParams.get('save');
-  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else { showNone(); $('#openTarget').click(); } });   // no save asked for: the list opens, nothing loads
+  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else showNone(); });   // no save asked for: nothing loads; the list opens from 모니터링 목록 열기 / the top button
 })();
 </script>
 </body>
