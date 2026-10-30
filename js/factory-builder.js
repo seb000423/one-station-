@@ -896,7 +896,7 @@
     // top toolbar: file · edit · simulation · view
     bar = document.createElement('div'); bar.id = 'fbBar'; bar.className = 'card';
     bar.innerHTML = `
-      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example" title="예시 공정(공장 + 창고)을 엽니다. 지금 배치는 Ctrl+Z로 되돌릴 수 있습니다">예시 공정 보기</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
+      <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example" title="예시 공정 테스트1을 엽니다. 지금 배치는 Ctrl+Z로 되돌릴 수 있습니다">예시 공정 · 테스트1</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
         <label title="켜면 이동 0.5 m 그리드(바닥 좌측 하단 원점 기준), 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.5m·15°</label></div>
@@ -949,7 +949,7 @@
     const on = (sel, fn) => { const b = bar.querySelector(sel); if (b) b.onclick = fn; };
     { const lm = bar.querySelector('#fbLabelMode'); if (lm) { lm.value = labelMode; lm.onchange = () => { labelMode = lm.value; lastLabels = 0; try { localStorage.setItem('fb-labels', labelMode); } catch (e) {} }; } }
     on('[data-t=new]', newFactory);
-    on('[data-t=example]', () => { if (!doc.objects.length || confirm(`예시 공정을 엽니다. 지금 배치(객체 ${doc.objects.length}개)는 Ctrl+Z로 되돌릴 수 있습니다.`)) loadExample(); });
+    on('[data-t=example]', () => { if (!doc.objects.length || confirm(`예시 공정 테스트1을 엽니다. 지금 배치(객체 ${doc.objects.length}개)는 Ctrl+Z로 되돌릴 수 있습니다.`)) loadExample(); });
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
     on('[data-t=clear]', clearAll);

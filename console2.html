@@ -487,7 +487,10 @@ main{display:block;position:absolute;inset:0}
   $('#retry').addEventListener('click', load);
 
   /* ---------- saved stations ---------- */
-  let saves = [];
+  // built-in entry: the BUILDER example line, recorded and bundled with the site (re-export it when the example changes); never deleted
+  const BUILTIN = [{ id: 'test1', name: '테스트1', kind: 'factory', builtin: true, glb: new URL('realvirtual-models/test1.glb', location.href).href, timeline: new URL('realvirtual-models/test1-timeline.json', location.href).href,
+    summary: { objects: 57, cells: 0, layout: { factory: { width: 40, depth: 20 } } } }];
+  let saves = BUILTIN.slice();
   const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
   const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };
   // nothing on screen: no 3D view, no panels, just the hint to pick a save
@@ -498,7 +501,7 @@ main{display:block;position:absolute;inset:0}
     $('#pickFirst').hidden = true; $('.app').classList.remove('no-target');
     setTarget({ glb: s.glb, timeline: s.timeline });
     $('#savePick').value = s ? s.id : '';
-    $('#saveDel').hidden = !s;
+    $('#saveDel').hidden = !s || !!s.builtin;
     $('#crumbTarget').textContent = s ? s.name : '기본 스테이션';
     const m = s && s.summary;
     $('#saveInfo').textContent = m && m.cycleTotal ? `C/T ${(m.cycleTotal / m.parts).toFixed(1)} s · OK ${m.ok} / NOK ${m.ng}` : '';
@@ -510,18 +513,17 @@ main{display:block;position:absolute;inset:0}
   async function loadSaves() {
     try {
       const r = await fetch('api/saves', { cache: 'no-store' });
-      if (!r.ok) return;
-      saves = (await r.json()).saves || [];
-      $('#savePick').innerHTML = '<option value="">— 저장본 선택 —</option>' + saves.map(s => `<option value="${s.id}">${label(s).replace(/[<>&"]/g, '')}</option>`).join('');
-      renderList();
-    } catch (e) { /* no API (local file / not deployed): default station only */ }
+      if (r.ok) saves = BUILTIN.concat((await r.json()).saves || []);
+    } catch (e) { /* no API (local file / not deployed): built-in entries only */ }
+    $('#savePick').innerHTML = '<option value="">— 저장본 선택 —</option>' + saves.map(s => `<option value="${s.id}">${label(s).replace(/[<>&"]/g, '')}</option>`).join('');
+    renderList();
   }
   const esc = t => String(t).replace(/[<>&"]/g, '');
   function renderList() {
-    const cur = $('#savePick').value, card = (id, name, sub) => `<div class="card"><button type="button" data-id="${id}" class="pick ${id === cur ? 'on' : ''}"><b>${esc(name)}</b><span>${esc(sub)}</span></button>${id ? `<button type="button" class="del" data-del="${id}" title="삭제 (불러오지 않음)" aria-label="${esc(name)} 삭제">×</button>` : ''}</div>`;
+    const cur = $('#savePick').value, card = (id, name, sub, fixed) => `<div class="card"><button type="button" data-id="${id}" class="pick ${id === cur ? 'on' : ''}"><b>${esc(name)}</b><span>${esc(sub)}</span></button>${id && !fixed ? `<button type="button" class="del" data-del="${id}" title="삭제 (불러오지 않음)" aria-label="${esc(name)} 삭제">×</button>` : ''}</div>`;
     $('#saveList').innerHTML = (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
-      return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · ' + (m.cells ? '원스테이션 셀 ' + m.cells + ' · ' : '') + '객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '));
+      return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · ' + (m.cells ? '원스테이션 셀 ' + m.cells + ' · ' : '') + '객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, s.builtin ? '예시 공정' : '', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '), s.builtin);
     }).join('') : '<p class="empty">아직 저장본이 없습니다. ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장하면 여기에 나타납니다.</p>');
     $('#saveList').querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => choose(b.dataset.id)));
     $('#saveList').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); delSave(b.dataset.del); }));
@@ -530,7 +532,7 @@ main{display:block;position:absolute;inset:0}
   // delete straight from the list: nothing is loaded; deleting the save on screen leaves the view as it is (pick another one yourself)
   let delPw = '';
   async function delSave(id) {
-    const s = saves.find(x => x.id === id); if (!s) return;
+    const s = saves.find(x => x.id === id); if (!s || s.builtin) return;
     const password = delPw || prompt(`"${s.name}" 저장본을 삭제합니다. 저장 비밀번호를 입력하세요.`); if (!password) return;
     const r = await fetch('api/saves', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, password }) });
     if (!r.ok) { delPw = ''; return alert('삭제 실패: ' + ((await r.json().catch(() => ({}))).error || r.status)); }
