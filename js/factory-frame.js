@@ -3,6 +3,9 @@
 // Every part is a box in the factory's metre frame ({ x, y, z, rot } + params). Moving a part near another snaps it face to
 // face (a profile end onto a side face, a plate onto the top of a frame) and lines its edges or centre up with the part it
 // touches; profile ends that meet a side face get corner brackets (params.ends, refreshed by the builder after each change).
+// Shape blocks (box / cylinder) and models (catalogue or the user's own GLB / STL, scaled to w × h × d) join the same way, so a whole
+// machine can be built and saved as one equipment asset (js/factory-equip.js). check() lists floating, overlapping and open-ended parts;
+// slide() gives the T-slot directions a part can move in while it stays on the parts holding it.
 // Parts that touch form an assembly (components()), which the builder can move, copy and delete as one.
 // Rule set v2.0 exception (rules/smart-factory-standard-v2.md, GLB over primitives): a profile's length and a plate's size are
 // parameters, so they are procedural geometry, not GLB. The profile is an extruded real T-slot section (slots, bores, chamfered
@@ -16,7 +19,8 @@
     bracket: lin(mat(0x8e979f, { metalness: 0.65, roughness: 0.35 })), plate: lin(mat(0xb9c0c7, { metalness: 0.6, roughness: 0.34 })),
     guard: lin(mat(0xdfe9f0, { metalness: 0, roughness: 0.08, transparent: true, opacity: 0.28, depthWrite: false })),
     diecast: lin(mat(0x3a3f45, { metalness: 0.55, roughness: 0.4 })), hole: lin(mat(0x15171a, { metalness: 0.3, roughness: 0.6 })),
-    steel: lin(mat(0xd4d8dc, { metalness: 0.8, roughness: 0.25 })), rubber: lin(mat(0x141518, { metalness: 0, roughness: 0.85 }))
+    steel: lin(mat(0xd4d8dc, { metalness: 0.8, roughness: 0.25 })), rubber: lin(mat(0x141518, { metalness: 0, roughness: 0.85 })),
+    cap: lin(mat(0x1d1f22, { metalness: 0, roughness: 0.6 })), standin: lin(mat(0x8fa3b8, { metalness: 0, roughness: 0.6, transparent: true, opacity: 0.35, depthWrite: false }))
   };
   // section: sy = height of a lying profile (Y), sz = its width (Z); m = slot module (one slot per m of face)
   // common metric series (20 / 30 / 40 / 45 mm modules, slot opening 6 / 8 / 8 / 10 mm); key = height × width of a lying profile
@@ -86,7 +90,7 @@
   // profile: origin = the start end's section centre; axis 'x' lies along local X (yaw = rot), 'y' stands up from the origin
   TYPES.profile = {
     label: '알루미늄 프로파일', group: 'frame',
-    defaults: () => ({ section: '4545', length: 0.6, axis: 'y', finish: 'clear', ends: [null, null], joint0: 'bracket', joint1: 'bracket', leg: 0 }),
+    defaults: () => ({ section: '4545', length: 0.6, axis: 'y', finish: 'clear', ends: [null, null], joint0: 'bracket', joint1: 'bracket', leg: 0, cap0: false, cap1: false }),
     build: (g, p) => {
       const S = SEC(p), L = Math.max(0.01, p.length), up = p.axis === 'y';
       const m = add(g, 'Profile_' + (p.section || '4545'), sectionGeo(p.section in SECTIONS ? p.section : '4545'), p.finish === 'black' ? K.black : K.clear);
@@ -94,6 +98,12 @@
       const A = up ? new V3(0, 1, 0) : new V3(1, 0, 0), half = up ? new V3(S.sy / 2, 0, S.sz / 2) : new V3(0, S.sy / 2, S.sz / 2);
       const hx = v => Math.abs(v.x) * half.x + Math.abs(v.y) * half.y + Math.abs(v.z) * half.z; // half width of the section along v
       const put = (o, a, s, w, at) => { o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(a, s, w)); o.position.copy(at); g.add(o); };
+      // end caps: a 3 mm plastic cover on an end that meets nothing (params.cap0 / cap1)
+      [p.cap0, p.cap1].forEach((on, i) => {
+        if (!on || (p.ends || [])[i]) return;
+        const c = add(g, 'Profile_EndCap', up ? boxGeo(S.sy, 0.003, S.sz) : boxGeo(0.003, S.sy, S.sz), K.cap);
+        c.position.copy(A).multiplyScalar(i ? L + 0.0015 : -0.0015);
+      });
       (p.ends || []).forEach((e, i) => {
         if (!e || !e.t) return;
         const t = new V3(...e.t).normalize(); if (Math.abs(t.dot(A)) > 0.1) return; // colinear joint: nothing to show
@@ -163,6 +173,43 @@
     footprint: () => [0.085, 0.085]
   };
 
+  // ---------------------------------------------------------------- equipment bodies: shape blocks and models (to build our own machines)
+  // block: a box or cylinder in any size and colour (housings, cabinets, tanks, motors, fixtures). Origin = centre of its bottom face.
+  // 'cyl' stands up (diameter w, height h), 'cylh' lies along X (length w, diameter h). Rule set v2.0 exception as for profiles: the size is a parameter.
+  const FINISH = { paint: { metalness: 0.5, roughness: 0.4 }, metal: { metalness: 0.78, roughness: 0.26 }, plastic: { metalness: 0, roughness: 0.5 }, rubber: { metalness: 0, roughness: 0.85 }, glass: { metalness: 0, roughness: 0.08, transparent: true, opacity: 0.3, depthWrite: false } };
+  const MATS = new Map(), finishMat = (color, finish) => { const k = color + finish; if (!MATS.has(k)) MATS.set(k, lin(mat(new THREE.Color(color || '#c8ccd0').getHex(), Object.assign({}, FINISH[finish] || FINISH.paint)))); return MATS.get(k); };
+  const blockDims = p => (p.shape === 'cyl' ? [p.w, p.h, p.w] : p.shape === 'cylh' ? [p.w, p.h, p.h] : [p.w, p.h, p.d]);
+  TYPES.block = {
+    label: '형상 블록', group: 'frame',
+    defaults: () => ({ shape: 'box', w: 0.4, h: 0.3, d: 0.3, color: '#c8ccd0', finish: 'paint', label: '' }),
+    build: (g, p) => {
+      const [w, h, d] = blockDims(p), m = finishMat(p.color, p.finish);
+      if (p.shape === 'cyl') add(g, 'Block_Cylinder', cylGeo(w / 2, w / 2, h, 32), m, 0, h / 2, 0);
+      else if (p.shape === 'cylh') add(g, 'Block_Cylinder', cylGeo(h / 2, h / 2, w, 32), m, 0, h / 2, 0).rotation.z = Math.PI / 2;
+      else add(g, 'Block_Box', boxGeo(w, h, d), m, 0, h / 2, 0);
+    },
+    footprint: p => { const [w, , d] = blockDims(p); return [w, d]; }
+  };
+  // model: a real equipment model scaled to w × h × d — from the model catalogue ('cat:<key>', js/factory-unity.js) or a GLB / STL the
+  // user uploaded ('up:<id>', js/factory-equip.js keeps the file in this browser). Origin = centre of its bottom face.
+  const catEntry = src => { const U = window.FactoryUnity, k = String(src || '').slice(4); return U && U.CATALOG[(U.ALIAS || {})[k] || k] ? { key: k, c: U.CATALOG[(U.ALIAS || {})[k] || k] } : null; };
+  const modelNative = p => { const e = String(p.src).startsWith('cat:') && catEntry(p.src); return e ? e.c.size : p.n || [p.w, p.h, p.d]; };
+  TYPES.model = {
+    label: '설비 모델', group: 'frame',
+    defaults: () => ({ src: '', w: 0.5, h: 0.5, d: 0.5, n: null, keep: true }),
+    build: (g, p) => {
+      const n = modelNative(p), sx = p.w / n[0], sy = p.h / n[1], sz = p.d / n[2], src = String(p.src || ''), E = window.FactoryEquip;
+      if (src.startsWith('cat:') && catEntry(src)) {
+        const m = FE.build({ type: 'ufmodel', params: { model: catEntry(src).key } }, null); m.position.set(0, 0, 0); m.rotation.set(0, 0, 0); m.scale.set(sx, sy, sz); m.name = 'Model_' + catEntry(src).key; g.add(m); return;
+      }
+      const m = src.startsWith('up:') && E ? E.get(src.slice(3)) : null;
+      if (m && window.FactoryAssets) { const w = FactoryAssets.placed(m, 'Model_Upload'); w.scale.set(sx, sy, sz); g.add(w); return; }
+      if (src.startsWith('up:') && E) E.ensure(src.slice(3));
+      add(g, 'Model_Standin', boxGeo(p.w, p.h, p.d), K.standin, 0, p.h / 2, 0).castShadow = false; // until the file is read (or when it is not in this browser)
+    },
+    footprint: p => [p.w, p.d]
+  };
+
   // ---------------------------------------------------------------- frame set (W × D × H): posts, top and bottom rings, feet, top plate
   // explode(p) lists the parts in the set's own frame (origin = floor centre); the builder places them as separate parts
   function explode(p) {
@@ -191,13 +238,14 @@
 
   TYPES.mine = {
     label: '내 설비', group: 'frame',
-    defaults: () => ({ parts: [] }),
+    defaults: () => ({ parts: [], kind: 'process', ct: 0, note: '' }),
     build: (g, p) => { for (const q of p.parts || []) g.add(FE.build(q, null)); },
-    footprint: () => [0.5, 0.5]
+    footprint: p => { let x = 0.05, z = 0.05; for (const q of p.parts || []) { if (!TYPES[q.type] || !FRAME.includes(q.type)) continue; const B = boxOf(q); x = Math.max(x, Math.abs(B.c.x) + extent(B, new V3(1, 0, 0))); z = Math.max(z, Math.abs(B.c.z) + extent(B, new V3(0, 0, 1))); } return [2 * x, 2 * z]; },
+    cycle: p => Math.max(0, +p.ct || 0)
   };
 
   // ---------------------------------------------------------------- boxes, snapping, joints, assemblies
-  const FRAME = ['profile', 'plate', 'foot'], isFrame = o => !!o && FRAME.includes(o.type);
+  const FRAME = ['profile', 'plate', 'foot', 'block', 'model'], isFrame = o => !!o && FRAME.includes(o.type);
   const P = o => Object.assign(TYPES[o.type].defaults(), o.params || {});
   const axesOf = rot => { const c = Math.cos(rot || 0), s = Math.sin(rot || 0); return [new V3(c, 0, -s), new V3(0, 1, 0), new V3(s, 0, c)]; };
   // oriented box of a part: centre c, axes ax (local X, Y, Z in world), half sizes h
@@ -206,6 +254,7 @@
     let h, c;
     if (o.type === 'profile') { const S = SEC(p), L = p.length; if (p.axis === 'y') { h = [S.sy / 2, L / 2, S.sz / 2]; c = O.clone().addScaledVector(Y, L / 2); } else { h = [L / 2, S.sy / 2, S.sz / 2]; c = O.clone().addScaledVector(X, L / 2); } }
     else if (o.type === 'plate') { if (p.orient === 'v') { h = [p.w / 2, p.d / 2, p.t / 2]; c = O.clone().addScaledVector(Y, p.d / 2).addScaledVector(Z, p.t / 2); } else { h = [p.w / 2, p.t / 2, p.d / 2]; c = O.clone().addScaledVector(Y, p.t / 2); } }
+    else if (o.type === 'block' || o.type === 'model') { const [w, hh, d] = o.type === 'block' ? blockDims(p) : [p.w, p.h, p.d]; h = [w / 2, hh / 2, d / 2]; c = O.clone().addScaledVector(Y, hh / 2); }
     else { const fh = footH(p); h = [0.0225, fh / 2, 0.0225]; /* the mounting plate; the pad below may stick out a little */ c = O.clone().addScaledVector(Y, fh / 2); }
     return { o, c, ax, h };
   }
@@ -214,7 +263,7 @@
   // gap / overlap of A and B along each of B's axes (> 0: apart)
   const seps = (A, B) => B.ax.map((e, k) => Math.abs(A.c.clone().sub(B.c).dot(e)) - B.h[k] - extent(A, e));
   const parallel = (A, B) => B.ax.every(e => A.ax.some(a => Math.abs(Math.abs(a.dot(e)) - 1) < 1e-3));
-  const STEP = 0.005;
+  let STEP = 0.005; // part move / snap increment (m): 1, 5, 10, 20 or 45 mm, chosen on the toolbar
   // the best face-to-face contact of part o with another frame part within reach R: o moves by `delta` so a face of it lies on
   // a face of the target, and along that face its centre or an edge lines up with the target's centre or edge (else 5 mm steps)
   function snap(doc, o, R = 0.06) {
@@ -310,6 +359,10 @@
     } else if (c.type === 'plate') {
       if (p.orient === 'v') { if (side) out.rot = Math.atan2(n.x, n.z); out.y = side ? Math.max(0, pt.y - p.d / 2) : up ? pt.y : pt.y - p.d; }
       else if (down) out.y = pt.y - p.t;
+    } else if (c.type === 'block' || c.type === 'model') {
+      const B = boxOf(Object.assign({}, c, { x: 0, y: 0, z: 0, rot: out.rot }));
+      if (side) { const e = extent(B, new V3(n.x, 0, n.z).normalize()); out.x += n.x * e; out.z += n.z * e; out.y = Math.max(0, pt.y - B.h[1]); }
+      else if (down) out.y = pt.y - 2 * B.h[1];
     } else if (c.type === 'foot') {
       const fh = footH(p);
       if (q && q.type === 'profile' && P(q).axis === 'y') { out.x = q.x; out.z = q.z; out.y = (q.y || 0) - fh; out.target = q.id; if (out.y < 0) { out.lift = -out.y; out.y = 0; } return out; }
@@ -345,9 +398,10 @@
         const k = B.ax.findIndex(a => Math.abs(Math.abs(a.dot(e)) - 1) < 1e-3); if (k < 0) return null;
         const along = B.ax[k].dot(e) > 0 ? 1 : -1;
         if (o.type === 'profile') { if ((p.axis === 'y' ? 1 : 0) !== k) return null; p.length = r(p.length + delta); if (along < 0) move(delta); }
+        else if (o.type === 'block' || o.type === 'model') { const key = ['w', 'h', 'd'][k]; if (o.type === 'block' && p.shape !== 'box' && k === 2) return null; p[key] = r(p[key] + delta); if (k !== 1) move(delta / 2); }
         else if (o.type === 'plate') { const key = k === 0 ? 'w' : p.orient === 'v' ? (k === 1 ? 'd' : null) : (k === 2 ? 'd' : null); if (!key) return null; p[key] = r(p[key] + delta); if (!(p.orient === 'v' && k === 1)) move(delta / 2); }
         else return null;
-        if ((o.type === 'profile' ? p.length : Math.min(p.w, p.d)) < 0.02) return null;
+        if ((o.type === 'profile' ? p.length : o.type === 'plate' ? Math.min(p.w, p.d) : Math.min(p.w, p.h, p.d || p.w)) < 0.02) return null;
         q.params = p;
       } else continue;
       out.push(q);
@@ -361,7 +415,10 @@
       if (!isFrame(o) || (ids && !ids.includes(o.id))) continue; const p = P(o);
       if (o.type === 'profile') put('p' + p.section + p.length, `프로파일 ${SEC(p).label} · ${Math.round(p.length * 1000)} mm`);
       else if (o.type === 'plate') put('t' + p.kind + p.w + p.d + p.t, `${{ alu: '알루미늄 판', guard: '투명 가드', mesh: '메시 가드' }[p.kind] || '판'} ${Math.round(p.w * 1000)}×${Math.round(p.d * 1000)}×${Math.round(p.t * 1000)} mm`);
+      else if (o.type === 'block') { const [w, h, d] = blockDims(p).map(v => Math.round(v * 1000)); put('b' + p.shape + w + h + d + (p.label || ''), `${p.label ? p.label + ' · ' : ''}${{ box: '형상 블록', cyl: '원통 블록', cylh: '원통 블록 (가로)' }[p.shape] || '형상 블록'} ${p.shape === 'cyl' ? `Ø${w} × ${h}` : p.shape === 'cylh' ? `${w} × Ø${h}` : `${w}×${d}×${h}`} mm`); }
+      else if (o.type === 'model') { const e = String(p.src).startsWith('cat:') && catEntry(p.src), E = window.FactoryEquip, nm = e ? e.c.label : E && String(p.src).startsWith('up:') ? E.label(p.src.slice(3)) : '모델'; put('m' + p.src, `설비 모델 · ${nm}`); }
       else put('f' + p.kind, p.kind === 'caster' ? '캐스터 (잠금)' : '레벨링 발');
+      if (o.type === 'profile') [p.cap0, p.cap1].forEach((on, i) => { if (on && !(p.ends || [])[i]) put('cap' + SEC(p).label, `엔드캡 · ${SEC(p).label}`); });
     }
     for (const o of doc.objects) {
       if (o.type !== 'profile' || (ids && !ids.includes(o.id))) continue; const p = P(o), A = p.axis === 'y' ? [0, 1, 0] : [1, 0, 0];
@@ -374,5 +431,61 @@
     return [...rows.values()];
   }
 
-  window.FactoryFrame = { SECTIONS, JOINTS, FRAME, isFrame, boxOf, extent, axesOf, touching, stretch, snap, overlaps, components, joints, poseOnHit, fitPlate, explode, bom, footH, STEP };
+  // ---------------------------------------------------------------- design check: what a builder should look at before the frame is ordered
+  // returns [{ kind, level ('error' | 'warn' | 'info'), text, ids, at: [x, y, z], fix? }]; profile ends come from params.ends (kept by the builder)
+  const UP = new V3(0, 1, 0);
+  // the 3 mm slab just past a profile end (i: 0 start, 1 end) and whether any other part touches it
+  function endSlab(o, i) {
+    const p = P(o), A = boxOf(o), k = p.axis === 'y' ? 1 : 0, d = A.ax[k], n = d.clone().multiplyScalar(i ? 1 : -1);
+    const fc = new V3(o.x, o.y || 0, o.z).addScaledVector(d, i ? p.length : 0), h = A.h.slice(); h[k] = 0.0015;
+    return { fc, n, B: { c: fc.clone().addScaledVector(n, 0.0015), ax: A.ax, h } };
+  }
+  const endCovered = (doc, o, i) => { const { B } = endSlab(o, i); return doc.objects.some(q => isFrame(q) && q.id !== o.id && (() => { const Q = boxOf(q); return near(B, Q, 0.004) && seps(B, Q).every(v => v < 0.002) && seps(Q, B).every(v => v < 0.002); })()); };
+  function check(doc) {
+    const parts = doc.objects.filter(isFrame), boxes = new Map(parts.map(o => [o.id, boxOf(o)])), out = [], seen = new Set(), at = v => [v.x, v.y, v.z];
+    for (const o of parts) { // assemblies that do not reach the floor
+      if (seen.has(o.id)) continue; const ids = components(doc, o.id); ids.forEach(i => seen.add(i));
+      let low = Infinity, lowB = null; for (const i of ids) { const B = boxes.get(i), y = B.c.y - extent(B, UP); if (y < low) { low = y; lowB = B; } }
+      if (low > 0.003) out.push({ kind: 'float', level: 'error', ids, at: at(lowB.c), text: `${ids.length > 1 ? `조립품 (부품 ${ids.length}개)` : o.name}이(가) 바닥에서 ${Math.round(low * 1000)} mm 떠 있습니다 (받쳐 주는 부품 없음)` });
+    }
+    for (let a = 0; a < parts.length; a++) for (let b = a + 1; b < parts.length; b++) { // parts inside each other
+      const A = boxes.get(parts[a].id), B = boxes.get(parts[b].id);
+      if (near(A, B, 0) && seps(A, B).every(s => s < -0.002) && seps(B, A).every(s => s < -0.002)) out.push({ kind: 'overlap', level: 'error', ids: [parts[a].id, parts[b].id], at: at(A.c.clone().add(B.c).multiplyScalar(0.5)), text: `${parts[a].name}와(과) ${parts[b].name}이(가) 겹칩니다` });
+    }
+    for (const o of parts) { // profile ends: open (no cap) or standing on the floor without a foot
+      if (o.type !== 'profile') continue; const p = P(o);
+      [0, 1].forEach(i => {
+        if ((p.ends || [])[i]) return; const { fc, n } = endSlab(o, i);
+        if (fc.y < 0.002 && n.y < -0.9) { if (!endCovered(doc, o, i)) out.push({ kind: 'floor', level: 'info', ids: [o.id], at: at(fc), text: `${o.name}: 바닥에 바로 서 있습니다 (레벨링 발이나 베이스 플레이트 권장)` }); return; }
+        if (p['cap' + i] || endCovered(doc, o, i)) return;
+        out.push({ kind: 'open', level: 'warn', ids: [o.id], at: at(fc), end: i, text: `${o.name}: ${i ? '끝' : '시작'} 끝단이 열려 있습니다 (엔드캡 없음)`, fix: 'cap' });
+      });
+    }
+    return out;
+  }
+  // T-slot slide: the directions a single part can slide while it stays on the parts holding it (a beam along the posts its ends meet,
+  // a block over the plate it stands on) and how far. Returns { axes: [{ k: local axis 0..2, d: world unit vector, lo, hi }] } or null when it touches nothing
+  const par = (a, b) => Math.abs(Math.abs(a.dot(b)) - 1) < 1e-3;
+  function slide(doc, o) {
+    const M = boxOf(o), p = P(o), byId = id => doc.objects.find(q => q.id === id);
+    const held = o.type === 'profile' ? (p.ends || []).filter(Boolean).map(e => byId(e.to)).filter(Boolean) : [];
+    const others = held.length ? held : doc.objects.filter(q => isFrame(q) && q.id !== o.id && q.type !== 'foot' && touching(M, boxOf(q)));
+    if (!others.length) return null;
+    let dirs = null; const lim = [];
+    for (const q of others) {
+      const B = boxOf(q), j = seps(M, B).findIndex(v => v > -0.002); if (j < 0) continue; // the contact face is normal to B's axis j
+      const allow = q.type === 'profile' ? (() => { const d = B.ax[P(q).axis === 'y' ? 1 : 0]; return Math.abs(d.dot(B.ax[j])) < 0.1 ? [d] : []; })() : B.ax.filter((e, k) => k !== j);
+      dirs = dirs === null ? allow : dirs.filter(d => allow.some(e => par(d, e))); lim.push(B);
+    }
+    if (!dirs || !dirs.length) return { axes: [] };
+    const axes = dirs.map(dw => {
+      const k = M.ax.findIndex(a => par(a, dw)); if (k < 0) return null; const d = M.ax[k]; let lo = -Infinity, hi = Infinity;
+      for (const B of lim) { const a = M.c.clone().sub(B.c).dot(d), hm = extent(M, d), hb = extent(B, d), room = hb >= hm ? hb - hm : hb + hm - 0.002; lo = Math.max(lo, -room - a); hi = Math.min(hi, room - a); }
+      return { k, d: d.clone(), lo: Math.min(0, lo), hi: Math.max(0, hi) };
+    }).filter(Boolean);
+    return { axes };
+  }
+
+  window.FactoryFrame = { SECTIONS, JOINTS, FRAME, FINISH, isFrame, boxOf, extent, axesOf, touching, stretch, snap, overlaps, components, joints, poseOnHit, fitPlate, explode, bom, footH, check, slide, blockDims,
+    get STEP() { return STEP; }, setStep: v => { STEP = Math.max(0.001, +v || 0.005); } };
 })();

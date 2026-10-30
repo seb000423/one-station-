@@ -29,13 +29,13 @@
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
   const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델', kpi: 'KPI 패널' };
-  const MACHINES = ['ufmodel']; // js/factory-unity.js: equipment comes only from the Asset Store models (모델 tab)
+  const MACHINES = ['ufmodel', 'mine']; // js/factory-unity.js: Asset Store models; js/factory-equip.js: our own equipment assets (내 설비)
   // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
   // chargers, process machines) is dropped when a saved layout is opened
   // conveyor, rack, tote, fence and roof are back as real-scale parametric parts (js/factory-kit.js)
-  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi', 'profile', 'plate', 'foot'];
+  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi', 'profile', 'plate', 'foot', 'block', 'model', 'mine'];
   // machine-building parts (js/factory-frame.js): profiles, plates, feet; a 프레임 세트 is placed as those parts
-  Object.assign(TYPE_LABEL, { profile: '알루미늄 프로파일', plate: '판 · 가드', foot: '발 · 캐스터', frameset: '프레임 세트', mine: '내 설비' });
+  Object.assign(TYPE_LABEL, { profile: '알루미늄 프로파일', plate: '판 · 가드', foot: '발 · 캐스터', frameset: '프레임 세트', mine: '내 설비', block: '형상 블록', model: '설비 모델' });
   const FR = () => window.FactoryFrame, isFrame = o => !!(window.FactoryFrame && FactoryFrame.isFrame(o));
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'bench', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
@@ -96,7 +96,12 @@
     walkroute: [],
     profile: [['section', '단면 (mm)', 'select', [['2020', '20×20'], ['2040', '20×40'], ['3030', '30×30'], ['3060', '30×60'], ['4040', '40×40'], ['8040', '40×80'], ['8080', '80×80'], ['4545', '45×45'], ['9045', '45×90'], ['9090', '90×90']]], ['length', '길이 (m, 5 mm 단위)', 0.005, 0.02, 12], ['axis', '방향', 'select', [['y', '세로 (기둥)'], ['x', '가로 (보)']]], ['finish', '표면', 'select', [['clear', '은색 아노다이징'], ['black', '블랙 아노다이징']]],
       ['joint0', '접합품 · 시작 끝', 'select', [['bracket', '코너 브래킷 (L)'], ['gusset', '거셋 브래킷 (대형)'], ['anchor', '앵커 체결 (숨김)'], ['cube', '큐브 코너 커넥터'], ['plate', '조인트 플레이트 (L · T)']], null, p => !!(p.ends && p.ends[0])], ['joint1', '접합품 · 끝 끝', 'select', [['bracket', '코너 브래킷 (L)'], ['gusset', '거셋 브래킷 (대형)'], ['anchor', '앵커 체결 (숨김)'], ['cube', '큐브 코너 커넥터'], ['plate', '조인트 플레이트 (L · T)']], null, p => !!(p.ends && p.ends[1])],
-      ['leg', '브래킷 다리 (m, 0 = 계열 기본)', 0.005, 0, 0.3, p => (p.ends || []).some(Boolean)]],
+      ['leg', '브래킷 다리 (m, 0 = 계열 기본)', 0.005, 0, 0.3, p => (p.ends || []).some(Boolean)],
+      ['cap0', '엔드캡 · 시작 끝', 'check', null, null, p => !(p.ends && p.ends[0])], ['cap1', '엔드캡 · 끝 끝', 'check', null, null, p => !(p.ends && p.ends[1])]],
+    block: [['shape', '형상', 'select', [['box', '박스'], ['cyl', '원통 (세로)'], ['cylh', '원통 (가로)']]], ['w', '가로 · 지름 (m)', 0.005, 0.005, 20], ['h', '높이 (m)', 0.005, 0.005, 20], ['d', '세로 (m)', 0.005, 0.005, 20, p => p.shape === 'box'],
+      ['color', '색', 'color'], ['finish', '표면', 'select', [['paint', '도장'], ['metal', '금속'], ['plastic', '플라스틱'], ['rubber', '고무'], ['glass', '유리 · 투명']]], ['label', '이름표 (자재 목록)', 'text']],
+    model: [['w', '가로 (m)', 0.005, 0.01, 50], ['h', '높이 (m)', 0.005, 0.01, 50], ['d', '세로 (m)', 0.005, 0.01, 50], ['keep', '비율 유지', 'check']],
+    mine: [['kind', '설비 종류', 'select', Object.entries({ process: '가공', assembly: '조립', inspect: '검사', transfer: '이송 · 핸들링', storage: '보관 · 버퍼', other: '기타' })], ['ct', '사이클 타임 (s)', 0.5, 0, 3600], ['note', '설명', 'text']],
     plate: [['kind', '종류', 'select', [['alu', '알루미늄 판'], ['guard', '투명 가드 (PC)'], ['mesh', '메시 가드']]], ['orient', '방향', 'select', [['h', '눕힘 (상판 · 선반)'], ['v', '세움 (가드 · 패널)']]], ['w', '가로 (m)', 0.005, 0.05, 6], ['d', '세로 · 높이 (m)', 0.005, 0.05, 6], ['t', '두께 (m)', 0.001, 0.002, 0.05]],
     foot: [['kind', '종류', 'select', [['level', '레벨링 발'], ['caster', '캐스터 (잠금, 125 mm)']]], ['h', '높이 (m)', 0.005, 0.05, 0.2, p => p.kind !== 'caster']]
   };
@@ -164,7 +169,7 @@
     return motionCache;
   }
   let shellEmpty = null;
-  function store() { if (shellEmpty !== null && shellEmpty !== !doc.objects.length) buildShell(); syncActive(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
+  function store() { if (shellEmpty !== null && shellEmpty !== !doc.objects.length) buildShell(); syncActive(); scheduleCheck(); try { localStorage.setItem(STORE, JSON.stringify(doc)); } catch (e) {} }
   // a document with only the supported types; returns how many objects were dropped
   function sanitize(d) {
     const U = window.FactoryUnity, known = o => o.type !== 'ufmodel' || !U || !(o.params || {}).model || (o.params.items && o.params.items.length) || U.CATALOG[(U.ALIAS || {})[o.params.model] || o.params.model]; // models removed from the catalog (e.g. the Unity 2.3 / 4.6 m belts) are dropped
@@ -312,7 +317,8 @@
         if (helper) helper.update(); refreshTransformFields();
         const o = selectedId && byId(selectedId), g = o && !innerSel && (asm ? asm.pivot : groupOf(o.id));
         if (g && o.type === 'conveyor') { const sn = FF().snap(doc, Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); if (sn) { g.position.set(sn.x, 0, sn.z); g.rotation.set(0, sn.rot, 0); if (helper) helper.update(); } snapNote = sn ? sn.text : ''; }
-        if (g && !asm && isFrame(o)) { const sn = FR().snap(doc, Object.assign({}, o, { x: g.position.x, y: Math.max(0, g.position.y), z: g.position.z, rot: g.rotation.y })); if (sn) g.position.set(sn.x, sn.y, sn.z); else if (g.position.y < 0) g.position.y = 0; snapNote = sn ? sn.text : ''; if (helper) helper.update(); if (sn) note(sn.text); }
+        if (g && !asm && isFrame(o) && slideState && tc.mode === 'translate') { const B = slideState.base, v = g.position.clone().sub(B), np = B.clone(); for (const a of slideState.axes) np.addScaledVector(a.d, Math.min(a.hi, Math.max(a.lo, v.dot(a.d)))); g.position.copy(np); snapNote = ''; if (helper) helper.update(); }
+        else if (g && !asm && isFrame(o)) { const sn = FR().snap(doc, Object.assign({}, o, { x: g.position.x, y: Math.max(0, g.position.y), z: g.position.z, rot: g.rotation.y })); if (sn) g.position.set(sn.x, sn.y, sn.z); else if (g.position.y < 0) g.position.y = 0; snapNote = sn ? sn.text : ''; if (helper) helper.update(); if (sn) note(sn.text); }
         if (asm) { const why = asmBlocked(); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
         else if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, y: g.position.y, z: g.position.z, rot: g.rotation.y })); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
       });
@@ -338,7 +344,13 @@
   // a single frame part moves in 5 mm steps (machine scale) and also up / down; assemblies and everything else on the 0.5 m layout grid
   const partSel = () => !asm && isFrame(selectedId && byId(selectedId));
   function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? (partSel() ? FR().STEP : GRID) : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(partSel() ? 90 : 15) : null); }
-  function setMode(m) { if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate || partSel(); if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); } }
+  function setMode(m) {
+    if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate || partSel(); tc.setSpace('world');
+    if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); }
+    else if (slideState && !rotate) { const has = k => slideState.axes.some(a => a.k === k); tc.setSpace('local'); tc.showX = has(0); tc.showY = has(1); tc.showZ = has(2); } // T-slot slide: only the slot directions
+  }
+  // T-slot slide (on by default): a part that hangs on others moves only along their slots and stays on them (FactoryFrame.slide)
+  let slideOn = true, slideInfo = null, slideState = null;
   /* ---------- profile length by dragging an end handle (5 mm steps); small parts held only by that end go along ---------- */
   let resizing = null;
   const profAxis = o => FR().axesOf(o.rot)[(o.params || {}).axis === 'y' ? 1 : 0];
@@ -394,7 +406,7 @@
     pv.updateMatrixWorld(true); for (const c of [...pv.children]) world.attach(c); if (pv.parent) pv.parent.remove(pv);
   }
   function select(id, inner, whole) {
-    const s = S(); selectedId = id || null; innerSel = null;
+    const s = S(); selectedId = id || null; innerSel = null; slideInfo = slideState = null;
     if (helper) { s.scene.remove(helper); helper = null; }
     if (tc) tc.detach();
     releaseAsm();
@@ -411,6 +423,7 @@
       if (inner && selectedId === activeId && INNER[inner]) {
         innerSel = inner; const L = s.layoutParams(); s.CELL.add(proxy); proxy.position.set(...INNER[inner].at(L)); tc.attach(proxy);
       } else tc.attach(g);
+      if (partSel()) { slideInfo = FR().slide(doc, byId(selectedId)); if (slideOn && slideInfo && slideInfo.axes.length) slideState = { base: g.position.clone(), axes: slideInfo.axes }; }
       setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate'); setSnap(snap);
       helper = selHelper(g); s.scene.add(helper);
       addHandles();
@@ -552,6 +565,7 @@
   // a palette entry is a type, or 'ufmodel:<catalog key>' for a model tile (type + model preset)
   const splitPlace = s => { const [type, model, variant] = s.split(':'); return { type, model, variant }; };
   function startPlacing(place) {
+    if (meas) measureToggle(false);
     if (PATHS.includes(place)) return startDrawing(null, place);
     const { type, model, variant } = splitPlace(place);
     if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
@@ -580,11 +594,17 @@
     const { type, model, variant } = splitPlace(place);
     const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
     if (type === 'frameset') { Object.assign(c.params, framesetParams); return c; }
-    if (type === 'mine') { const m = mineList()[+model]; c.params = { parts: m ? clone(m.parts) : [] }; c.name = m ? m.name : '내 설비'; return c; }
+    if (type === 'mine') { const m = mineList()[+model]; c.params = { parts: m ? clone(m.parts) : [], kind: (m && m.kind) || 'process', ct: (m && m.ct) || 0, note: (m && m.note) || '' }; c.name = m ? m.name : '내 설비'; c.unit = variant === 'unit'; return c; } // unit: one object (설비 tab); otherwise its parts
     if (FR() && FR().FRAME.includes(type)) { // profile:4545:y, plate:guard:v, foot:caster
       if (type === 'profile') Object.assign(c.params, model ? { section: model } : {}, variant ? { axis: variant } : {});
       if (type === 'plate') { if (model) c.params.kind = model; if (variant) c.params.orient = variant; if (variant === 'v') Object.assign(c.params, { w: 0.6, d: 0.8, t: model === 'alu' ? 0.004 : 0.004 }); }
       if (type === 'foot' && model) c.params.kind = model;
+      if (type === 'block' && model) Object.assign(c.params, model === 'panel' ? { shape: 'box', w: 0.6, h: 0.01, d: 0.4 } : model === 'cyl' ? { shape: 'cyl', w: 0.3, h: 0.5 } : model === 'cylh' ? { shape: 'cylh', w: 0.6, h: 0.12 } : { shape: 'box' });
+      if (type === 'model' && model) { // model:cat-<catalogue key> or model:up-<uploaded file id>; starts at its real size
+        const up = model.startsWith('up-'), key = model.slice(up ? 3 : 4), U = window.FactoryUnity, f = up && window.FactoryEquip && FactoryEquip.files().find(x => x.id === key), cc = !up && U && U.CATALOG[key], n = up ? f && f.n : cc && cc.size;
+        c.params.src = (up ? 'up:' : 'cat:') + key; if (n) Object.assign(c.params, { w: n[0], h: n[1], d: n[2], n: up ? n : null });
+        c.name = up ? (f ? f.name : '내 모델') : cc ? cc.label : '설비 모델';
+      }
       c.rot = framePlaceRot;
       const hit = p.hit || { obj: null, point: new THREE.Vector3(p.x, 0, p.z), normal: new THREE.Vector3(0, 1, 0) };
       const pose = FR().poseOnHit(doc, c, hit); Object.assign(c, { x: pose.x, y: pose.y, z: pose.z, rot: pose.rot, snapped: pose.snapped, lift: pose.lift, liftOf: pose.target });
@@ -611,11 +631,11 @@
   }
   function placeAt(place, p) {
     const cand = candidate(place, p), type = cand.type, why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
-    if (type === 'frameset' || type === 'mine') return placeFrameset(cand);
+    if (type === 'frameset' || (type === 'mine' && !cand.unit)) return placeFrameset(cand);
     pushUndo();
     if (isFrame(cand)) {
       if (cand.lift > 0 && cand.liftOf) for (const id of FR().components(doc, cand.liftOf)) { const q = byId(id); q.y = r2k((q.y || 0) + cand.lift); placeObjectGroup(q); }
-      const o = { id: newId(), type, name: nextName(type), x: cand.x, y: cand.y, z: cand.z, rot: cand.rot, params: cand.params };
+      const o = { id: newId(), type, name: nextName(type, type === 'model' ? cand.name : undefined), x: cand.x, y: cand.y, z: cand.z, rot: cand.rot, params: cand.params };
       doc.objects.push(o); buildView(o); frameRefresh(); select(o.id); store();
       return note(`${o.name}을(를) 놓았습니다${cand.snapped ? ' · ' + cand.snapped : ''}${cand.lift > 0 ? ` · 프레임을 ${Math.round(cand.lift * 1000)} mm 올렸습니다` : ''}`);
     }
@@ -633,7 +653,7 @@
   function frameRefresh() {
     if (!FR()) return; if (asm) select(null); const J = FR().joints(doc);
     for (const [id, ends] of J) {
-      const o = byId(id), want = ends.map(e => (e ? Object.assign({ t: e.t, depth: e.depth, room: e.room }, e.sides ? { sides: e.sides } : {}) : null)), had = JSON.stringify(((o.params || {}).ends) || [null, null]);
+      const o = byId(id), want = ends.map(e => (e ? Object.assign({ t: e.t, to: e.to, depth: e.depth, room: e.room }, e.sides ? { sides: e.sides } : {}) : null)), had = JSON.stringify(((o.params || {}).ends) || [null, null]);
       if (had !== JSON.stringify(want)) { o.params = Object.assign({}, o.params, { ends: want }); buildView(o); placeObjectGroup(o); }
     }
   }
@@ -664,6 +684,64 @@
       wrap.remove(); if (mode === 'ok') { framesetParams = p; go(); }
     });
   }
+  /* ---------- design check (FactoryFrame.check): floating assemblies, overlaps, open profile ends ---------- */
+  let checkT = null, checkList = [];
+  function scheduleCheck() { clearTimeout(checkT); checkT = setTimeout(renderCheck, 250); }
+  function flashMark(at) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.035, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.85, depthTest: false }));
+    m.renderOrder = 14; m.position.set(...at); S().scene.add(m); setTimeout(() => S().scene.remove(m), 2500);
+  }
+  function renderCheck() {
+    const box = $('#fbCheck'), cnt = $('#fbCheckCount'); if (!box || !FR() || !doc) return;
+    const n = doc.objects.filter(isFrame).length;
+    if (!n) { checkList = []; cnt.textContent = ''; cnt.className = ''; box.innerHTML = '<span class="hint">프레임 부품을 놓으면 여기서 떠 있는 부품, 겹침, 열린 끝단을 검사합니다</span>'; return; }
+    const L = checkList = FR().check(doc), err = L.filter(i => i.level === 'error').length, warn = L.filter(i => i.level === 'warn').length, open = L.filter(i => i.fix === 'cap');
+    cnt.textContent = err + warn ? `${err ? `오류 ${err}` : ''}${err && warn ? ' · ' : ''}${warn ? `확인 ${warn}` : ''}` : L.length ? `참고 ${L.length}` : '통과'; cnt.className = err ? 'bad' : warn ? 'warn' : 'ok';
+    box.innerHTML = (open.length ? `<div class="acts"><button type="button" data-fixall>열린 끝단 ${open.length}곳에 엔드캡 모두 씌우기</button></div>` : '')
+      + (L.length ? L.slice(0, 80).map((it, i) => `<div class="ci ${it.level}" data-ci="${i}" title="누르면 그 부품을 고르고 위치를 보여 줍니다"><span>${esc(it.text)}</span>${it.fix ? `<button type="button" data-fix="${i}">엔드캡</button>` : ''}</div>`).join('') : '')
+      + (err + warn ? '' : `<span class="ok">${L.length ? '' : '문제 없음 · '}프레임 부품 ${n}개 검사함</span>`);
+    const cap = it => { const o = byId(it.ids[0]); if (!o) return; o.params = Object.assign({}, o.params, { ['cap' + it.end]: true }); buildView(o); placeObjectGroup(o); };
+    box.querySelectorAll('[data-ci]').forEach(r => r.onclick = e => { if (e.target.closest('button')) return; const it = L[+r.dataset.ci]; if (!byId(it.ids[0])) return; select(it.ids[0]); focusObject(it.ids[0]); flashMark(it.at); });
+    box.querySelectorAll('[data-fix]').forEach(b => b.onclick = () => { pushUndo(); const it = L[+b.dataset.fix]; cap(it); store(); select(it.ids[0]); note(`${byId(it.ids[0]).name}에 엔드캡을 씌웠습니다`); });
+    const all = box.querySelector('[data-fixall]'); if (all) all.onclick = () => { pushUndo(); open.forEach(cap); store(); if (selectedId) select(selectedId, null, !!asm); note(`엔드캡 ${open.length}개를 씌웠습니다 (자재 목록에 추가됨)`); };
+  }
+  /* ---------- measuring: two clicks, snapping to a frame part's corners, edge middles and face centres ---------- */
+  let meas = null; // { pts: [{ p, n }], group, label, mid }
+  const toScreen = v => { const s = S(), r = s.renderer.domElement.getBoundingClientRect(), q = v.clone().project(s.camera); return { x: (q.x + 1) / 2 * r.width, y: (1 - q.y) / 2 * r.height, front: q.z < 1 }; };
+  function measureToggle(on = !meas) {
+    if (meas) { S().scene.remove(meas.group); meas.label.remove(); meas = null; }
+    const b = bar && bar.querySelector('[data-t=measure]'); if (b) b.classList.toggle('on', !!on);
+    if (!on) return;
+    cancelPlacing(); const g = new THREE.Group(); g.name = 'measure'; S().scene.add(g);
+    const label = document.createElement('div'); label.id = 'fbMeasure'; label.hidden = true; $('.view').appendChild(label);
+    meas = { pts: [], group: g, label, mid: null }; note('측정: 첫 점과 둘째 점을 클릭하세요. 프레임 부품의 모서리 · 면 가운데에 붙습니다 (M 또는 Esc로 끝)');
+  }
+  function measurePick(e) {
+    const rc = rayAt(e), meshes = []; for (const g of views.values()) g.traverse(m => { let ok = m.isMesh && m.name !== 'Resize_Pad'; for (let x = m; ok && x; x = x.parent) if (!x.visible) ok = false; if (ok) meshes.push(m); });
+    const h = rc.intersectObjects(meshes, false)[0], mouse = { x: e.clientX - S().renderer.domElement.getBoundingClientRect().left, y: e.clientY - S().renderer.domElement.getBoundingClientRect().top };
+    let p = null, n = null, snapped = '';
+    if (h) {
+      p = h.point.clone(); n = h.face ? h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize() : null;
+      let k = h.object; while (k && !(k.userData && k.userData.objId)) k = k.parent; const o = k && byId(k.userData.objId);
+      if (o && isFrame(o)) { // nearest box feature on screen within 14 px
+        const B = FR().boxOf(o); let best = 14;
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+          if (!a && !b && !c) continue; const f = B.c.clone().addScaledVector(B.ax[0], a * B.h[0]).addScaledVector(B.ax[1], b * B.h[1]).addScaledVector(B.ax[2], c * B.h[2]), sp = toScreen(f), dd = Math.hypot(sp.x - mouse.x, sp.y - mouse.y);
+          if (dd < best) { best = dd; p = f; snapped = [a, b, c].filter(Boolean).length === 3 ? '모서리 점' : [a, b, c].filter(Boolean).length === 2 ? '모서리 가운데' : '면 가운데'; }
+        }
+      }
+    } else { p = new THREE.Vector3(); if (!rc.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p)) return; n = new THREE.Vector3(0, 1, 0); }
+    if (meas.pts.length >= 2) { meas.pts = []; meas.group.clear(); meas.label.hidden = true; }
+    meas.pts.push({ p, n });
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 16, 12), new THREE.MeshBasicMaterial({ color: 0xeec539, depthTest: false })); dot.renderOrder = 15; dot.position.copy(p); meas.group.add(dot);
+    if (meas.pts.length < 2) return note(`첫 점${snapped ? ` (${snapped})` : ''} · 둘째 점을 클릭하세요`);
+    const [A, B] = meas.pts, d = B.p.clone().sub(A.p), mm = v => (Math.round(v * 10000) / 10).toLocaleString('ko-KR');
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([A.p, B.p]), new THREE.LineBasicMaterial({ color: 0xeec539, depthTest: false })); line.renderOrder = 15; meas.group.add(line);
+    const gap = A.n && B.n && Math.abs(A.n.dot(B.n)) > 0.999 && Math.abs(d.dot(A.n)) > 0.0005 ? Math.abs(d.dot(A.n)) : null; // parallel faces: their distance
+    meas.mid = A.p.clone().add(B.p).multiplyScalar(0.5);
+    meas.label.innerHTML = `<b>${mm(d.length())} mm</b><span>X ${mm(Math.abs(d.x))} · Y ${mm(Math.abs(d.z))} · 높이 ${mm(Math.abs(d.y))}${gap !== null ? ` · 면 간격 ${mm(gap)}` : ''}</span>`; meas.label.hidden = false;
+  }
+  function measureTick() { if (!meas || !meas.mid || meas.label.hidden) return; const sp = toScreen(meas.mid); meas.label.style.transform = `translate(${sp.x}px, ${sp.y}px) translate(-50%, -130%)`; meas.label.style.opacity = sp.front ? 1 : 0; }
   /* ---------- conveyors: links, live items ---------- */
   const FF = () => window.FactoryFlow;
   let snapNote = '', flowSim = null, flowKey = '', flowLayer = null, itemLayer = null;
@@ -748,7 +826,7 @@
   }
   // where o may not stand: overlapping another object's size / work area, or outside the factory
   function blockedBy(o) {
-    if (o.type === 'frameset' || o.type === 'mine') { const parts = framesetParts(o), tmp = { factory: doc.factory, objects: doc.objects.concat(parts) }; for (const q of parts) { const hit = FR().overlaps(tmp, q, new Set(parts.map(x => x.id))); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; } return ''; }
+    if (o.type === 'frameset' || (o.type === 'mine' && o.unit === false)) { const parts = framesetParts(o), tmp = { factory: doc.factory, objects: doc.objects.concat(parts) }; for (const q of parts) { const hit = FR().overlaps(tmp, q, new Set(parts.map(x => x.id))); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; } return ''; }
     if (isFrame(o)) { if (FM().outside(doc, o)) return '공장 밖으로 나갑니다'; const hit = FR().overlaps(doc, o, asm ? new Set(asm.ids) : null); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : ''; }
     if (FM().outside(doc, o) && !FM().backdrop(o)) return '공장 밖으로 나갑니다'; // a building shell grows the floor instead (fitFloor)
     const hit = FM().collisions(doc, o); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : '';
@@ -847,7 +925,12 @@
     plate: '<path d="M3 15 9 9h12l-6 6z"/><path d="M3 15v2l12 0 6-6V9"/>',
     foot: '<path d="M12 3v12M9 7h6M6 21h12l-2-4H8z"/>',
     frameset: '<path d="M5 21V8M19 21V8M5 8h14M5 17h14M3 8l4-4h14l-2 4M19 4v0"/><path d="M21 4v13l-2 4"/>',
-    mine: '<path d="M5 21V9M19 21V9M5 9h14M5 16h14"/><path d="m12 2 1.5 3 3.3.5-2.4 2.3.6 3.2-3-1.6-3 1.6.6-3.2L7.2 5.5l3.3-.5z"/>'
+    mine: '<path d="M5 21V9M19 21V9M5 9h14M5 16h14"/><path d="m12 2 1.5 3 3.3.5-2.4 2.3.6 3.2-3-1.6-3 1.6.6-3.2L7.2 5.5l3.3-.5z"/>',
+    block: '<path d="M4 8l8-4 8 4v9l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v9"/>',
+    model: '<path d="M5 21h8M9 21v-5l4-6 5 2M13 10l-2-4"/><circle cx="18" cy="12" r="1.5"/><path d="M3 21h18"/>',
+    upload: '<path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/>',
+    measure: '<path d="M3 17 17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
+    check: '<path d="M4 12l5 5L20 6"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   // palette: four tabs (건물 / 설비 / 동선·구역 / 이동체); each opens on a grid of category icons, a category opens its part
@@ -871,7 +954,7 @@
     amr: ICON.amr, agv: '<rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V5h12v6M6 8h12"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/>',
     forklift: '<path d="M4 17V8h6l3 5v4M17 4v14M17 18h4M10 8V5"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/>', worker: ICON.worker, cart: '<path d="M4 6h3l2 9h10l2-7H8"/><circle cx="10" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/>'
   };
-  CI.mine = ICON.mine;
+  CI.mine = ICON.mine; CI.block = ICON.block; CI.model = ICON.model; CI.upload = ICON.upload;
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
@@ -906,19 +989,60 @@
   PAL.frame = [['frameset', '프레임 세트', [['frameset', '프레임 세트 (가로 · 세로 · 높이)', 'type']]],
     ['profile', '알루미늄 프로파일', [['profile:4545:y', '45×45 기둥 (세로)', 'type'], ['profile:4545:x', '45×45 보 (가로)', 'type'], ['profile:4040:y', '40×40 기둥 (세로)', 'type'], ['profile:4040:x', '40×40 보 (가로)', 'type'], ['profile:8040:x', '40×80 보 (가로)', 'type'], ['profile:8080:y', '80×80 기둥 (세로)', 'type'], ['profile:9045:x', '45×90 보 (가로)', 'type'], ['profile:9090:y', '90×90 기둥 (세로)', 'type'], ['profile:3030:y', '30×30 기둥 (세로)', 'type'], ['profile:3030:x', '30×30 보 (가로)', 'type'], ['profile:2020:x', '20×20 보 (가로)', 'type']]],
     ['plate', '판 · 가드', [['plate:alu:h', '알루미늄 상판', 'type'], ['plate:guard:v', '투명 가드 패널', 'type'], ['plate:mesh:v', '메시 가드 패널', 'type'], ['plate:alu:v', '알루미늄 측판', 'type']]],
-    ['foot', '발 · 캐스터', [['foot:level', '레벨링 발', 'type'], ['foot:caster', '캐스터 (잠금)', 'type']]], ['mine', '내 설비', []]];
+    ['foot', '발 · 캐스터', [['foot:level', '레벨링 발', 'type'], ['foot:caster', '캐스터 (잠금)', 'type']]],
+    ['block', '형상 블록', [['block:box', '박스 (하우징 · 커버)', 'type'], ['block:cyl', '원통 (탱크 · 모터)', 'type'], ['block:cylh', '원통 가로 (롤러 · 축)', 'type'], ['block:panel', '패널 (얇은 판)', 'type']]],
+    ['model', '설비 모델 (장착)', []], ['upload', '내 파일 (GLB · STL)', []], ['mine', '내 설비', []]];
+  // 설비 tab: saved equipment assets are placed as one object (it can be taken apart again for editing)
+  PAL.equip.push(['mine', '내 설비 에셋', []]);
   // 내 설비: assemblies saved from the assembly card, in this browser (parts relative to the assembly's floor centre)
   const MINE = 'one-station-frame-mine';
   const mineList = () => { try { return JSON.parse(localStorage.getItem(MINE) || '[]'); } catch (e) { return []; } };
   const mineSave = L => { try { localStorage.setItem(MINE, JSON.stringify(L)); return true; } catch (e) { return false; } };
+  const pickFile = (accept, go) => { const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.onchange = () => { if (i.files[0]) go(i.files[0]); }; i.click(); };
+  // right-click on a saved asset: export as a file, rename, delete
+  function assetMenu(e, i, done) {
+    const L = mineList(), a = L[i]; if (!a) return; document.querySelectorAll('.fbMenu').forEach(m => m.remove());
+    const m = document.createElement('div'); m.className = 'fbMenu card'; m.style.left = e.clientX + 'px'; m.style.top = e.clientY + 'px';
+    m.innerHTML = `<b>${esc(a.name)}</b><button type="button" data-m="export">파일로 내보내기</button><button type="button" data-m="rename">이름 바꾸기</button><button type="button" data-m="del" class="danger">삭제</button>`;
+    document.body.appendChild(m); const close = () => { m.remove(); removeEventListener('pointerdown', away, true); }, away = ev => { if (!m.contains(ev.target)) close(); };
+    setTimeout(() => addEventListener('pointerdown', away, true), 0);
+    m.onclick = ev => {
+      const k = ev.target.dataset.m; if (!k) return; close();
+      if (k === 'export') window.FactoryEquip.exportAsset(a).then(r => note(`"${a.name}"을(를) 파일로 내보냈습니다${r.files ? ` (올린 모델 ${r.files}개 포함)` : ''}${r.missing ? ` · 이 브라우저에 없는 모델 ${r.missing}개는 빠졌습니다` : ''}`, !!r.missing));
+      if (k === 'rename') { const n = (prompt('새 이름', a.name) || '').trim(); if (n) { a.name = n; mineSave(L); done(); } }
+      if (k === 'del' && confirm(`내 설비 "${a.name}"을(를) 지울까요? 이미 놓은 설비는 그대로 남습니다.`)) { L.splice(i, 1); mineSave(L); done(); note('내 설비에서 지웠습니다'); }
+    };
+  }
+  // save dialog for an equipment asset: name, kind, cycle time, note
+  function assetDialog(d, go) {
+    const wrap = document.createElement('div'), K = window.FactoryEquip.KINDS; wrap.className = 'fbModal';
+    wrap.innerHTML = `<div class="card fsCard"><h3>내 설비로 저장</h3><p class="hint">이 조립품을 설비 하나로 저장합니다. 설비 탭 › 내 설비 에셋에서 통째로 배치하고, 프레임 탭 › 내 설비에서 부품으로 풀어 놓을 수 있습니다. 이 브라우저에 저장되며, 오른쪽 클릭 › 파일로 내보내기로 다른 PC에 옮길 수 있습니다.</p>
+      <div class="fsGrid"><label style="grid-column:span 2">이름<input type="text" data-f="name" maxlength="40" value="${esc(d.name)}"></label><label>종류<select data-f="kind">${Object.entries(K).map(([k, l]) => `<option value="${k}" ${d.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>사이클 타임 (s)<input type="number" data-f="ct" min="0" max="3600" step="0.5" value="${d.ct || 0}"></label><label style="grid-column:span 2">설명<input type="text" data-f="note" maxlength="80" value="${esc(d.note || '')}"></label></div>
+      <div class="acts"><button type="button" data-c="cancel">취소</button><button type="button" data-c="ok" class="primary">저장</button></div></div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => {
+      const c = e.target.closest('[data-c]'), mode = c ? c.dataset.c : (e.target === wrap ? 'cancel' : null); if (!mode) return;
+      const v = k => wrap.querySelector(`[data-f=${k}]`).value, out = { name: v('name').trim(), kind: v('kind'), ct: Math.max(0, parseFloat(v('ct')) || 0), note: v('note').trim() };
+      if (mode === 'ok' && !out.name) return note('이름을 넣어 주세요', true);
+      wrap.remove(); if (mode === 'ok') go(out);
+    });
+  }
   const palCat = {}; // tab → open category (null = the icon grid)
   function paletteTiles(tab) {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
     const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group));
-    if (tab === 'frame') PAL.frame.find(c => c[0] === 'mine')[2] = mineList().map((m, i) => ['mine:' + i, `${m.name} (부품 ${m.parts.length}개)`, 'type']);
+    const E = window.FactoryEquip, mm = v => Math.round(v * 1000), cat = k => PAL[tab].find(c => c[0] === k);
+    if (tab === 'frame') {
+      cat('mine')[2] = [['act:import', '에셋 파일 가져오기 (.equip.json)', 'act']].concat(mineList().map((m, i) => ['mine:' + i, `${m.name} · 부품 ${m.parts.length}개 (부품으로 놓기)`, m.thumb || 'type']));
+      cat('model')[2] = Object.keys(U.CATALOG).filter(k => CATOF(k)[0] === 'equip').map(k => ['model:cat-' + k, U.CATALOG[k].label, U.thumb(k)]);
+      cat('upload')[2] = [['act:upload', 'GLB · STL 파일 올리기', 'act']].concat(E ? E.files().map(f => ['model:up-' + f.id, `${f.name}${f.n ? ` · ${f.n.map(mm).join('×')} mm` : ''}`, 'type']) : []);
+    }
+    if (tab === 'equip') cat('mine')[2] = [['act:import', '에셋 파일 가져오기 (.equip.json)', 'act']].concat(mineList().map((m, i) => ['mine:' + i + ':unit', `${m.name}${m.ct ? ` · C/T ${m.ct} s` : ''}`, m.thumb || 'type']));
     const moverThumb = { 'amr:e3_amr_deck_bot': 'e3_amr_deck_bot', 'amr:uw_palletrobot': 'uw_palletrobot', 'amr:e3_omron_agv': 'e3_omron_agv', 'amr:uw_forklift': 'uw_forklift' };
     const tileOf = ([place, label, img], g) => {
+      if (img === 'act') return `<button type="button" class="tile kit typ act" data-act="${place.slice(4)}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}"><i class="ic">${icon('upload')}</i><span>${esc(label)}</span></button>`;
       if (img === 'type') return `<button type="button" class="tile kit typ" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(place.split(':')[0])}</i><span>${esc(label)}</span></button>`;
       const src = img || (moverThumb[place] ? U.thumb(moverThumb[place]) : /^amr:/.test(place) ? '' : 'assets/models/thumbs/kit_' + place.split(':').slice(0, 2).join('_') + '.webp');
       return `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 놓은 뒤 오른쪽 설정에서 크기 · 동작을 바꿉니다">${src ? `<img src="${src}" alt="" loading="lazy" draggable="false">` : `<i class="ic">${icon('amr')}</i>`}<span>${esc(label)}</span></button>`;
@@ -1052,7 +1176,8 @@
   #fbPanel .fbBody{min-height:0;overflow:hidden}
   #fbPanel .fold{display:flex;flex-direction:column;min-height:0;border-top:1px solid var(--line);padding-top:4px}
   #fbPanel .fold.list{flex:1 1 0;min-height:90px}
-  #fbPanel .fold.safety,#fbPanel .fold.logi{flex:0 0 auto}
+  #fbPanel .fold.safety,#fbPanel .fold.logi,#fbPanel .fold.check{flex:0 0 auto}
+  #fbPanel .fold.check .foldBody{max-height:170px;overflow:auto;font-size:11.5px}
   #fbProps .jobs{display:grid;gap:3px;max-height:220px;overflow:auto}
   #fbProps .jobs .pt{grid-template-columns:18px 1fr 62px 46px 26px}
   #fbProps .jobs select,#fbProps .jobs input{min-width:0}
@@ -1096,6 +1221,15 @@
   #fbProps table.bom{width:100%;border-collapse:collapse;font-size:11.5px;margin:2px 0 6px}
   #fbProps table.bom td{padding:3px 4px;border-bottom:1px solid var(--line)}
   #fbProps table.bom td:last-child{text-align:right;font-family:var(--mono);color:var(--accent)}
+  #fbCheck .ci{display:flex;gap:6px;align-items:center;justify-content:space-between;padding:4px 6px;margin:2px 0;border-left:3px solid var(--line);font-size:11.5px;cursor:pointer;border-radius:3px}
+  #fbCheck .ci:hover{background:rgba(255,255,255,.05)} #fbCheck .ci.error{border-left-color:#ff3b30} #fbCheck .ci.warn{border-left-color:#EEC539} #fbCheck .ci.info{border-left-color:#7a8794;opacity:.85}
+  #fbCheck .ci button{flex:none;font-size:11px;padding:2px 6px} #fbCheckCount.bad{color:#ff6b61} #fbCheckCount.warn{color:#EEC539} #fbCheckCount.ok{color:#7dffb2}
+  #fbMeasure{position:absolute;left:0;top:0;z-index:30;pointer-events:none;background:rgba(10,10,12,.88);border:1px solid #EEC539;border-radius:4px;padding:4px 8px;font-size:12px;color:#fff;white-space:nowrap;display:flex;flex-direction:column;align-items:center}
+  #fbMeasure b{color:#EEC539;font-family:var(--mono);font-size:13px} #fbMeasure span{opacity:.8;font-size:11px}
+  #fbBar button.on{background:#EEC539;color:#111}
+  .fbMenu{position:fixed;z-index:60;display:flex;flex-direction:column;min-width:150px;padding:6px;gap:2px;background:#141418;border:1px solid var(--line);border-radius:6px}
+  .fbMenu b{font-size:12px;padding:2px 6px 6px;border-bottom:1px solid var(--line);margin-bottom:2px} .fbMenu button{text-align:left;font-size:12px;padding:5px 8px;background:none;border:0;color:inherit;cursor:pointer;border-radius:3px} .fbMenu button:hover{background:rgba(238,197,57,.15)} .fbMenu .danger{color:#ff6b61}
+  .pal .tile.act{border-style:dashed}
   .fbModal .acts button{display:inline-block;padding:7px 14px}
   @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:0 7px;font-size:11.5px} }`;
   let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'equip';
@@ -1113,7 +1247,9 @@
       <div class="grp"><span>파일</span><button type="button" data-t="new">새 공장</button><button type="button" data-t="load">불러오기</button><button type="button" data-t="example" title="예시 공정 테스트1을 엽니다. 지금 배치는 Ctrl+Z로 되돌릴 수 있습니다">예시 공정 · 테스트1</button><button type="button" data-t="clear" class="danger">전체 지우기</button></div>
       <div class="sep"></div>
       <div class="grp"><span>편집</span><button type="button" data-t="undo" title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>
-        <label title="켜면 이동 0.5 m 그리드(바닥 좌측 하단 원점 기준), 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.5m·15°</label></div>
+        <label title="켜면 이동 0.5 m 그리드(바닥 좌측 하단 원점 기준), 회전 15° 단위로 맞춰집니다. 끄면 자유롭게 움직입니다"><input type="checkbox" data-t="snap" checked> 스냅 0.5m·15°</label>
+        <select id="fbStep" title="프레임 부품의 이동 · 길이 · 붙이기 간격"><option value="1">부품 간격 1 mm</option><option value="5">부품 간격 5 mm</option><option value="10">부품 간격 10 mm</option><option value="20">부품 간격 20 mm</option><option value="45">부품 간격 45 mm</option></select>
+        <button type="button" data-t="measure" title="두 점을 클릭해 거리를 잽니다. 모서리 · 면 가운데에 붙습니다 (M, Esc로 끝)">측정</button></div>
       <div class="sep"></div>
       <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button><button type="button" data-v="roofs" title="지붕 (트러스 · 지붕판 · 조명)을 숨기거나 보입니다">지붕 숨기기</button><select id="fbLabelMode" title="화면 라벨: 구역 이름 · 재고 · 상태"><option value="all">라벨: 모두</option><option value="stock">라벨: 재고 · 상태</option><option value="name">라벨: 바닥 이름만</option><option value="off">라벨: 끄기</option></select>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
@@ -1137,6 +1273,7 @@
         <div class="tabs">${TABS.map(([k, l]) => `<button type="button" data-tab="${k}">${l}</button>`).join('')}</div>
         <div class="pal"></div>
         <section class="fold list"><button type="button" class="foldHead">객체 목록 <em id="fbCount"></em></button><div class="foldBody" id="fbTree"></div></section>
+        <section class="fold check"><button type="button" class="foldHead">설계 검사 <em id="fbCheckCount"></em></button><div class="foldBody" id="fbCheck"><span class="hint">프레임 부품을 놓으면 여기서 떠 있는 부품, 겹침, 열린 끝단을 검사합니다</span></div></section>
         <section class="fold safety"><button type="button" class="foldHead">안전 경고 <em id="fbSafetyCount"></em></button><div class="foldBody" id="fbSafety"><span class="ok">위험 없음</span></div></section>
         <section class="fold logi"><button type="button" class="foldHead">물류 현황 <em id="fbLogiCount"></em></button><div class="foldBody" id="fbLogi"><span class="hint">AMR이나 재고 관리 구역이 있으면 여기에 운반 횟수와 재고가 나옵니다</span></div></section>
       </div>`;
@@ -1151,10 +1288,16 @@
       if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); allG.hidden = !q; rest.forEach(e => { e.hidden = !!q; }); allG.querySelectorAll('.tile').forEach(t => { t.hidden = !!q && !t.dataset.q.includes(q); }); };
       pal.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => { palCat[tab] = b.dataset.cat; showTab(tab); });
       const back = pal.querySelector('[data-back]'); if (back) back.onclick = () => { palCat[tab] = null; showTab(tab); };
-      pal.querySelectorAll('[data-place^="mine:"]').forEach(b => b.addEventListener('contextmenu', e => { // right-click: delete a saved assembly
-        e.preventDefault(); const L = mineList(), i = +b.dataset.place.split(':')[1]; if (!L[i] || !confirm(`내 설비 "${L[i].name}"을(를) 지울까요?`)) return;
-        L.splice(i, 1); mineSave(L); showTab(tab); note('내 설비에서 지웠습니다');
+      pal.querySelectorAll('[data-place^="mine:"]').forEach(b => b.addEventListener('contextmenu', e => { e.preventDefault(); assetMenu(e, +b.dataset.place.split(':')[1], () => showTab(tab)); })); // right-click: export / rename / delete
+      pal.querySelectorAll('[data-place^="model:up-"]').forEach(b => b.addEventListener('contextmenu', e => {
+        e.preventDefault(); const id = b.dataset.place.slice(9); if (!confirm(`올린 파일 "${window.FactoryEquip.label(id)}"을(를) 이 브라우저에서 지울까요? 이미 놓은 모델은 회색 상자로 남습니다.`)) return;
+        window.FactoryEquip.removeFile(id).then(() => { showTab(tab); note('올린 파일을 지웠습니다'); });
       }));
+      pal.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => pickFile(b.dataset.act === 'upload' ? '.glb,.gltf,.stl' : '.json,.equip.json', file => {
+        const E = window.FactoryEquip;
+        if (b.dataset.act === 'upload') { note(`${file.name} 읽는 중…`); E.upload(file).then(f => { palCat[tab] = 'upload'; showTab(tab); note(`${f.name}을(를) 올렸습니다 · ${f.n.map(v => Math.round(v * 1000)).join(' × ')} mm${f.mm ? ' (mm 단위로 읽음)' : ''} · 타일을 눌러 놓으세요 (이 브라우저에 저장)`); }).catch(e => note('파일을 읽지 못했습니다: ' + e.message, true)); }
+        else E.importAsset(file).then(a => { const L = mineList(); L.push(a); if (!mineSave(L)) throw new Error('브라우저 저장 공간이 부족합니다'); showTab(tab); note(`"${a.name}" 에셋을 가져왔습니다 (부품 ${a.parts.length}개)`); }).catch(e => note('가져오지 못했습니다: ' + e.message, true));
+      })));
       pal.querySelectorAll('[data-place]').forEach(b => {
         b.addEventListener('click', () => startPlacing(b.dataset.place));
         b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', b.dataset.place); startPlacing(b.dataset.place); });
@@ -1173,6 +1316,9 @@
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
+    { const st = bar.querySelector('#fbStep'), v0 = (() => { try { return localStorage.getItem('fb-step') || '5'; } catch (e) { return '5'; } })(); st.value = v0; FR().setStep(+v0 / 1000);
+      st.onchange = () => { FR().setStep(+st.value / 1000); try { localStorage.setItem('fb-step', st.value); } catch (e) {} setSnap(snap); note(`프레임 부품 간격: ${st.value} mm`); }; }
+    on('[data-t=measure]', () => measureToggle());
     bar.querySelectorAll('[data-v]').forEach(b => b.onclick = () => view(b.dataset.v));
     $('#fbTarget').onchange = viewButtons;
     S().controls.addEventListener('start', () => { if (followId) stopFollow(); }); // dragging the camera ends 추적
@@ -1356,9 +1502,16 @@
       const sameCat = (k, mn) => (o.type === 'ufmodel' && k === 'model' && mc ? mn.filter(([key]) => (U.CATALOG[key] || {}).cat === mc.cat) : mn);
       html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, sameCat(k, mn), mx)).join('')}</div>`;
       if (o.type === 'conveyor') html += conveyorInfo(o);
+      if (o.type === 'mine') {
+        const tmp = { objects: (p.parts || []).map((q, i) => Object.assign({}, q, { id: '__m' + i, name: TYPE_LABEL[q.type] })) }, rows = FR().bom(tmp), [fw, fd] = window.FactoryElements.footprint(o);
+        html += `<p class="hint">내 설비 에셋 · 부품 ${(p.parts || []).length}개 · 바닥 ${Math.round(fw * 1000)} × ${Math.round(fd * 1000)} mm. 설비 하나로 옮기고 복제합니다. 모양을 고치려면 부품으로 풀어 편집한 뒤 조립품 카드의 "내 설비로 저장"으로 다시 저장하세요.</p>
+          <h4>자재 목록</h4><table class="bom">${rows.map(r => `<tr><td>${esc(r.label)}</td><td>${r.n}</td></tr>`).join('')}</table>
+          <div class="acts"><button type="button" data-a="explode">부품으로 풀어 편집</button></div>`;
+      }
       if (isFrame(o)) {
         const parts = FR().components(doc, o.id), ends = o.type === 'profile' ? ((o.params || {}).ends || []).filter(Boolean).length : 0;
         html += `<p class="hint">${o.type === 'profile' ? `끝단 연결 ${ends} / 2${ends ? ` · 코너 브래킷 ${ends * 2}개 (자동)` : ''} · ` : ''}${parts.length > 1 ? `조립품 부품 ${parts.length}개` : '다른 부품과 닿아 있지 않습니다'}. 부품을 끌어 다른 부품 가까이 가져가면 면에 붙고, 가운데나 모서리에 맞춰집니다 (5 mm 단위).</p>
+          ${slideInfo ? `<label class="chk" title="T 슬롯에 끼운 부품처럼, 붙어 있는 부품에서 떨어지지 않는 방향으로만 움직입니다"><input type="checkbox" data-a="slide" ${slideOn ? 'checked' : ''}> 슬롯 따라만 이동${slideInfo.axes.length ? ` (${slideInfo.axes.map(a => ['X', '높이', 'Z'][[0, 1, 2].find(i => Math.abs(['x', 'y', 'z'].map(c => a.d[c])[i]) > 0.9)] || '축').join(' · ')} 방향, ${slideInfo.axes.map(a => `${Math.round(a.lo * 1000)} ~ +${Math.round(a.hi * 1000)} mm`).join(' / ')})` : ' — 여러 방향에 고정되어 있어 지금은 자유 이동'}</label>` : ''}
           <div class="acts">${parts.length > 1 ? '<button type="button" data-a="asm" title="Shift+클릭으로도 고릅니다">조립품 전체 선택</button>' : ''}${o.type === 'plate' && (o.params || {}).orient !== 'v' ? '<button type="button" data-a="fit">아래 프레임에 맞추기</button>' : ''}</div>`;
       }
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
@@ -1408,7 +1561,10 @@
       if (k === 'rot') next.rot = THREE.MathUtils.degToRad(raw);
       else if (k === 'x' || k === 'z') { const u = toUser(o.x, o.z), w = fromUser(k === 'x' ? raw : u.x, k === 'z' ? raw : u.y), rr = isFrame(o) ? r2k : r2; next.x = rr(w.x); next.z = rr(w.z); }
       else if (k === 'y') next.y = r2k(Math.max(0, raw));
-      else { next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); next.params[k.slice(2)] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw; }
+      else {
+        next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); const key = k.slice(2), was = next.params[key]; next.params[key] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw;
+        if (o.type === 'model' && next.params.keep && ['w', 'h', 'd'].includes(key) && was > 0) { const f = next.params[key] / was; ['w', 'h', 'd'].forEach(q => { if (q !== key) next.params[q] = r2k(next.params[q] * f); }); } // 비율 유지
+      }
       const why = blockedBy(next); if (why) { note(`바꿀 수 없습니다: ${why}`, true); return renderProps(); }
       pushUndo();
       o.x = next.x; o.z = next.z; o.rot = next.rot; if (next.params) o.params = next.params; if (next.y !== undefined) o.y = next.y;
@@ -1436,6 +1592,14 @@
     }));
     act('dup', duplicate); act('del', remove); act('look', () => focusObject(o.id));
     act('asm', () => select(o.id, null, true));
+    { const sb = propSec.querySelector('[data-a=slide]'); if (sb) sb.onchange = () => { slideOn = sb.checked; select(o.id); }; }
+    act('explode', () => { // the placed asset becomes its parts again (they remember the asset's name, kind and cycle time for the next save)
+      const p = Object.assign(window.FactoryElements.defaults('mine'), o.params), meta = { name: o.name, kind: p.kind, ct: p.ct, note: p.note };
+      pushUndo(); doc.objects = doc.objects.filter(x => x !== o); const v = views.get(o.id); if (v && v.parent) v.parent.remove(v); views.delete(o.id);
+      const ids = []; for (const q of framesetParts(Object.assign({}, o, { type: 'mine' }))) { const n = Object.assign(q, { id: newId(), name: nextName(q.type), asset: meta }); doc.objects.push(n); buildView(n); ids.push(n.id); }
+      frameRefresh(); store(); if (ids.length) select(ids[0], null, true); else select(null);
+      note(`${meta.name}을(를) 부품 ${ids.length}개로 풀었습니다 · 고친 뒤 조립품 카드에서 "내 설비로 저장"`);
+    });
     act('fit', () => { const f = FR().fitPlate(doc, o); if (!f) return note('이 판 바로 아래(같은 높이)에 닿은 프레임이 없습니다', true); pushUndo(); o.x = f.x; o.z = f.z; o.params = Object.assign({}, o.params, { w: f.w, d: f.d }); buildView(o); placeObjectGroup(o); frameRefresh(); store(); select(o.id); note(`판을 프레임에 맞췄습니다: ${Math.round(f.w * 1000)} × ${Math.round(f.d * 1000)} mm`); });
     propSec.querySelectorAll('[data-perm]').forEach(i => i.addEventListener('change', () => {
       pushUndo(); o.perm = Object.assign({}, o.perm, { [i.dataset.perm]: i.checked });
@@ -1491,12 +1655,18 @@
       note('자재 목록을 frame-bom.csv로 내려받았습니다');
     });
     act('mine', () => {
-      const name = (prompt('내 설비 이름', `프레임 ${mm(F.size[0])}×${mm(F.size[2])}×${mm(F.size[1])}`) || '').trim(); if (!name) return;
-      const c = new THREE.Vector3(); F.ax.forEach((e, k) => { if (k !== 1) c.addScaledVector(e, (F.lo[k] + F.hi[k]) / 2); });
-      const parts = asm.ids.map(byId).map(q => { const r = clone(q); delete r.id; delete r.name; r.x = r2k(q.x - c.x); r.z = r2k(q.z - c.z); r.y = r2k((q.y || 0) - Math.max(0, F.lo[1])); return r; });
-      const L = mineList(); L.push({ name, parts }); if (!mineSave(L)) return note('브라우저 저장 공간에 저장하지 못했습니다', true);
-      if (tab === 'frame') { palCat.frame = 'mine'; panel.querySelector('[data-tab=frame]').click(); }
-      note(`"${name}"을(를) 프레임 탭 › 내 설비에 저장했습니다 (이 브라우저에 저장, 오른쪽 클릭으로 삭제)`);
+      const ids = asm.ids.slice(), was = (ids.map(byId).find(q => q.asset) || {}).asset || {};
+      assetDialog({ name: was.name || `설비 ${mm(F.size[0])}×${mm(F.size[2])}×${mm(F.size[1])}`, kind: was.kind || 'process', ct: was.ct || 0, note: was.note || '' }, meta => {
+        const c = new THREE.Vector3(); F.ax.forEach((e, k) => { if (k !== 1) c.addScaledVector(e, (F.lo[k] + F.hi[k]) / 2); });
+        const parts = ids.map(byId).map(q => { const r = clone(q); delete r.id; delete r.name; delete r.asset; r.x = r2k(q.x - c.x); r.z = r2k(q.z - c.z); r.y = r2k((q.y || 0) - Math.max(0, F.lo[1])); return r; });
+        const thumb = window.FactoryEquip.thumbnail(window.FactoryElements.build({ type: 'mine', params: { parts } }, doc.factory));
+        const L = mineList(), at = L.findIndex(a => a.name === meta.name), entry = Object.assign({ parts, thumb, at: new Date().toISOString() }, meta);
+        if (at >= 0 && !confirm(`"${meta.name}" 에셋이 이미 있습니다. 덮어쓸까요? (이미 배치한 설비는 바뀌지 않습니다)`)) return;
+        if (at >= 0) L[at] = entry; else L.push(entry);
+        if (!mineSave(L)) return note('브라우저 저장 공간에 저장하지 못했습니다', true);
+        if (tab === 'frame' || tab === 'equip') { palCat[tab] = 'mine'; panel.querySelector(`[data-tab=${tab}]`).click(); }
+        note(`"${meta.name}"을(를) 저장했습니다 · 설비 탭 › 내 설비 에셋에서 통째로 배치할 수 있습니다`);
+      });
     });
   }
   function refreshTransformFields() {
@@ -1644,7 +1814,7 @@
     // AMRs and workers can wear Asset Store models too (forklift, pallet robot, worker: js/factory-unity-groups.js)
     const USES = { fanuc: ['robot'], agv: ['amr'], uw_forklift: ['amr'], uw_palletrobot: ['amr'], uw_worker: ['worker'] };
     addEventListener('factory-assets-ready', e => {
-      const id = e.detail.id, types = (USES[id] || []).concat(window.FactoryUnity && FactoryUnity.assetIds().includes(id) ? ['ufmodel', 'amr', 'worker', 'zone'] : []); if (!types.length || !doc) return; // movers and zones carry catalog models too (loads, pallets, carts)
+      const id = e.detail.id, types = (USES[id] || []).concat(window.FactoryUnity && FactoryUnity.assetIds().includes(id) ? ['ufmodel', 'amr', 'worker', 'zone'] : []).concat(['model', 'mine']); if (!doc) return; // mounted models and equipment assets use catalogue and uploaded models // movers and zones carry catalog models too (loads, pallets, carts)
       doc.objects.filter(o => types.includes(o.type)).forEach(o => { buildView(o); placeObjectGroup(o); });
       if (selectedId && byId(selectedId) && types.includes(byId(selectedId).type)) select(selectedId);
     });
@@ -1656,6 +1826,7 @@
     el.addEventListener('pointermove', moveGhost);
     el.addEventListener('pointerup', e => {
       const d = onPick.down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) >= 4) return;
+      if (meas) { if (d[2] === 2) return measureToggle(false); if (d[2] === 0) measurePick(e); return; }
       if (drawing) { if (d[2] === 2) return finishDrawing(); const p = floorPoint(e); if (p) addDrawPoint(p); return; }
       if (placing) { if (d[2] === 2) return cancelPlacing(); const p = placePoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); return; }
       if (d[2] === 0) onPick(e);
@@ -1667,7 +1838,8 @@
     addEventListener('keydown', e => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
       if (drawing && e.key === 'Enter') { finishDrawing(); return; }
-      if (e.key === 'Escape') { if (followId) { stopFollow(); return; } cancelPlacing(); select(null); }
+      if (e.key === 'Escape') { if (meas) { measureToggle(false); return; } if (followId) { stopFollow(); return; } cancelPlacing(); select(null); }
+      else if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey) measureToggle();
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') remove();
@@ -1707,7 +1879,7 @@
       if (now - lastPanel > 250) updateLogistics(M, t);
       labelTick(M, t, now);
       updateSafety(M, t, now - lastPanel > 250) && (lastPanel = now);
-      cameraTick(dt);
+      cameraTick(dt); measureTick();
       { // roof sheets show from inside / below the eave, and hide when the camera is above the roof (to look in)
         const cy = S().camera.position.y, under = cy < doc.factory.height + 0.5;
         if (under !== roofShown || (now | 0) % 30 === 0) { roofShown = under; for (const [id, g] of views) { const o = byId(id); if (o && o.type === 'roof') { g.visible = !roofsHidden && under; g.traverse(m => { if (m.name === 'Roof_Sheet') m.visible = (o.params || {}).sheet !== false; }); } } } // from above the eave the whole roof (sheets and steel) steps aside so racks and aisles read; also catches rebuilt roofs
