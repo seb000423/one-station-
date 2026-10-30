@@ -1,3 +1,4 @@
+import './save-edit.js';
 // Console 1 factory 저장 / 불러오기. 저장 records every station cell of the factory built in
 // js/factory-builder.js and uploads station.glb + timeline.json + factory.json + meta.json to Vercel Blob
 // under saves/<id>/ through api/upload (the GLB goes straight to Blob). 불러오기 lists the saves
@@ -29,7 +30,11 @@ const css = `
 .savedlg .list button{display:grid;gap:2px;text-align:left;padding:8px 10px}
 .savedlg .list button span{font-size:11px;color:var(--mute);font-family:var(--mono)}
 .savedlg .list button span.note{font-family:inherit;color:var(--fg);opacity:.8;font-size:12px;line-height:1.45}
-.savedlg textarea{resize:vertical;min-height:44px}`;
+.savedlg textarea{resize:vertical;min-height:44px}
+.savedlg .list .item{position:relative;display:grid}
+.savedlg .list .item>button[data-id]{padding-right:40px}
+.savedlg .list .item>button.edit{position:absolute;top:6px;right:6px;width:26px;height:26px;padding:0;display:grid;place-items:center;background:transparent;border-color:transparent;color:var(--mute);font-size:13px}
+.savedlg .list .item>button.edit:hover{color:var(--accent);border-color:var(--accent)}`;
 
 function newId() {
   const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -126,7 +131,8 @@ async function loadDialog() {
   catch (e) { return say('저장 목록을 불러올 수 없습니다 (' + e.message + ')', true); }
   say(saves.length ? '' : '아직 저장본이 없습니다.');
   const list = form.querySelector('.saves');
-  list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<button type="button" data-id="${s.id}"><b>${esc(s.name)}</b>${s.note ? `<span class="note">${esc(s.note)}</span>` : ''}<span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? (m.cells ? `원스테이션 셀 ${m.cells} · ` : '') + `객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button>`; }).join('');
+  const render = () => { list.innerHTML = saves.map(s => { const m = s.summary || {}, f = m.factory || (m.layout && m.layout.factory); return `<div class="item"><button type="button" data-id="${s.id}"><b>${esc(s.name)}</b>${s.note ? `<span class="note">${esc(s.note)}</span>` : ''}<span>${[s.created && new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }), s.kind === 'factory' ? (m.cells ? `원스테이션 셀 ${m.cells} · ` : '') + `객체 ${m.objects}` : '원스테이션 (이전 형식)', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · ')}</span></button><button type="button" class="edit" data-edit="${s.id}" title="이름 · 설명 수정" aria-label="${esc(s.name)} 수정">✎</button></div>`; }).join('');
+  list.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => window.SaveEdit.open(b.parentElement, saves.find(x => x.id === b.dataset.edit), render));
   list.querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
     const s = saves.find(x => x.id === b.dataset.id);
     try {
@@ -135,6 +141,7 @@ async function loadDialog() {
       window.FactoryBuilder.loadDoc(doc); close();
     } catch (e) { say('불러오기 실패: ' + e.message, true); }
   });
+  }; render();
 }
 
 const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);

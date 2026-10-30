@@ -240,9 +240,11 @@ main{display:block;position:absolute;inset:0}
 #saveList button{display:grid;gap:2px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:7px 10px;cursor:pointer;color:var(--fg);font:inherit;min-width:0}
 #saveList button:hover{border-color:var(--mute)}
 #saveList .card{position:relative}
-#saveList .card>button.pick{width:100%;padding-right:34px}
+#saveList .card>button.pick{width:100%;padding-right:60px}
 #saveList .card>button.del{position:absolute;top:6px;right:6px;width:24px;height:24px;padding:0;display:grid;place-items:center;border-radius:3px;background:transparent;border:1px solid transparent;color:var(--mute);font-size:15px;line-height:1}
 #saveList .card>button.del:hover{color:var(--ng);border-color:var(--ng)}
+#saveList .card>button.edit{position:absolute;top:6px;right:32px;width:24px;height:24px;padding:0;display:grid;place-items:center;border-radius:3px;background:transparent;border:1px solid transparent;color:var(--mute);font-size:13px;line-height:1}
+#saveList .card>button.edit:hover{color:var(--accent);border-color:var(--accent)}
 #saveList button.pick.on{border-color:var(--accent)}
 #saveList b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #saveList span{font-size:11px;color:var(--mute);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -436,6 +438,7 @@ main{display:block;position:absolute;inset:0}
   </main>
 </div>
 <script src="js/sim-panel.js"></script>
+<script src="js/save-edit.js"></script>
 <script>
 (() => {
   const $ = q => document.querySelector(q), $$ = q => [...document.querySelectorAll(q)];
@@ -521,13 +524,15 @@ main{display:block;position:absolute;inset:0}
   }
   const esc = t => String(t).replace(/[<>&"]/g, '');
   function renderList() {
-    const cur = $('#savePick').value, card = (id, name, sub, fixed, note) => `<div class="card"><button type="button" data-id="${id}" class="pick ${id === cur ? 'on' : ''}"><b>${esc(name)}</b>${note ? `<span class="note">${esc(note)}</span>` : ''}<span>${esc(sub)}</span></button>${id && !fixed ? `<button type="button" class="del" data-del="${id}" title="삭제 (불러오지 않음)" aria-label="${esc(name)} 삭제">×</button>` : ''}</div>`;
+    const cur = $('#savePick').value, card = (id, name, sub, fixed, note) => `<div class="card"><button type="button" data-id="${id}" class="pick ${id === cur ? 'on' : ''}"><b>${esc(name)}</b>${note ? `<span class="note">${esc(note)}</span>` : ''}<span>${esc(sub)}</span></button>${id && !fixed ? `<button type="button" class="edit" data-edit="${id}" title="이름 · 설명 수정" aria-label="${esc(name)} 수정">✎</button><button type="button" class="del" data-del="${id}" title="삭제 (불러오지 않음)" aria-label="${esc(name)} 삭제">×</button>` : ''}</div>`;
     $('#saveList').innerHTML = (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
       return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · ' + (m.cells ? '원스테이션 셀 ' + m.cells + ' · ' : '') + '객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, s.builtin ? '예시 공정' : '', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '), s.builtin, s.note);
     }).join('') : '<p class="empty">아직 저장본이 없습니다. ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장하면 여기에 나타납니다.</p>');
     $('#saveList').querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => choose(b.dataset.id)));
     $('#saveList').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); delSave(b.dataset.del); }));
+    $('#saveList').querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); const s = saves.find(x => x.id === b.dataset.edit);
+      window.SaveEdit.open(b.parentElement, s, changed => { if (changed) { const o = $('#savePick').querySelector(`option[value="${s.id}"]`); if (o) o.textContent = label(s); if ($('#savePick').value === s.id) $('#crumbTarget').textContent = s.name; } renderList(); }); }));
   }
   $('#savePick').addEventListener('change', e => choose(e.target.value));
   // delete straight from the list: nothing is loaded; deleting the save on screen leaves the view as it is (pick another one yourself)
