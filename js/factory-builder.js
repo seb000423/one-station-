@@ -33,7 +33,10 @@
   // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
   // chargers, process machines) is dropped when a saved layout is opened
   // conveyor, rack, tote, fence and roof are back as real-scale parametric parts (js/factory-kit.js)
-  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi'];
+  const KEEP = ['column', 'wall', 'door', 'stairs', 'walkway', 'zone', 'amr', 'worker', 'route', 'walkroute', 'ufmodel', 'conveyor', 'rack', 'tote', 'fence', 'roof', 'bench', 'kpi', 'profile', 'plate', 'foot'];
+  // machine-building parts (js/factory-frame.js): profiles, plates, feet; a 프레임 세트 is placed as those parts
+  Object.assign(TYPE_LABEL, { profile: '알루미늄 프로파일', plate: '판 · 가드', foot: '발 · 캐스터', frameset: '프레임 세트' });
+  const FR = () => window.FactoryFrame, isFrame = o => !!(window.FactoryFrame && FactoryFrame.isFrame(o));
   const EQUIPMENT = ['station', 'conveyor', 'robot', 'rack', 'tote', 'bench', 'charger'].concat(MACHINES), MOVERS = ['amr', 'worker', 'route', 'walkroute'];
   const PATHS = ['route', 'walkroute']; // drawn point by point
   // automatic names: walkways and zones get letters (보행로 A, B, …), everything else numbers (컨베이어 1, 2, …);
@@ -90,7 +93,10 @@
     leaktest: [['cycle', '검사 사이클 (s)', 1, 10, 3600], ['ng', '불량률 (%)', 0.5, 0, 100], ['width', '폭 (m)', 0.1, 1.2, 5], ['depth', '깊이 (m)', 0.1, 1, 4], ['height', '높이 (m)', 0.1, 1.6, 4]],
     worker: [['walkway', '걷는 경로 (왕복)', 'walkway'], ['speed', '보행 속도 (m/s)', 0.1, 0.3, 2.5], ['dwell', '끝에서 작업 시간 (s)', 1, 0, 600]],
     route: [],
-    walkroute: []
+    walkroute: [],
+    profile: [['section', '단면 (mm)', 'select', [['4040', '40×40'], ['4545', '45×45'], ['8040', '80×40'], ['9045', '90×45']]], ['length', '길이 (m, 5 mm 단위)', 0.005, 0.02, 12], ['axis', '방향', 'select', [['y', '세로 (기둥)'], ['x', '가로 (보)']]], ['finish', '표면', 'select', [['clear', '은색 아노다이징'], ['black', '블랙 아노다이징']]]],
+    plate: [['kind', '종류', 'select', [['alu', '알루미늄 판'], ['guard', '투명 가드 (PC)'], ['mesh', '메시 가드']]], ['orient', '방향', 'select', [['h', '눕힘 (상판 · 선반)'], ['v', '세움 (가드 · 패널)']]], ['w', '가로 (m)', 0.005, 0.05, 6], ['d', '세로 · 높이 (m)', 0.005, 0.05, 6], ['t', '두께 (m)', 0.001, 0.002, 0.05]],
+    foot: [['kind', '종류', 'select', [['level', '레벨링 발'], ['caster', '캐스터 (잠금, 125 mm)']]], ['h', '높이 (m)', 0.005, 0.05, 0.2, p => p.kind !== 'caster']]
   };
 
   const hasJobs = p => (p.stops || []).filter(x => x && x.at).length >= 2; // AMR job list in use
@@ -110,6 +116,7 @@
   const newId = () => Date.now().toString(36).slice(-5) + (seq++).toString(36);
 
   let doc = null, activeId = null, selectedId = null, innerSel = null, snap = true;
+  let asm = null; // a selected assembly (frame parts that touch): { ids, pivot } — their views sit in the pivot while selected
   let world = null, shell = null, tc = null, proxy = null, helper = null, ghost = null, placing = null;
   const views = new Map(), snapshots = new Map(), undoStack = [];
 
@@ -222,7 +229,8 @@
   }
   // rebuild everything from the document (load, undo)
   function rebuildAll(preferActive) {
-    for (const g of views.values()) world.remove(g); views.clear();
+    releaseAsm();
+    for (const g of views.values()) if (g.parent) g.parent.remove(g); views.clear();
     for (const g of snapshots.values()) world.remove(g); snapshots.clear();
     activeId = null; buildShell();
     doc.objects.filter(o => o.type !== 'station').forEach(buildView);
@@ -275,7 +283,7 @@
     s.controls.maxDistance = Math.max(9, Math.hypot(f.width, f.depth, f.height) * 2.5);
   }
   function buildView(o) {
-    const old = views.get(o.id); if (old) world.remove(old);
+    const old = views.get(o.id); if (old && old.parent) old.parent.remove(old);
     const g = window.FactoryElements.build(o, doc.factory, { billboard: true }); g.userData = { objId: o.id };
     views.set(o.id, g); world.add(g);
     return g;
@@ -300,9 +308,11 @@
       tc.addEventListener('dragging-changed', e => { s.controls.enabled = !e.value; if (e.value) pushUndo(); else commitDrag(); });
       tc.addEventListener('objectChange', () => {
         if (helper) helper.update(); refreshTransformFields();
-        const o = selectedId && byId(selectedId), g = o && !innerSel && groupOf(o.id);
+        const o = selectedId && byId(selectedId), g = o && !innerSel && (asm ? asm.pivot : groupOf(o.id));
         if (g && o.type === 'conveyor') { const sn = FF().snap(doc, Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); if (sn) { g.position.set(sn.x, 0, sn.z); g.rotation.set(0, sn.rot, 0); if (helper) helper.update(); } snapNote = sn ? sn.text : ''; }
-        if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, z: g.position.z, rot: g.rotation.y })); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
+        if (g && !asm && isFrame(o)) { const sn = FR().snap(doc, Object.assign({}, o, { x: g.position.x, y: Math.max(0, g.position.y), z: g.position.z, rot: g.rotation.y })); if (sn) g.position.set(sn.x, sn.y, sn.z); else if (g.position.y < 0) g.position.y = 0; snapNote = sn ? sn.text : ''; if (helper) helper.update(); if (sn) note(sn.text); }
+        if (asm) { const why = asmBlocked(); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
+        else if (g && helper) { const why = blockedBy(Object.assign({}, o, { x: g.position.x, y: g.position.y, z: g.position.z, rot: g.rotation.y })); selColor(why); if (why) note(`여기에는 둘 수 없습니다: ${why}`, true); }
       });
       s.scene.add(tc);
       proxy = new THREE.Object3D(); proxy.name = 'inner-proxy';
@@ -323,21 +333,34 @@
     grp.material = line.material; grp.area = area; grp.raycast = () => {}; line.raycast = () => {}; area.raycast = () => {}; grp.update(); return grp;
   }
   function selColor(bad) { if (!helper) return; const c = bad ? SEL_BAD : SEL_OK; helper.material.color.set(c); if (helper.area) { helper.area.material.color.set(c); helper.area.material.emissive.set(c); } }
-  function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? GRID : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(15) : null); }
-  function setMode(m) { if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate; if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); } }
-  function select(id, inner) {
+  // a single frame part moves in 5 mm steps (machine scale) and also up / down; assemblies and everything else on the 0.5 m layout grid
+  const partSel = () => !asm && isFrame(selectedId && byId(selectedId));
+  function setSnap(on) { snap = on; if (!tc) return; tc.setTranslationSnap(on ? (partSel() ? FR().STEP : GRID) : null); tc.setRotationSnap(on ? THREE.MathUtils.degToRad(partSel() ? 90 : 15) : null); }
+  function setMode(m) { if (!tc) return; tc.setMode(m); const rotate = m === 'rotate'; tc.showX = tc.showZ = !rotate; tc.showY = rotate || partSel(); if (innerSel) { tc.setMode('translate'); tc.showY = false; const a = INNER[innerSel].axes; tc.showX = a.includes('x'); tc.showZ = a.includes('z'); } }
+  function releaseAsm() {
+    if (!asm) return; const pv = asm.pivot; asm = null;
+    if (tc && tc.object === pv) tc.detach();
+    pv.updateMatrixWorld(true); for (const c of [...pv.children]) world.attach(c); if (pv.parent) pv.parent.remove(pv);
+  }
+  function select(id, inner, whole) {
     const s = S(); selectedId = id || null; innerSel = null;
     if (helper) { s.scene.remove(helper); helper = null; }
     if (tc) tc.detach();
+    releaseAsm();
+    if (whole && isFrame(byId(id))) { // the whole assembly: views move into a pivot at its floor centre
+      const ids = FR().components(doc, id), b = new THREE.Box3(); ids.forEach(k => { const g = views.get(k); if (g) b.expandByObject(g); });
+      const pv = new THREE.Object3D(); pv.name = 'assembly-pivot'; const c = b.getCenter(new THREE.Vector3()); pv.position.set(c.x, b.min.y, c.z); world.add(pv); pv.updateMatrixWorld(true);
+      ids.forEach(k => { const g = views.get(k); if (g) pv.attach(g); }); asm = { ids, pivot: pv };
+    }
     if (proxy && proxy.parent) proxy.parent.remove(proxy);
     const o = id && byId(id);
     if (o && o.type === 'station' && !activate(o)) { selectedId = activeId; }
-    const g = selectedId && groupOf(selectedId);
+    const g = asm ? asm.pivot : selectedId && groupOf(selectedId);
     if (g && tc) {
       if (inner && selectedId === activeId && INNER[inner]) {
         innerSel = inner; const L = s.layoutParams(); s.CELL.add(proxy); proxy.position.set(...INNER[inner].at(L)); tc.attach(proxy);
       } else tc.attach(g);
-      setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate');
+      setMode(tc.mode === 'rotate' && !innerSel ? 'rotate' : 'translate'); setSnap(snap);
       helper = selHelper(g); s.scene.add(helper);
     }
     renderTree(); renderProps();
@@ -350,6 +373,13 @@
       if (innerSel === 'jig' || innerSel === 'rail') L[innerSel].z = v(p.z, ZMIN, ZMAX); else L[innerSel] = { x: v(p.x, XMIN, XMAX), z: v(p.z, ZMIN, ZMAX) };
       s.applyLayout(L); o.params = engineCellParams(); store(); select(o.id, innerSel); return;
     }
+    if (asm) return commitAsm();
+    if (isFrame(o)) {
+      const g = groupOf(o.id), next = Object.assign({}, o, { x: r2k(g.position.x), y: r2k(Math.max(0, g.position.y)), z: r2k(g.position.z), rot: Math.round(g.rotation.y * 1e4) / 1e4 }), why = blockedBy(next);
+      if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { selColor(null); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
+      Object.assign(o, { x: next.x, y: next.y, z: next.z, rot: next.rot }); placeObjectGroup(o); frameRefresh(); store(); select(o.id);
+      if (snapNote) note(snapNote); snapNote = ''; return;
+    }
     const g = groupOf(o.id), exact = o.type === 'conveyor' && snapNote, q = snap && !exact ? snapXZ(g.position.x, g.position.z) : { x: r2(g.position.x), z: r2(g.position.z) }, next = Object.assign({}, o, { x: exact ? g.position.x : q.x, z: exact ? g.position.z : q.z, rot: Math.round(g.rotation.y * 1e4) / 1e4 });
     const why = blockedBy(next);
     if (why) { undoStack.pop(); placeObjectGroup(o); if (helper) { selColor(null); helper.update(); } note(`원래 자리로 되돌렸습니다: ${why}`, true); renderProps(); return; }
@@ -357,16 +387,32 @@
     store(); if (helper) helper.update(); renderProps(); renderTree();
     if (o.type === 'conveyor') conveyorNote(o, snapNote); snapNote = '';
   }
+  // an assembly may stand where its parts do not run into other frame parts (or out of the factory)
+  function asmBlocked() {
+    if (!asm) return ''; asm.pivot.updateMatrixWorld(true); const skip = new Set(asm.ids);
+    for (const id of asm.ids) { const o = byId(id), g = views.get(id); if (!o || !g) continue; const p = g.getWorldPosition(new THREE.Vector3()), q = Object.assign({}, o, { x: p.x, y: p.y, z: p.z, rot: (o.rot || 0) + asm.pivot.rotation.y });
+      if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; const hit = FR().overlaps(doc, q, skip); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; }
+    return '';
+  }
+  function commitAsm() {
+    const why = asmBlocked(), ids = asm.ids, first = selectedId;
+    if (why) { undoStack.pop(); releaseAsm(); ids.forEach(id => placeObjectGroup(byId(id))); note(`원래 자리로 되돌렸습니다: ${why}`, true); select(first, null, true); return; }
+    asm.pivot.updateMatrixWorld(true); const turn = asm.pivot.rotation.y;
+    for (const id of ids) { const o = byId(id), g = views.get(id); if (!o || !g) continue; const p = g.getWorldPosition(new THREE.Vector3()); o.x = r2k(p.x); o.y = r2k(Math.max(0, p.y)); o.z = r2k(p.z); o.rot = Math.round(((o.rot || 0) + turn) * 1e4) / 1e4; }
+    releaseAsm(); ids.forEach(id => placeObjectGroup(byId(id))); frameRefresh(); store(); select(first, null, true);
+  }
   function onPick(e) {
     if (placing || (tc && tc.dragging)) return;
     const s = S(), el = s.renderer.domElement, r = el.getBoundingClientRect();
     const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     const ray = new THREE.Raycaster(); ray.setFromCamera(m, s.camera);
-    const hits = ray.intersectObjects([world, s.CELL], true).filter(h => h.object.visible && !(proxy && h.object.parent === proxy));
+    const shown = m => { for (; m; m = m.parent) if (!m.visible) return false; return true; }; // the hidden station cell (no cells placed) must not catch clicks
+    const hits = ray.intersectObjects([world, s.CELL], true).filter(h => shown(h.object) && !(proxy && h.object.parent === proxy));
     if (!hits.length) return select(null);
     let n = hits[0].object; while (n && !(n.userData && n.userData.objId) && n !== s.CELL) n = n.parent;
     const id = n === s.CELL ? activeId : n && n.userData.objId;
     if (!id) return select(null);
+    if (isFrame(byId(id))) return select(id, null, e.shiftKey);
     // inside the selected active cell: pick its equipment
     if (id === activeId && selectedId === activeId) {
       const p = s.CELL.worldToLocal(hits[0].point.clone()), L = s.layoutParams(); let best = null, bd = 0.35;
@@ -383,6 +429,22 @@
     const p = new THREE.Vector3(); if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p)) return null;
     const q = snapXZ(p.x, p.z, snap ? GRID : 0.01); p.x = q.x; p.z = q.z; return p;
   };
+  // frame parts are placed on the face of the part under the pointer (or on the floor)
+  let framePlaceRot = 0, framesetParams = {};
+  function placePoint(e) {
+    const t = placing && splitPlace(placing).type;
+    if (!t || !FR() || !FR().FRAME.includes(t)) return floorPoint(e);
+    const s = S(), r = s.renderer.domElement.getBoundingClientRect(), rc = new THREE.Raycaster();
+    rc.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), s.camera);
+    const meshes = []; for (const [id, g] of views) if (isFrame(byId(id))) g.traverse(m => { if (m.isMesh && m.visible) meshes.push(m); });
+    const h = rc.intersectObjects(meshes, false)[0];
+    if (h && h.face) {
+      let n = h.object; while (n && !(n.userData && n.userData.objId)) n = n.parent;
+      const normal = h.face.normal.clone().transformDirection(h.object.matrixWorld), pt = h.point.clone();
+      pt.hit = { obj: n && byId(n.userData.objId), point: h.point.clone(), normal }; return pt;
+    }
+    const f = floorPoint(e); if (f) f.hit = { obj: null, point: f.clone(), normal: new THREE.Vector3(0, 1, 0) }; return f;
+  }
   /* ---------- path drawing (AMR 경로 / 작업자 경로): click points, double-click / Enter / right-click to finish ---------- */
   let drawing = null; // { type, obj (when extending), pts: [[x, z]], preview }
   function setRoutePoints(o, pts) {
@@ -441,7 +503,8 @@
     if (PATHS.includes(place)) return startDrawing(null, place);
     const { type, model, variant } = splitPlace(place);
     if (busy()) return note('시뮬레이션 중에는 배치할 수 없습니다 — ⟲ 처음부터를 누르면 편집할 수 있습니다', true);
-    cancelPlacing(); placing = place;
+    if (type === 'frameset' && !startPlacing.asked) return framesetDialog(() => { startPlacing.asked = true; try { startPlacing(place); } finally { startPlacing.asked = false; } });
+    cancelPlacing(); placing = place; framePlaceRot = 0;
     ghost = type === 'station'
       ? new THREE.Mesh(new THREE.BoxGeometry(CELL_FOOT[0], 2, CELL_FOOT[1]), new THREE.MeshBasicMaterial({ color: 0xeec539, transparent: true, opacity: 0.18, depthWrite: false }))
       : window.FactoryElements.build({ type, x: 0, z: 0, params: candidate(place, { x: 0, z: 0 }).params }, doc.factory);
@@ -453,8 +516,9 @@
   function cancelPlacing() { cancelDrawing(); if (ghost) S().scene.remove(ghost); ghost = null; placing = null; }
   function moveGhost(e) {
     if (drawing) { const p = floorPoint(e); if (p) redrawPreview(snapToNode(p)); return; }
-    if (!ghost) return; const p = floorPoint(e); if (!p) return; ghost.visible = true;
-    const cand = candidate(placing, p); ghost.position.set(cand.x, ghost.position.y, cand.z); ghost.rotation.y = cand.rot;
+    if (!ghost) return; const p = placePoint(e); if (!p) return; ghost.visible = true;
+    const cand = candidate(placing, p); ghost.position.set(cand.x, cand.y !== undefined ? cand.y : ghost.position.y, cand.z); ghost.rotation.y = cand.rot;
+    if (cand.snapped && isFrame(cand)) note(`${modelLabel(cand.type)}: ${cand.snapped} · 클릭해 놓습니다 (R: 90° 돌리기, Esc 취소)`);
     const why = blockedBy(cand), bad = !!why;
     if (bad !== ghost.userData.bad) { ghost.userData.bad = bad; ghost.traverse(o => { if (o.isMesh) { if (!o.userData.c0) o.userData.c0 = o.material.color.clone(); o.material.color.copy(bad ? new THREE.Color(0xff3b30) : o.userData.c0); } }); }
     if (bad) note(`여기에는 놓을 수 없습니다: ${why}`, true);
@@ -463,6 +527,16 @@
   const candidate = (place, p) => {
     const { type, model, variant } = splitPlace(place);
     const c = { id: '__ghost', type, model, name: modelLabel(type, model), x: r2(p.x), z: r2(p.z), rot: 0, params: type === 'station' ? defaultCellParams() : window.FactoryElements.defaults(type, doc.factory) };
+    if (type === 'frameset') { Object.assign(c.params, framesetParams); return c; }
+    if (FR() && FR().FRAME.includes(type)) { // profile:4545:y, plate:guard:v, foot:caster
+      if (type === 'profile') Object.assign(c.params, model ? { section: model } : {}, variant ? { axis: variant } : {});
+      if (type === 'plate') { if (model) c.params.kind = model; if (variant) c.params.orient = variant; if (variant === 'v') Object.assign(c.params, { w: 0.6, d: 0.8, t: model === 'alu' ? 0.004 : 0.004 }); }
+      if (type === 'foot' && model) c.params.kind = model;
+      c.rot = framePlaceRot;
+      const hit = p.hit || { obj: null, point: new THREE.Vector3(p.x, 0, p.z), normal: new THREE.Vector3(0, 1, 0) };
+      const pose = FR().poseOnHit(doc, c, hit); Object.assign(c, { x: pose.x, y: pose.y, z: pose.z, rot: pose.rot, snapped: pose.snapped, lift: pose.lift, liftOf: pose.target });
+      return c;
+    }
     if (model && ['conveyor', 'tote', 'bench'].includes(type)) c.params.kind = model; if (variant && type === 'conveyor') c.params.shape = variant; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
     if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
     return c;
@@ -484,7 +558,14 @@
   }
   function placeAt(place, p) {
     const cand = candidate(place, p), type = cand.type, why = blockedBy(cand); if (why) return note(`여기에는 놓을 수 없습니다: ${why}`, true);
+    if (type === 'frameset') return placeFrameset(cand);
     pushUndo();
+    if (isFrame(cand)) {
+      if (cand.lift > 0 && cand.liftOf) for (const id of FR().components(doc, cand.liftOf)) { const q = byId(id); q.y = r2k((q.y || 0) + cand.lift); placeObjectGroup(q); }
+      const o = { id: newId(), type, name: nextName(type), x: cand.x, y: cand.y, z: cand.z, rot: cand.rot, params: cand.params };
+      doc.objects.push(o); buildView(o); frameRefresh(); select(o.id); store();
+      return note(`${o.name}을(를) 놓았습니다${cand.snapped ? ' · ' + cand.snapped : ''}${cand.lift > 0 ? ` · 프레임을 ${Math.round(cand.lift * 1000)} mm 올렸습니다` : ''}`);
+    }
     const o = { id: newId(), type, name: nextName(type, cand.model && cand.name), x: cand.x, z: cand.z, rot: cand.rot, params: cand.params };
     if (stackable(o)) { const y = surfaceY(o.x, o.z, o.id); if (y > 0.01) o.y = y; }
     const grew = fitFloor(o);
@@ -493,6 +574,42 @@
     select(o.id); if (type === 'station') placeObjectGroup(o);
     store(); if (type === 'conveyor') conveyorNote(o, cand.snapped, true); else note(`${o.name}을(를) 놓았습니다${grew ? ` · 공장 바닥을 ${doc.factory.width}×${doc.factory.depth} m로 넓혔습니다` : ''}`);
     if (grew) renderProps();
+  }
+  const r2k = v => Math.round(v * 1e4) / 1e4; // frame parts: 0.1 mm
+  // brackets follow the joints: after every frame change each profile's params.ends is recomputed and changed profiles rebuilt
+  function frameRefresh() {
+    if (!FR()) return; if (asm) select(null); const J = FR().joints(doc);
+    for (const [id, ends] of J) {
+      const o = byId(id), want = ends.map(e => (e ? Object.assign({ t: e.t }, e.sides ? { sides: e.sides } : {}) : null)), had = JSON.stringify(((o.params || {}).ends) || [null, null]);
+      if (had !== JSON.stringify(want)) { o.params = Object.assign({}, o.params, { ends: want }); buildView(o); placeObjectGroup(o); }
+    }
+  }
+  // a 프레임 세트 tile asks for the size, then is placed (0.5 m grid) as separate parts that already join
+  function framesetParts(c) {
+    const cs = Math.cos(c.rot || 0), sn = Math.sin(c.rot || 0);
+    return FR().explode(c.params).map((q, i) => Object.assign(q, { id: '__fs' + i, name: TYPE_LABEL[q.type], x: r2k(c.x + q.x * cs + q.z * sn), z: r2k(c.z - q.x * sn + q.z * cs), rot: (q.rot || 0) + (c.rot || 0) }));
+  }
+  function placeFrameset(c) {
+    pushUndo(); const ids = [];
+    for (const q of framesetParts(c)) { const o = Object.assign(q, { id: newId(), name: nextName(q.type) }); doc.objects.push(o); buildView(o); ids.push(o.id); }
+    frameRefresh(); select(ids[0], null, true); store();
+    note(`프레임 세트를 놓았습니다 · 부품 ${ids.length}개 (조립품 전체 선택됨 — 부품 하나를 고치려면 그 부품을 클릭)`);
+  }
+  function framesetDialog(go) {
+    const p = Object.assign(window.FactoryElements.defaults('frameset'), framesetParams), wrap = document.createElement('div'); wrap.className = 'fbModal';
+    const num = (k, l, st, mn, mx) => `<label>${l}<input type="number" data-f="${k}" step="${st}" min="${mn}" max="${mx}" value="${p[k]}"></label>`;
+    const sel = (k, l, opts) => `<label>${l}<select data-f="${k}">${opts.map(([v, t]) => `<option value="${v}" ${String(p[k]) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`;
+    wrap.innerHTML = `<div class="card fsCard"><h3>프레임 세트</h3><p class="hint">바깥 치수로 기둥 4개, 위·아래 보, 발, 상판을 만듭니다. 놓은 뒤에는 부품마다 길이를 바꾸거나 떼어낼 수 있습니다.</p>
+      <div class="fsGrid">${num('w', '가로 (m)', 0.005, 0.2, 6)}${num('d', '세로 (m)', 0.005, 0.2, 6)}${num('h', '높이 (m, 상판 윗면)', 0.005, 0.2, 3)}
+      ${sel('section', '프로파일 단면', [['4040', '40×40'], ['4545', '45×45'], ['8040', '80×40'], ['9045', '90×45']])}${sel('feet', '바닥', [['level', '레벨링 발'], ['caster', '캐스터'], ['none', '없음 (바닥 고정)']])}${sel('finish', '표면', [['clear', '은색'], ['black', '블랙']])}</div>
+      <label class="chk"><input type="checkbox" data-f="top" ${p.top ? 'checked' : ''}> 알루미늄 상판</label><label class="chk"><input type="checkbox" data-f="lower" ${p.lower ? 'checked' : ''}> 아래 보 (선반 높이)</label>
+      <div class="acts"><button type="button" data-c="cancel">취소</button><button type="button" data-c="ok" class="primary">바닥에 놓기</button></div></div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => {
+      const c = e.target.closest('[data-c]'), mode = c ? c.dataset.c : (e.target === wrap ? 'cancel' : null); if (!mode) return;
+      if (mode === 'ok') wrap.querySelectorAll('[data-f]').forEach(i => { const k = i.dataset.f; p[k] = i.type === 'checkbox' ? i.checked : i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, parseFloat(i.value) || p[k])) : i.value; });
+      wrap.remove(); if (mode === 'ok') { framesetParams = p; go(); }
+    });
   }
   /* ---------- conveyors: links, live items ---------- */
   const FF = () => window.FactoryFlow;
@@ -578,6 +695,8 @@
   }
   // where o may not stand: overlapping another object's size / work area, or outside the factory
   function blockedBy(o) {
+    if (o.type === 'frameset') { const parts = framesetParts(o), tmp = { factory: doc.factory, objects: doc.objects.concat(parts) }; for (const q of parts) { const hit = FR().overlaps(tmp, q, new Set(parts.map(x => x.id))); if (hit.length) return `${hit.join(', ')}와(과) 겹칩니다`; if (FM().outside(doc, q)) return '공장 밖으로 나갑니다'; } return ''; }
+    if (isFrame(o)) { if (FM().outside(doc, o)) return '공장 밖으로 나갑니다'; const hit = FR().overlaps(doc, o, asm ? new Set(asm.ids) : null); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : ''; }
     if (FM().outside(doc, o) && !FM().backdrop(o)) return '공장 밖으로 나갑니다'; // a building shell grows the floor instead (fitFloor)
     const hit = FM().collisions(doc, o); return hit.length ? `${hit.join(', ')}와(과) 겹칩니다` : '';
   }
@@ -595,6 +714,17 @@
   function duplicate() {
     const o = selectedId && byId(selectedId); if (!o) return;
     if (busy()) return note('사이클 중에는 복제할 수 없습니다', true);
+    if (asm || isFrame(o)) { // frame parts / assemblies: a copy right next to it (+X, then +Z), touching nothing
+      const ids = asm ? asm.ids : [o.id], src = ids.map(byId), b = new THREE.Box3(); ids.forEach(id => b.expandByObject(views.get(id)));
+      const sz = b.getSize(new THREE.Vector3()), sx = asm ? Math.ceil((sz.x + 0.5) / GRID) * GRID : r2k(sz.x + 0.1), szz = asm ? Math.ceil((sz.z + 0.5) / GRID) * GRID : r2k(sz.z + 0.1);
+      for (const [dx, dz] of [[sx, 0], [0, szz], [-sx, 0], [0, -szz]]) {
+        const copies = src.map(q => Object.assign(clone(q), { id: newId(), x: r2k(q.x + dx), z: r2k(q.z + dz) })), tmp = { factory: doc.factory, objects: doc.objects.concat(copies) }, mine = new Set(copies.map(c => c.id));
+        if (copies.some(c => FM().outside(doc, c) || FR().overlaps(tmp, c, mine).length)) continue;
+        pushUndo(); releaseAsm(); copies.forEach(c => { c.name = nextName(c.type); doc.objects.push(c); buildView(c); });
+        frameRefresh(); select(copies[0].id, null, !!(ids.length > 1)); store(); return note(`${ids.length > 1 ? `조립품 (부품 ${copies.length}개)` : copies[0].name}을(를) 복제했습니다`);
+      }
+      return note('복제할 빈자리가 없습니다', true);
+    }
     syncActive(); pushUndo();
     const c = clone(o); c.id = newId(); c.name = nextName(o.type);
     // the nearest free spot around the original (spiral, 0.5 m steps)
@@ -613,6 +743,11 @@
     const o = selectedId && byId(selectedId); if (!o) return;
     if (busy()) return note('사이클 중에는 삭제할 수 없습니다', true);
     pushUndo();
+    if (asm || isFrame(o)) {
+      const ids = new Set(asm ? asm.ids : [o.id]); releaseAsm();
+      doc.objects = doc.objects.filter(x => !ids.has(x.id)); ids.forEach(id => { const g = views.get(id); if (g && g.parent) g.parent.remove(g); views.delete(id); });
+      select(null); frameRefresh(); store(); return note(`${ids.size > 1 ? `조립품 (부품 ${ids.size}개)` : o.name}을(를) 삭제했습니다 (Ctrl+Z로 되돌리기)`);
+    }
     doc.objects = doc.objects.filter(x => x !== o);
     if (o.type !== 'station') { world.remove(views.get(o.id)); views.delete(o.id); }
     else if (o.id === activeId) {
@@ -654,7 +789,11 @@
     palletloop: '<rect x="3" y="7" width="18" height="10" rx="5"/><rect x="6" y="9" width="3" height="2"/><rect x="15" y="13" width="3" height="2"/>',
     asmstation: '<path d="M4 21V5h16v16M4 13h16M12 5v4"/><rect x="10" y="9" width="4" height="2"/>',
     flowrack: '<path d="M4 21V3M20 21V7M4 8l16 4M4 13l16 4M4 18l16 3"/>',
-    ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>'
+    ufmodel: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+    profile: '<rect x="8" y="2" width="8" height="20" rx="1"/><path d="M11 2v3M13 2v3M8 11h3M13 11h3M11 19v3M13 19v3"/>',
+    plate: '<path d="M3 15 9 9h12l-6 6z"/><path d="M3 15v2l12 0 6-6V9"/>',
+    foot: '<path d="M12 3v12M9 7h6M6 21h12l-2-4H8z"/>',
+    frameset: '<path d="M5 21V8M19 21V8M5 8h14M5 17h14M3 8l4-4h14l-2 4M19 4v0"/><path d="M21 4v13l-2 4"/>'
   };
   const icon = t => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON[t] || ''}</svg>`;
   // palette: four tabs (건물 / 설비 / 동선·구역 / 이동체); each opens on a grid of category icons, a category opens its part
@@ -671,6 +810,8 @@
     press: '<path d="M4 21h16M6 21V4h12v17M6 7h12"/><rect x="9" y="9" width="6" height="4"/><path d="M8 17h8"/>',
     cabinet: '<rect x="6" y="3" width="12" height="18" rx="1"/><path d="M12 3v18M10 11h.01M14 11h.01"/>',
     part: '<path d="M4 9h16v8H4z"/><path d="M7 9V6M17 9V6M4 13h16"/>',
+    profile: '<rect x="8" y="2" width="8" height="20" rx="1"/><path d="M11 2v3M13 2v3M8 11h3M13 11h3M11 19v3M13 19v3"/>', plate: '<path d="M3 15 9 9h12l-6 6z"/><path d="M3 15v2l12 0 6-6V9"/>',
+    foot: '<path d="M12 3v12M9 7h6M6 21h12l-2-4H8z"/>', frameset: '<path d="M5 21V8M19 21V8M5 8h14M5 17h14M3 8l4-4h14l-2 4"/><path d="M21 4v13l-2 4"/>',
     wall: ICON.wall, column: ICON.column, door: ICON.door, roof: '<path d="M2 12 12 5l10 7M5 10v9M19 10v9M5 15h14"/>', fence: '<path d="M4 4v17M12 4v17M20 4v17M4 7h16M4 18h16M4 11l8 7M12 11l8 7"/>', stairs: ICON.stairs,
     floor: '<path d="M3 17 9 7h12l-6 10z"/><path d="M6 12h12"/>', zone: ICON.zone, walkway: ICON.walkway, aisle: '<path d="M3 20 9 4M21 20 15 4M12 6v3M12 12v3M12 18v2"/>', route: ICON.route,
     amr: ICON.amr, agv: '<rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V5h12v6M6 8h12"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/>',
@@ -706,6 +847,11 @@
     mover: [['amr', 'AMR', [['amr:e3_amr_deck_bot', 'AMR (롤러 상판) · 움직임'], ['amr:uw_palletrobot', '팔레트 운반 로봇 · 움직임']]], ['agv', 'AGV', [['amr:e3_omron_agv', 'AGV (Omron, 트롤리) · 움직임'], ['amr:agv', 'AGV 리프트 · 움직임']]],
       ['forklift', '지게차', [['amr:uw_forklift', '지게차 · 움직임']]], ['worker', '작업자', [['worker', '작업자 · 움직임', 'type']]], ['cart', '대차', []]]
   };
+  // 프레임: machine-building parts that join (js/factory-frame.js); a tile is type:preset:variant
+  PAL.frame = [['frameset', '프레임 세트', [['frameset', '프레임 세트 (가로 · 세로 · 높이)', 'type']]],
+    ['profile', '알루미늄 프로파일', [['profile:4545:y', '45×45 기둥 (세로)', 'type'], ['profile:4545:x', '45×45 보 (가로)', 'type'], ['profile:4040:y', '40×40 기둥 (세로)', 'type'], ['profile:4040:x', '40×40 보 (가로)', 'type'], ['profile:8040:x', '80×40 보 (가로)', 'type'], ['profile:9045:y', '90×45 기둥 (세로)', 'type'], ['profile:9045:x', '90×45 보 (가로)', 'type']]],
+    ['plate', '판 · 가드', [['plate:alu:h', '알루미늄 상판', 'type'], ['plate:guard:v', '투명 가드 패널', 'type'], ['plate:mesh:v', '메시 가드 패널', 'type'], ['plate:alu:v', '알루미늄 측판', 'type']]],
+    ['foot', '발 · 캐스터', [['foot:level', '레벨링 발', 'type'], ['foot:caster', '캐스터 (잠금)', 'type']]]];
   const palCat = {}; // tab → open category (null = the icon grid)
   function paletteTiles(tab) {
     const U = window.FactoryUnity; if (!U) return '<span class="hint">모델 목록을 불러오지 못했습니다</span>';
@@ -713,12 +859,12 @@
     const shown = Object.entries(U.CATALOG).filter(([, c]) => U.GROUPS.includes(c.group));
     const moverThumb = { 'amr:e3_amr_deck_bot': 'e3_amr_deck_bot', 'amr:uw_palletrobot': 'uw_palletrobot', 'amr:e3_omron_agv': 'e3_omron_agv', 'amr:uw_forklift': 'uw_forklift' };
     const tileOf = ([place, label, img], g) => {
-      if (img === 'type') return `<button type="button" class="tile kit typ" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(place)}</i><span>${esc(label)}</span></button>`;
+      if (img === 'type') return `<button type="button" class="tile kit typ" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><i class="ic">${icon(place.split(':')[0])}</i><span>${esc(label)}</span></button>`;
       const src = img || (moverThumb[place] ? U.thumb(moverThumb[place]) : /^amr:/.test(place) ? '' : 'assets/models/thumbs/kit_' + place.split(':').slice(0, 2).join('_') + '.webp');
       return `<button type="button" class="tile kit" draggable="true" data-place="${place}" data-q="${esc((label + ' ' + g).toLowerCase())}" title="${esc(label)}: 놓은 뒤 오른쪽 설정에서 크기 · 동작을 바꿉니다">${src ? `<img src="${src}" alt="" loading="lazy" draggable="false">` : `<i class="ic">${icon('amr')}</i>`}<span>${esc(label)}</span></button>`;
     };
     const model = ([k, c], g) => `<button type="button" class="tile" draggable="true" data-place="ufmodel:${k}" data-q="${esc((c.label + ' ' + g).toLowerCase())}" title="${esc(c.label)} · ${c.size[0]} × ${c.size[2]} × ${c.size[1]} m (실제 크기): 누른 뒤 바닥을 클릭하거나 바닥으로 끌어다 놓기"><img src="${U.thumb(k)}" alt="" loading="lazy" draggable="false"><span>${esc(c.label)}</span></button>`;
-    const TAB = { building: '건물', equip: '설비', route: '동선·구역', mover: '이동체' }[tab];
+    const TAB = { building: '건물', equip: '설비', frame: '프레임', route: '동선·구역', mover: '이동체' }[tab];
     const cats = (PAL[tab] || []).map(([key, label, kits]) => [key, label, kits, shown.filter(([k]) => { const [t, c] = CATOF(k); return t === tab && c === key; })]).filter(([, , kits, list]) => kits.length + list.length);
     const tilesOf = ([key, label, kits, list]) => kits.map(t => tileOf(t, label)).join('') + list.map(e => model(e, label)).join('');
     const open = cats.find(c => c[0] === palCat[tab]);
@@ -727,7 +873,7 @@
     if (open) return search + `<div class="pcrumb"><button type="button" data-back title="분류 목록으로">‹</button><span>${TAB} › <b>${esc(open[1])}</b></span></div><div class="mgrp cur"><div class="tiles">${tilesOf(open)}</div></div>` + all;
     return search + `<div class="cats">${cats.map(([key, label, kits, list]) => `<button type="button" class="cat" data-cat="${key}"><i class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${CI[key] || ''}</svg></i><span>${esc(label)}</span><em>${kits.length + list.length}</em></button>`).join('')}</div>` + all;
   }
-  const TABS = [['building', '건물', PALETTE[0][1]], ['equip', '설비', null], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
+  const TABS = [['building', '건물', PALETTE[0][1]], ['equip', '설비', null], ['frame', '프레임', null], ['route', '동선·구역', PALETTE[1][1]], ['mover', '이동체', PALETTE[2][1]]];
   const css = `
   .fb-on .view .hud.tr{display:none}
   .fb-on .view .hud.tl{left:262px;top:var(--fbbar,58px)}
@@ -758,7 +904,7 @@
   #fbPanel .fbBody{display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
   #fbPanel button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:5px 8px;border-radius:3px;cursor:pointer;font:inherit;font-size:11.5px;line-height:1.4}
   #fbPanel button:hover{border-color:var(--mute)}
-  #fbPanel .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
+  #fbPanel .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:2px}
   #fbPanel .tabs button{padding:6px 2px;font-size:11px;line-height:1.35;white-space:nowrap}
   #fbPanel .tabs button.on{border-color:var(--accent);color:var(--accent);background:rgba(238,197,57,.06)}
   #fbPanel .pal{display:grid;grid-template-columns:1fr 1fr;gap:4px}
@@ -881,7 +1027,15 @@
   .fbModal button span{font-size:11.5px;color:var(--mute)}
   .fbModal button.danger b{color:#ff8a80}
   .fbModal button:disabled{opacity:.4;cursor:default}
-  .fbModal .acts{display:flex;justify-content:flex-end}
+  .fbModal .acts{display:flex;justify-content:flex-end;gap:6px}
+  .fbModal .fsGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .fbModal label{display:grid;gap:3px;font-size:11.5px;color:var(--mute)}
+  .fbModal label.chk{display:flex;align-items:center;gap:6px}
+  .fbModal input[type=number],.fbModal select{background:var(--panel2);border:1px solid var(--line);color:var(--fg);padding:5px 6px;border-radius:3px;font:inherit;font-size:12px;min-width:0}
+  .fbModal .acts button.primary{border-color:var(--accent);color:var(--accent)}
+  #fbProps table.bom{width:100%;border-collapse:collapse;font-size:11.5px;margin:2px 0 6px}
+  #fbProps table.bom td{padding:3px 4px;border-bottom:1px solid var(--line)}
+  #fbProps table.bom td:last-child{text-align:right;font-family:var(--mono);color:var(--accent)}
   .fbModal .acts button{display:inline-block;padding:7px 14px}
   @media (max-width:1400px){ #fbBar{gap:4px 10px} #fbBar .grp > span{display:none} #fbBar button,#fbBar select{padding:0 7px;font-size:11.5px} }`;
   let panel, bar, simBox, propSec, stationSecs = [], noteT, tab = 'equip';
@@ -1087,7 +1241,7 @@
     const KIND = { conveyor: 'EGR 라인', rack: '물류', tote: '물류', bench: '공장 설비' };
     const groups = [['건물', o => ['column', 'wall', 'door', 'stairs', 'fence', 'roof'].includes(o.type) || cat(o) === '건물'], ['동선 · 구역', o => ['walkway', 'zone'].includes(o.type)]]
       .concat((U ? U.CATS : []).filter(c => c !== '건물').map(c => [c, o => cat(o) === c || KIND[o.type] === c]))
-      .concat([['설비', o => EQUIPMENT.includes(o.type) && !cat(o) && !KIND[o.type]], ['이동체', o => MOVERS.includes(o.type)]]);
+      .concat([['설비', o => EQUIPMENT.includes(o.type) && !cat(o) && !KIND[o.type]], ['프레임', isFrame], ['이동체', o => MOVERS.includes(o.type)]]);
     t.innerHTML = `<button type="button" data-id="" class="${selectedId ? '' : 'on'}"><span>공장 · </span>${doc.factory.width}×${doc.factory.depth}×${doc.factory.height} m</button>` + groups.map(([g, has]) => {
       const list = doc.objects.filter(has);
       return list.length ? `<div class="grp">${g}</div>` + list.map(o => `<button type="button" data-id="${o.id}" class="${o.id === selectedId ? 'on' : ''}" title="${TYPE_LABEL[o.type]} · 더블클릭: 이 객체 보기">${icon(o.type)}<span>${esc(o.name)}</span>${o.id === activeId ? '<em>시뮬레이션</em>' : ''}</button>`).join('') : '';
@@ -1126,17 +1280,23 @@
       }));
       return;
     }
+    if (asm) return renderAsmProps(o);
     const deg = Math.round(THREE.MathUtils.radToDeg(o.rot || 0));
     const U = window.FactoryUnity, mc = o.type === 'ufmodel' && U && U.CATALOG[(U.ALIAS || {})[(o.params || {}).model] || (o.params || {}).model];
     let html = `<div class="kind">${icon(o.type)}${mc ? esc(mc.cat || '공정 설비') + ' · ' + esc(mc.label) : TYPE_LABEL[o.type]}</div>${mc ? `<p class="hint" style="margin:2px 0 6px">실제 크기 ${mc.size[0]} × ${mc.size[2]} m · 높이 ${mc.size[1]} m${mc.clip ? ' · 재생하면 동작합니다 (시뮬레이션 시계)' : ''}</p>${mc.spec ? `<p class="hint" style="margin:0 0 6px"><b>가반하중 ${mc.spec.payload} kg · 작업 반경 ${mc.spec.reach} mm</b>${mc.spec.use ? ' · ' + esc(mc.spec.use) : ''}</p>` : ''}` : ''}
       <label>이름<input type="text" data-n value="${esc(o.name)}" maxlength="40"></label>
-      <div class="row">${field('x', 'X (m) · 서쪽 벽부터', toUser(o.x, o.z).x, GRID, -999, 999)}${field('z', 'Y (m) · 남쪽 벽부터', toUser(o.x, o.z).y, GRID, -999, 999)}${field('rot', '회전 (°)', deg, 15, -360, 360)}</div>`;
+      <div class="row">${field('x', 'X (m) · 서쪽 벽부터', toUser(o.x, o.z).x, isFrame(o) ? 0.005 : GRID, -999, 999)}${field('z', 'Y (m) · 남쪽 벽부터', toUser(o.x, o.z).y, isFrame(o) ? 0.005 : GRID, -999, 999)}${isFrame(o) ? field('y', '높이 (m) · 바닥부터', r2k(o.y || 0), 0.005, 0, 30) : ''}${field('rot', '회전 (°)', deg, isFrame(o) ? 90 : 15, -360, 360)}</div>`;
     if (!isCell) {
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
       // a model's 모델 choice lists the same category only (a column swaps for another building part, not a robot)
       const sameCat = (k, mn) => (o.type === 'ufmodel' && k === 'model' && mc ? mn.filter(([key]) => (U.CATALOG[key] || {}).cat === mc.cat) : mn);
       html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, sameCat(k, mn), mx)).join('')}</div>`;
       if (o.type === 'conveyor') html += conveyorInfo(o);
+      if (isFrame(o)) {
+        const parts = FR().components(doc, o.id), ends = o.type === 'profile' ? ((o.params || {}).ends || []).filter(Boolean).length : 0;
+        html += `<p class="hint">${o.type === 'profile' ? `끝단 연결 ${ends} / 2${ends ? ` · 코너 브래킷 ${ends * 2}개 (자동)` : ''} · ` : ''}${parts.length > 1 ? `조립품 부품 ${parts.length}개` : '다른 부품과 닿아 있지 않습니다'}. 부품을 끌어 다른 부품 가까이 가져가면 면에 붙고, 가운데나 모서리에 맞춰집니다 (5 mm 단위).</p>
+          <div class="acts">${parts.length > 1 ? '<button type="button" data-a="asm" title="Shift+클릭으로도 고릅니다">조립품 전체 선택</button>' : ''}${o.type === 'plate' && (o.params || {}).orient !== 'v' ? '<button type="button" data-a="fit">아래 프레임에 맞추기</button>' : ''}</div>`;
+      }
       if (o.type === 'rack') html += `<p class="hint">수용량 ${p.bays * p.levels * p.perSlot}개 · 현재 ${Math.round(p.bays * p.levels * p.perSlot * p.fill / 100)}개</p>`;
       if (o.type === 'amr') {
         const pl = motion().amr[o.id], jobs = p.stops || [], opts = [['', '— 선택 —']].concat(FM().places(doc, motion().G).filter(x => !x.ref.startsWith('node:')).map(x => [x.ref, x.label]));
@@ -1182,14 +1342,15 @@
       if (i.type === 'number' && Number.isNaN(raw)) return renderProps();
       const next = clone(o);
       if (k === 'rot') next.rot = THREE.MathUtils.degToRad(raw);
-      else if (k === 'x' || k === 'z') { const u = toUser(o.x, o.z), w = fromUser(k === 'x' ? raw : u.x, k === 'z' ? raw : u.y); next.x = r2(w.x); next.z = r2(w.z); }
+      else if (k === 'x' || k === 'z') { const u = toUser(o.x, o.z), w = fromUser(k === 'x' ? raw : u.x, k === 'z' ? raw : u.y), rr = isFrame(o) ? r2k : r2; next.x = rr(w.x); next.z = rr(w.z); }
+      else if (k === 'y') next.y = r2k(Math.max(0, raw));
       else { next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); next.params[k.slice(2)] = i.type === 'number' ? Math.min(+i.max, Math.max(+i.min, raw)) : raw; }
       const why = blockedBy(next); if (why) { note(`바꿀 수 없습니다: ${why}`, true); return renderProps(); }
       pushUndo();
-      o.x = next.x; o.z = next.z; o.rot = next.rot; if (next.params) o.params = next.params;
+      o.x = next.x; o.z = next.z; o.rot = next.rot; if (next.params) o.params = next.params; if (next.y !== undefined) o.y = next.y;
       if (o.type === 'station' && o.id === activeId) S().applyLayout(Object.assign({ cell: { x: o.x, z: o.z, rot: o.rot || 0 } }, engineCellParams().inner));
       if (o.type !== 'station' && k.startsWith('p.')) buildView(o);
-      placeObjectGroup(o); fitFloor(o); store(); select(o.id, innerSel);
+      placeObjectGroup(o); fitFloor(o); if (isFrame(o)) frameRefresh(); store(); select(o.id, innerSel);
     }));
     propSec.querySelectorAll('[data-inner]').forEach(b => b.addEventListener('click', () => select(o.id, b.dataset.inner)));
     propSec.querySelectorAll('[data-pt]').forEach(i => i.addEventListener('change', () => {
@@ -1210,6 +1371,8 @@
       else jobs.push({ at: '', act: jobs.length % 2 ? 'unload' : 'load', dwell: p.dwell });
     }));
     act('dup', duplicate); act('del', remove); act('look', () => focusObject(o.id));
+    act('asm', () => select(o.id, null, true));
+    act('fit', () => { const f = FR().fitPlate(doc, o); if (!f) return note('이 판 바로 아래(같은 높이)에 닿은 프레임이 없습니다', true); pushUndo(); o.x = f.x; o.z = f.z; o.params = Object.assign({}, o.params, { w: f.w, d: f.d }); buildView(o); placeObjectGroup(o); frameRefresh(); store(); select(o.id); note(`판을 프레임에 맞췄습니다: ${Math.round(f.w * 1000)} × ${Math.round(f.d * 1000)} mm`); });
     propSec.querySelectorAll('[data-perm]').forEach(i => i.addEventListener('change', () => {
       pushUndo(); o.perm = Object.assign({}, o.perm, { [i.dataset.perm]: i.checked });
       if (o.type !== 'station') buildView(o); store(); select(o.id);
@@ -1219,10 +1382,20 @@
     act('check', checkCycle);
     act('innerReset', () => { if (busy()) return; pushUndo(); const L = clone(S().LAYOUT_DEFAULT); L.cell = { x: o.x, z: o.z, rot: o.rot || 0 }; S().applyLayout(L); o.params = engineCellParams(); store(); select(o.id); });
   }
+  // an assembly: its parts, cut list, and move / copy / delete as one
+  function renderAsmProps(o) {
+    const rows = FR().bom(doc, asm.ids), b = new THREE.Box3(); asm.ids.forEach(id => { const B = FR().boxOf(byId(id)), e = new THREE.Vector3(...[0, 1, 2].map(k => B.ax.reduce((s2, a, i) => s2 + Math.abs(a.getComponent(k)) * B.h[i], 0))); b.expandByPoint(B.c.clone().sub(e)).expandByPoint(B.c.clone().add(e)); }); const sz = b.getSize(new THREE.Vector3()); // part boxes, not the feet's pads
+    propSec.innerHTML = `<div class="kind">${icon('frameset')}조립품</div><h3>프레임 조립품 · 부품 ${asm.ids.length}개</h3>
+      <p class="hint">바깥 치수 ${Math.round(sz.x * 1000)} × ${Math.round(sz.z * 1000)} mm · 높이 ${Math.round(sz.y * 1000)} mm. 3D 화살표로 통째로 옮기고 (0.5 m 그리드) R 키로 돌립니다. 부품 하나를 고치려면 그 부품을 클릭하세요.</p>
+      <h4>자재 목록</h4><table class="bom">${rows.map(r => `<tr><td>${esc(r.label)}</td><td>${r.n}</td></tr>`).join('')}</table>
+      <div class="acts"><button type="button" data-a="look">보기</button><button type="button" data-a="dup">조립품 복제</button><button type="button" data-a="del">조립품 삭제</button></div>`;
+    const act = (a, fn) => { const x = propSec.querySelector(`[data-a=${a}]`); if (x) x.onclick = fn; };
+    act('look', () => focusObject(o.id)); act('dup', duplicate); act('del', remove);
+  }
   function refreshTransformFields() {
     if (!propSec || innerSel) return; const g = selectedId && groupOf(selectedId); if (!g) return;
     const set = (k, v) => { const i = propSec.querySelector(`[data-k=${k}]`); if (i && document.activeElement !== i) i.value = v; };
-    const u = toUser(g.position.x, g.position.z); set('x', u.x); set('z', u.y); set('rot', Math.round(THREE.MathUtils.radToDeg(g.rotation.y)));
+    if (asm) return; const u = toUser(g.position.x, g.position.z); set('x', u.x); set('z', u.y); set('y', r2k(g.position.y)); set('rot', Math.round(THREE.MathUtils.radToDeg(g.rotation.y)));
   }
   async function checkCycle() {
     if (busy()) return note('사이클 중에는 검사할 수 없습니다', true);
@@ -1376,13 +1549,13 @@
     el.addEventListener('pointerup', e => {
       const d = onPick.down; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) >= 4) return;
       if (drawing) { if (d[2] === 2) return finishDrawing(); const p = floorPoint(e); if (p) addDrawPoint(p); return; }
-      if (placing) { if (d[2] === 2) return cancelPlacing(); const p = floorPoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); return; }
+      if (placing) { if (d[2] === 2) return cancelPlacing(); const p = placePoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); return; }
       if (d[2] === 0) onPick(e);
     });
     el.addEventListener('dblclick', () => { if (drawing) finishDrawing(); });
     el.addEventListener('contextmenu', e => { if (drawing) e.preventDefault(); });
     el.addEventListener('dragover', e => { if (placing) { e.preventDefault(); moveGhost(e); } });
-    el.addEventListener('drop', e => { e.preventDefault(); if (!placing) return; const p = floorPoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); });
+    el.addEventListener('drop', e => { e.preventDefault(); if (!placing) return; const p = placePoint(e), t = placing; if (p && blockedBy(candidate(t, p))) return note('여기에는 놓을 수 없습니다: ' + blockedBy(candidate(t, p)) + ' — 다른 곳을 클릭하세요 (Esc 취소)', true); cancelPlacing(); if (p) placeAt(t, p); });
     addEventListener('keydown', e => {
       if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
       if (drawing && e.key === 'Enter') { finishDrawing(); return; }
@@ -1390,6 +1563,7 @@
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
       else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
       else if (e.key === 'Delete' || e.key === 'Backspace') remove();
+      else if ((e.key === 'r' || e.key === 'R') && placing && ghost) { framePlaceRot += Math.PI / 2; ghost.rotation.y += Math.PI / 2; note('놓을 방향을 90° 돌렸습니다'); }
       else if (e.key === 'r' || e.key === 'R') setMode('rotate');
       else if (e.key === 't' || e.key === 'T') setMode('translate');
     });
