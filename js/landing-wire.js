@@ -1,4 +1,4 @@
-// Landing hero (index.html): small line-drawn blocks float scattered over a perspective grid, then fly together and
+// Landing hero (index.html): small line-drawn blocks float scattered in empty space, then fly together and
 // build "ONE AUTOMATION" in the company logo's colours (white / ink, the N's first stem in the logo teal); after
 // that a gentle wave runs through the word. Hidden-line drawing (faces filled with the background, edges drawn,
 // back to front), tweened with anime.js (js/vendor/anime.min.js, MIT). Colours come from CSS (light / dark).
@@ -37,8 +37,7 @@
 
   /* ---------------------------------------------------------------- the word: one row (wide) or two rows (phone) */
   let cubes = [], els = [], W0 = 0, H0 = 0, wide = true;
-  const gridG = document.createElementNS(NS, 'g'), world = document.createElementNS(NS, 'g');
-  gridG.setAttribute('class', 'grid'); svg.append(gridG, world);
+  const world = document.createElementNS(NS, 'g'); svg.append(world);
   const rnd = (() => { let s = 11; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   function build() {
     const r = stage.getBoundingClientRect(); wide = r.width / Math.max(1, r.height) > 1.25;
@@ -49,8 +48,8 @@
     const W = wide ? one.w + 5 + auto.w : auto.w, H = wide ? 14 : 23;
     W0 = W; H0 = H;
     cubes = [...one.blocks, ...auto.blocks].map(b => {
-      // where it floats before the build: anywhere over the grid, around and above the word
-      const sx = (rnd() - 0.5) * W * 1.5, sy = 1 + rnd() * H * 1.9, sz = -W * 0.5 + rnd() * W * 0.62;
+      // where it floats before the build: spread wide around, above, below and behind the word
+      const sx = (rnd() - 0.5) * W * 2.8, sy = H * 0.45 + (rnd() - 0.5) * H * 3.2, sz = -W * 1.1 + rnd() * W * 1.25;
       return { tx: b.x - W / 2, ty: b.y, tz: -0.5, x: sx, y: sy, z: sz, sx, sy, sz, ph: rnd() * 6.28, s: 0.86, acc: b.acc, lift: 0, float: 1 };
     });
     world.textContent = '';
@@ -73,21 +72,9 @@
   function fit() { // viewBox around the finished word
     setCam(); let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const c of cubes) for (const [dx, dy] of [[0, 0], [1, 1]]) { const p = P(c.tx + dx, c.ty + dy, c.tz + 1); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
-    const r = stage.getBoundingClientRect(), asp = r.width / Math.max(1, r.height), pad = wide ? 0.14 : 0.07;
-    let w = (x1 - x0) * (1 + pad * 2), h = w / asp; if ((y1 - y0) * 1.9 > h) { h = (y1 - y0) * 1.9; w = h * asp; }
-    svg.setAttribute('viewBox', `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h * 0.52} ${w} ${h}`);
-  }
-  function drawGrid() {
-    const ext = Math.max(W0, 40) * 0.9, step = 2; gridG.textContent = '';
-    const lines = [];
-    for (let x = -ext; x <= ext + 1e-6; x += step) lines.push([[x, 0, -ext * 0.9], [x, 0, ext * 0.45]]);
-    for (let z = -ext * 0.9; z <= ext * 0.45 + 1e-6; z += step) lines.push([[-ext, 0, z], [ext, 0, z]]);
-    for (const [a, b] of lines) {
-      const p = P(...a), q = P(...b); if (p[2] < 1 || q[2] < 1) continue;
-      const l = document.createElementNS(NS, 'path'); l.setAttribute('d', `M${p[0].toFixed(2)} ${p[1].toFixed(2)}L${q[0].toFixed(2)} ${q[1].toFixed(2)}`);
-      l.style.opacity = (0.25 + 0.75 * Math.min(1, Math.abs((a[2] + b[2]) / 2 + ext * 0.9) / (ext * 1.35))).toFixed(2);
-      gridG.appendChild(l);
-    }
+    const r = stage.getBoundingClientRect(), asp = r.width / Math.max(1, r.height), pad = wide ? 0.09 : 0.06;
+    let w = (x1 - x0) * (1 + pad * 2), h = w / asp; if ((y1 - y0) * 1.6 > h) { h = (y1 - y0) * 1.6; w = h * asp; }
+    svg.setAttribute('viewBox', `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h * 0.5} ${w} ${h}`);
   }
   const pt = p => p[0].toFixed(2) + ' ' + p[1].toFixed(2);
   function render(tt) {
@@ -110,7 +97,7 @@
   const replayB = document.getElementById('replay');
   let anims = [], timers = [], idle = false, t0 = 0;
   const stopAll = () => { anims.forEach(a => a.pause()); anims = []; timers.forEach(clearTimeout); timers = []; };
-  function setup() { build(); fit(); drawGrid(); }
+  function setup() { build(); fit(); }
   function play() {
     stopAll(); idle = false; if (replayB) replayB.hidden = true;
     cubes.forEach(c => Object.assign(c, { x: c.sx, y: c.sy, z: c.sz, float: 1, lift: 0 }));
@@ -130,7 +117,7 @@
     requestAnimationFrame(tick);
   }
   if (replayB) replayB.onclick = play;
-  let rz = 0; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { const r = stage.getBoundingClientRect(); if ((r.width / Math.max(1, r.height) > 1.25) !== wide) { setup(); finish(); } else { fit(); drawGrid(); } }, 120); });
+  let rz = 0; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { const r = stage.getBoundingClientRect(); if ((r.width / Math.max(1, r.height) > 1.25) !== wide) { setup(); finish(); } else fit(); }, 120); });
   setup();
   let started = false;
   new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && !started) { started = true; reduce ? finish() : play(); } }), { threshold: 0.2 }).observe(stage);
