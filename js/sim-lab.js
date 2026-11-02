@@ -3,7 +3,10 @@
 (() => {
   'use strict';
   const E = window.OneTwinSim, $ = id => document.getElementById(id);
-  const ST = E.DEMO_STATIONS, byId = Object.fromEntries(ST.map(s => [s.id, s]));
+  // the line: the demo line, or the line drawn in ONE BUILDER (window.ONE_LINE from sim-layout.js)
+  const LINE = window.ONE_LINE && window.ONE_LINE.kind === 'layout' ? window.ONE_LINE : null;
+  const ST = LINE ? LINE.stations() : E.DEMO_STATIONS, byId = Object.fromEntries(ST.map(s => [s.id, s]));
+  const LB = id => (LINE ? LINE.label(id) : id), BUILD = LINE ? LINE.build : undefined;
   const C_A = '#3d86d6', C_B = '#b08a1a', C_DOT = '#5d6064', C_BEST = '#eec539'; // validated pair (dark surface), muted, highlight
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const f1 = v => v.toFixed(1), f0 = v => Math.round(v).toLocaleString('ko-KR');
@@ -52,15 +55,16 @@
   /* ================================================================ scenario compare */
   // the stations worth changing: the slowest cycles (time + stop turnover), and the two checks with an OK rate
   const CT_IDS = ST.filter(s => s.id !== 'A0' && s.id !== 'A1').map(s => ({ id: s.id, c: s.ct + (s.turnover ?? 0) })).sort((a, b) => b.c - a.c).slice(0, 6).map(s => s.id);
-  const OK_IDS = ST.filter(s => s.okRate !== undefined).map(s => s.id);
-  const DEF = { name: '', pallets: 8, ct: Object.fromEntries(CT_IDS.map(id => [id, byId[id].ct])), ok: Object.fromEntries(OK_IDS.map(id => [id, byId[id].okRate * 100])) };
+  let OK_IDS = ST.filter(s => s.okRate !== undefined).map(s => s.id);
+  if (LINE && !OK_IDS.length) OK_IDS = CT_IDS.slice(0, 2); // no OK rate set in the builder: offer the two slowest at 100 %
+  const DEF = { name: '', pallets: 8, ct: Object.fromEntries(CT_IDS.map(id => [id, byId[id].ct])), ok: Object.fromEntries(OK_IDS.map(id => [id, +((byId[id].okRate ?? 1) * 100).toFixed(1)])) };
   const SIDES = [{ key: 'A', color: C_A, name: '현재안' }, { key: 'B', color: C_B, name: '개선안' }];
 
   function formHtml(side) {
     let h = `<div class="card"><h3><span class="sw" style="background:${side.color}"></span><input id="nm${side.key}" value="${esc(side.name)}" style="background:transparent;border:0;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex:1;min-width:0"><button class="btn" id="v3d${side.key}">3D로 보기</button></h3><div class="fields">`;
-    h += `<span class="lab">지그 팔레트 수</span><input type="number" min="3" max="32" step="1" data-k="pallets" data-def="${DEF.pallets}" id="${side.key}_pallets" value="${DEF.pallets}">`;
-    for (const id of CT_IDS) h += `<span class="lab"><b>${id}</b>${esc(byId[id].name)} 사이클 (s)</span><input type="number" min="1" step="0.1" data-k="ct" data-id="${id}" data-def="${DEF.ct[id]}" value="${DEF.ct[id]}">`;
-    for (const id of OK_IDS) h += `<span class="lab"><b>${id}</b>${esc(byId[id].name)} 양품률 (%)</span><input type="number" min="50" max="100" step="0.5" data-k="ok" data-id="${id}" data-def="${DEF.ok[id]}" value="${DEF.ok[id]}">`;
+    if (!LINE) h += `<span class="lab">지그 팔레트 수</span><input type="number" min="3" max="32" step="1" data-k="pallets" data-def="${DEF.pallets}" id="${side.key}_pallets" value="${DEF.pallets}">`;
+    for (const id of CT_IDS) h += `<span class="lab"><b>${LB(id)}</b>${esc(byId[id].name)} 사이클 (s)</span><input type="number" min="1" step="0.1" data-k="ct" data-id="${id}" data-def="${DEF.ct[id]}" value="${DEF.ct[id]}">`;
+    for (const id of OK_IDS) h += `<span class="lab"><b>${LB(id)}</b>${esc(byId[id].name)} 양품률 (%)</span><input type="number" min="50" max="100" step="0.5" data-k="ok" data-id="${id}" data-def="${DEF.ok[id]}" value="${DEF.ok[id]}">`;
     return h + '</div></div>';
   }
   $('scnForms').innerHTML = SIDES.map(formHtml).join('');
@@ -68,7 +72,7 @@
   const mark = el => el.classList.toggle('chg', Math.abs(+el.value - +el.dataset.def) > 1e-9);
   document.querySelectorAll('#scnForms input[data-k]').forEach(el => el.addEventListener('input', () => mark(el)));
   function readSide(k) {
-    const p = { pallets: DEF.pallets, stations: {} };
+    const p = LINE ? { stations: {} } : { pallets: DEF.pallets, stations: {} };
     for (const el of inputs(k)) {
       const v = +el.value; if (!Number.isFinite(v)) continue;
       if (el.dataset.k === 'pallets') p.pallets = Math.max(3, Math.min(32, Math.round(v)));
@@ -84,20 +88,25 @@
     }
   }
   const ct = (id, f) => +(byId[id].ct * f).toFixed(2);
-  const PRESETS = [
+  const S0 = CT_IDS[0], S1 = CT_IDS[1];
+  const PRESETS = LINE ? [
+    ...(S0 ? [{ label: `가장 느린 ${LB(S0)} 20% 단축`, name: `${LB(S0)} 20% 단축`, p: { stations: { [S0]: { ct: ct(S0, 0.8) } } } }] : []),
+    ...(S1 ? [{ label: `${LB(S0)}·${LB(S1)} 20% 단축`, name: `${LB(S0)}·${LB(S1)} 단축`, p: { stations: { [S0]: { ct: ct(S0, 0.8) }, [S1]: { ct: ct(S1, 0.8) } } } }] : []),
+    ...(OK_IDS[0] ? [{ label: `${LB(OK_IDS[0])} 양품률 95%`, name: `${LB(OK_IDS[0])} NG 증가`, p: { stations: { [OK_IDS[0]]: { okRate: 0.95 } } } }] : []),
+  ] : [
     { label: '팔레트 8 → 14', name: '팔레트 14', p: { pallets: 14 } },
     { label: '리크 테스트 20% 단축', name: '리크 20% 단축', p: { pallets: 16, stations: { E3: { ct: ct('E3', 0.8) } } } },
     { label: '리크·레이저 20% 단축 + 팔레트 16', name: '리크·레이저 단축', p: { pallets: 16, stations: { E3: { ct: ct('E3', 0.8) }, B6: { ct: ct('B6', 0.8) } } } },
     { label: '리크 양품률 97 → 90%', name: '리크 NG 증가', p: { pallets: 8, stations: { E3: { okRate: 0.9 } } } },
   ];
   for (const pr of PRESETS) { const b = document.createElement('button'); b.className = 'btn'; b.textContent = pr.label; b.onclick = () => { writeSide('B', pr.p); $('nmB').value = pr.name; }; $('presets').appendChild(b); }
-  writeSide('B', PRESETS[0].p); $('nmB').value = PRESETS[0].name;
+  if (PRESETS[0]) { writeSide('B', PRESETS[0].p); $('nmB').value = PRESETS[0].name; }
   for (const s of SIDES) $('v3d' + s.key).onclick = () => show3D(readSide(s.key), $('nm' + s.key).value || s.name);
 
   const KPI = [
     { k: 'throughputPerHour', label: '시간당 생산', unit: '개/h', fmt: f1, up: true },
     { k: 'perShift', label: '8시간당 생산', unit: '개', fmt: f0, up: true },
-    { k: 'leadTime', label: '리드타임 (투입 → 포장)', unit: '분', fmt: v => f1(v / 60), scale: 1 / 60, up: false },
+    { k: 'leadTime', label: LINE ? '리드타임 (투입 → 배출)' : '리드타임 (투입 → 포장)', unit: '분', fmt: v => f1(v / 60), scale: 1 / 60, up: false },
     { k: 'wip', label: '평균 재공', unit: '개', fmt: f1, up: false },
     { k: 'ngRate', label: 'NG 비율 (배출 ÷ 전체)', unit: '%', fmt: v => v.toFixed(2), up: false },
     { k: 'scrapped', label: 'NG 배출 수 (측정 구간)', unit: '개', fmt: f1, info: true },
@@ -110,7 +119,7 @@
     $('runCmp').disabled = true; $('cmpBusy').textContent = `계산 중… (${reps}회 × 2안, ${shift + 1}시간씩)`;
     setTimeout(() => {
       const t0 = performance.now();
-      const a = E.runScenario(na, pa, run), b = E.runScenario(nb, pb, run), rows = E.compare(a, b);
+      const a = E.runScenario(na, pa, run, BUILD), b = E.runScenario(nb, pb, run, BUILD), rows = E.compare(a, b);
       renderCompare(a, b, rows, run, pa, pb);
       $('cmpBusy').textContent = `완료 · ${((performance.now() - t0) / 1000).toFixed(1)}초`; $('runCmp').disabled = false;
     }, 30);
@@ -140,6 +149,14 @@
 
     // hand calculation vs simulation, bottleneck
     const hand = (s, p) => {
+      if (LINE) {
+        const c = LINE.capacity(p), sim = s.kpi.throughputPerHour.mean, lim = c.limit;
+        return `<div style="margin-bottom:10px"><b style="color:inherit;font-family:var(--sans)">${esc(s.name)}</b><br>
+          ${c.station ? `가장 느린 공정 ${LB(c.station.id)} ${esc(c.station.name)} ${c.station.cycle.toFixed(2)} s (작업 + 교체) → <b>${f1(c.station.perHour)}</b> 개/h${lim === 'station' ? ' (한계)' : ''}<br>` : ''}
+          투입 합계 <b>${f1(c.supply.perHour)}</b> 개/h${lim === 'supply' ? ' (한계)' : ''}<br>
+          손계산 상한 <b>${f1(c.perHour)}</b> · 시뮬 <b>${f1(sim)}</b> 개/h (변동·고장·NG로 ${((1 - sim / c.perHour) * 100).toFixed(1)}% 낮음)<br>
+          시뮬 병목 <b>${s.bottleneck ? LB(s.bottleneck) : '–'}</b> ${esc(byId[s.bottleneck]?.name ?? '')}</div>`;
+      }
       const c = E.capacity(E.buildDemoLine(p)), lim = c.station.perHour <= c.pallets.perHour ? 'station' : 'pallets', sim = s.kpi.throughputPerHour.mean;
       return `<div style="margin-bottom:10px"><b style="color:inherit;font-family:var(--sans)">${esc(s.name)}</b><br>
         가장 느린 공정 ${c.station.id} ${c.station.cycle.toFixed(2)} s → <b>${f1(c.station.perHour)}</b> 개/h${lim === 'station' ? ' (한계)' : ''}<br>
@@ -153,12 +170,13 @@
     const ids = Object.keys(a.utilisation).filter(id => byId[id]).sort((x, y) => Math.max(b.utilisation[y].busy + b.utilisation[y].down, a.utilisation[y].busy + a.utilisation[y].down) - Math.max(b.utilisation[x].busy + b.utilisation[x].down, a.utilisation[x].busy + a.utilisation[x].down)).slice(0, 10);
     const bar = (u, nm, id) => `<div class="u" data-tip="${esc(`${id} · ${nm}<br>가동 ${(u.busy * 100).toFixed(1)}% · 막힘 ${(u.blocked * 100).toFixed(1)}% · 고장 ${(u.down * 100).toFixed(1)}%`)}"><u style="width:${u.busy * 100}%;background:var(--busy)"></u><u style="width:${u.blocked * 100}%;background:var(--blocked)"></u><u style="width:${u.down * 100}%;background:var(--down)"></u><span>${(u.busy * 100).toFixed(0)}%</span></div>`;
     let ub = `<span></span><span class="hd">${esc(a.name)}</span><span class="hd">${esc(b.name)}</span>`;
-    for (const id of ids) ub += `<span class="id" title="${esc(byId[id].name)}">${id}</span>${bar(a.utilisation[id], a.name, id)}${bar(b.utilisation[id], b.name, id)}`;
+    for (const id of ids) ub += `<span class="id" title="${esc(byId[id].name)}">${LB(id)}</span>${bar(a.utilisation[id], a.name, id)}${bar(b.utilisation[id], b.name, id)}`;
     $('ub').innerHTML = ub;
   }
 
   /* ================================================================ optimisation (GA) */
-  const GENES = [
+  const ctG = (id, on, cost) => ({ on, gene: E.ctGene(id, `${LB(id)} ${byId[id].name} 단축`, byId[id].ct), cost, unit: '1단계 (−10%)', show: v => v ? `−${v * 10}% (${(byId[id].ct * (1 - 0.1 * v)).toFixed(1)} s)` : '그대로' });
+  const GENES = LINE ? CT_IDS.slice(0, 4).map((id, i) => ctG(id, i < 2, 2)) : [
     { on: true, gene: E.palletGene, cost: 0.6, unit: '팔레트 1개', show: v => `${v}개` },
     { on: true, gene: E.ctGene('E3', 'E3 리크 테스트 단축', byId.E3.ct), cost: 2, unit: '1단계 (−10%)', show: v => v ? `−${v * 10}% (${(byId.E3.ct * (1 - 0.1 * v)).toFixed(1)} s)` : '그대로' },
     { on: true, gene: E.ctGene('B6', 'B6 레이저 용접 단축', byId.B6.ct), cost: 2, unit: '1단계 (−10%)', show: v => v ? `−${v * 10}% (${(byId.B6.ct * (1 - 0.1 * v)).toFixed(1)} s)` : '그대로' },
@@ -175,7 +193,7 @@
     const sel = GENES.filter((g, i) => (g.cost = Math.max(0, +document.querySelector(`[data-gc="${i}"]`).value || 0), document.querySelector(`[data-g="${i}"]`).checked));
     if (!sel.length) { $('optBusy').textContent = '찾을 항목을 하나 이상 고르세요'; return; }
     const opts = {
-      genes: sel.map(g => g.gene), base: { pallets: 8 }, population: setv('population'), generations: setv('generations'), seed: setv('seed'),
+      genes: sel.map(g => g.gene), base: LINE ? {} : { pallets: 8 }, build: BUILD, population: setv('population'), generations: setv('generations'), seed: setv('seed'),
       horizon: setv('hours') * 3600 + 3600, warmup: 3600, evalSeeds: Array.from({ length: setv('seeds') }, (_, i) => 11 + i),
       costPerUnit: Object.fromEntries(sel.map(g => [g.gene.key, g.cost])),
     };
@@ -193,7 +211,7 @@
     $('optBusy').textContent = '첫 세대 계산 중…'; drawGA(); ga.timer = setTimeout(step, 30);
   };
   function finishOpt(word) { $('runOpt').disabled = false; $('stopOpt').disabled = true; if (ga) $('optBusy').textContent = `${word} · ${ga.gens.length}세대 · 후보 ${ga.all.size}개 · ${((performance.now() - ga.t0) / 1000).toFixed(1)}초`; }
-  const paramsOf = (sel, genes) => { const p = { pallets: 8 }; sel.forEach((g, i) => g.gene.apply(p, genes[i])); return p; };
+  const paramsOf = (sel, genes) => { const p = LINE ? {} : { pallets: 8 }; sel.forEach((g, i) => g.gene.apply(p, genes[i])); return p; };
 
   function drawGA() {
     const G = ga.opts.generations, gens = ga.gens;
@@ -212,10 +230,10 @@
     const best = lb.best, found = gens.findIndex(g => g.best.genes.join(',') === best.genes.join(','));
     const base = [...ga.all.values()].find(c => c.genes.every((v, i) => v === (ga.sel[i].gene.key === 'pallets' ? 8 : 0)));
     $('bestBox').innerHTML = `<div class="gv">${ga.sel.map((g, i) => `<span>${esc(g.gene.label)}</span><span>${esc(g.show(best.genes[i]))}</span>`).join('')}</div>
-      <div class="gv" style="border-top:1px solid var(--line);padding-top:6px"><span>시간당 생산</span><span>${f1(best.throughput)} 개/h</span><span>투자 비용 (환산)</span><span>${f1(best.cost)}</span><span>점수</span><span style="color:var(--accent)">${f1(best.score)}</span>${base ? `<span>현재안 (팔레트 8, 개선 없음)</span><span>${f1(base.throughput)} 개/h · 점수 ${f1(base.score)}</span>` : ''}<span>처음 나온 세대</span><span>${found + 1}</span></div>
+      <div class="gv" style="border-top:1px solid var(--line);padding-top:6px"><span>시간당 생산</span><span>${f1(best.throughput)} 개/h</span><span>투자 비용 (환산)</span><span>${f1(best.cost)}</span><span>점수</span><span style="color:var(--accent)">${f1(best.score)}</span>${base ? `<span>${LINE ? '현재안 (개선 없음)' : '현재안 (팔레트 8, 개선 없음)'}</span><span>${f1(base.throughput)} 개/h · 점수 ${f1(base.score)}</span>` : ''}<span>처음 나온 세대</span><span>${found + 1}</span></div>
       <div class="bar" style="margin-top:6px"><button class="btn pri" id="best3d">이 안을 3D로 보기</button><button class="btn" id="bestCmp">비교에 넣기</button></div>`;
     $('best3d').onclick = () => show3D(paramsOf(ga.sel, best.genes), '최적화 최고안');
-    $('bestCmp').onclick = () => { writeSide('A', { pallets: 8 }); $('nmA').value = '현재안'; writeSide('B', paramsOf(ga.sel, best.genes)); $('nmB').value = '최적화 최고안'; setMode('cmp'); };
+    $('bestCmp').onclick = () => { writeSide('A', LINE ? {} : { pallets: 8 }); $('nmA').value = '현재안'; writeSide('B', paramsOf(ga.sel, best.genes)); $('nmB').value = '최적화 최고안'; setMode('cmp'); };
 
     // every evaluated candidate: cost vs throughput
     const all = [...ga.all.values()], xx = nice(0, Math.max(1, ...all.map(c => c.cost))), ty = nice(Math.min(...all.map(c => c.throughput)), Math.max(...all.map(c => c.throughput)));
@@ -225,5 +243,5 @@
     pb += dot(P.X(best.cost), P.Y(best.throughput), 5.5, C_BEST, `최고안 · ${describe(best.genes, ' · ')}<br>생산 ${f1(best.throughput)} · 비용 ${f1(best.cost)} · 점수 ${f1(best.score)}`);
     $('paretoChart').innerHTML = P.svg(pb);
   }
-  const describe = (genes, sep) => ga.sel.map((g, i) => `${g.gene.key === 'pallets' ? '팔레트' : g.gene.key.slice(3)} ${g.show(genes[i])}`).join(sep);
+  const describe = (genes, sep) => ga.sel.map((g, i) => `${g.gene.key === 'pallets' ? '팔레트' : LB(g.gene.key.slice(3))} ${g.show(genes[i])}`).join(sep);
 })();

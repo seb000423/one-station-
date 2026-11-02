@@ -4,7 +4,7 @@
  * same seeds (common random numbers) so the difference between them is the change, not the dice.
  */
 import { buildDemoLine, type DemoParams } from './demo-line';
-import { simulateLine, type LineResult } from './line';
+import { simulateLine, type LineResult, type LineModel } from './line';
 
 export interface RunSettings { horizon: number; warmup: number; seeds: number[] }
 export const DEFAULT_RUN: RunSettings = { horizon: 8 * 3600 + 3600, warmup: 3600, seeds: [1, 2, 3, 4, 5] };
@@ -26,8 +26,9 @@ export function stat(xs: number[]): Stat {
 /** NG share of everything that left the line, % */
 const ngRate = (r: LineResult) => (r.produced + r.scrapped ? (r.scrapped / (r.produced + r.scrapped)) * 100 : 0);
 
-export function runScenario(name: string, params: DemoParams, run: RunSettings = DEFAULT_RUN): ScenarioResult {
-  const model = buildDemoLine(params).model;
+/** `build` turns the scenario's parameters into a line (default: the demo line; a BUILDER line passes its own) */
+export function runScenario(name: string, params: DemoParams, run: RunSettings = DEFAULT_RUN, build: (p: DemoParams) => LineModel = p => buildDemoLine(p).model): ScenarioResult {
+  const model = build(params);
   const runs = run.seeds.map(seed => simulateLine(model, run.horizon, { seed, warmup: run.warmup }));
   const util: ScenarioResult['utilisation'] = {};
   for (const id of Object.keys(runs[0]!.stations)) {

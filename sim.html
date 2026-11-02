@@ -238,7 +238,16 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/meshopt_decoder.js"></script>
 <script src="js/one-twin-sim.js"></script>
-<script src="js/sim-run.js"></script>
-<script src="js/sim-lab.js"></script>
+<script>
+// ?src=builder → the line drawn in ONE BUILDER (its own element code + the layout runner); otherwise the demo line
+(() => {
+  const builder = new URLSearchParams(location.search).get('src') === 'builder';
+  const list = builder
+    ? ['factory-assets', 'factory-elements', 'factory-kit', 'factory-frame', 'factory-unity', 'factory-unity-groups', 'factory-equip', 'factory-motion', 'factory-flow', 'sim-layout', 'sim-lab']
+    : ['sim-run', 'sim-lab'];
+  const next = i => { if (i >= list.length) return; const el = document.createElement('script'); el.src = 'js/' + list[i] + '.js'; el.onload = () => next(i + 1); el.onerror = () => console.error('load', list[i]); document.body.appendChild(el); };
+  next(0);
+})();
+</script>
 </body>
 </html>

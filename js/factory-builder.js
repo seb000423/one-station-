@@ -55,6 +55,11 @@
   // walkways and zones show their name on the floor
   const syncLabel = o => { if (LETTERED.includes(o.type)) { o.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}); o.params.label = o.name; } };
   const hasClip = p => { const U = window.FactoryUnity, c = U && U.CATALOG[(U.ALIAS || {})[p.model] || p.model]; return !!(c && c.clip); };
+  // ONE SIM (line simulation) settings of a machine: whether it is a process step, and its cycle / OK rate / failures
+  const SIMF = [['simOn', '라인 시뮬레이션', 'select', [['', '자동 (컨베이어 옆이면 공정)'], ['on', '공정으로 넣기'], ['off', '공정에서 빼기']]],
+    ['simCt', '시뮬 사이클 (s, 0 = 설비 값)', 0.5, 0, 3600, p => p.simOn !== 'off'], ['simOk', '양품률 (%)', 0.5, 50, 100, p => p.simOn !== 'off'],
+    ['simMtbf', '평균 고장 간격 (분, 0 = 없음)', 1, 0, 6000, p => p.simOn !== 'off'], ['simMttr', '평균 수리 시간 (분)', 0.5, 0, 600, p => p.simOn !== 'off' && p.simMtbf > 0]];
+  const SIMDEF = { simOn: '', simCt: 0, simOk: 100, simMtbf: 0, simMttr: 5 };
   const FIELDS = { // building element settings: key, label, step, min, max
     column: [['w', '가로 (m)', 0.1, 0.1, 3], ['d', '세로 (m)', 0.1, 0.1, 3], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
@@ -105,6 +110,7 @@
     plate: [['kind', '종류', 'select', [['alu', '알루미늄 판'], ['guard', '투명 가드 (PC)'], ['mesh', '메시 가드']]], ['orient', '방향', 'select', [['h', '눕힘 (상판 · 선반)'], ['v', '세움 (가드 · 패널)']]], ['w', '가로 (m)', 0.005, 0.05, 6], ['d', '세로 · 높이 (m)', 0.005, 0.05, 6], ['t', '두께 (m)', 0.001, 0.002, 0.05]],
     foot: [['kind', '종류', 'select', [['level', '레벨링 발'], ['caster', '캐스터 (잠금, 125 mm)']]], ['h', '높이 (m)', 0.005, 0.05, 0.2, p => p.kind !== 'caster']]
   };
+  for (const t of ['robot', 'bench', 'ufmodel', 'mine']) FIELDS[t] = FIELDS[t].concat(SIMF);
 
   const hasJobs = p => (p.stops || []).filter(x => x && x.at).length >= 2; // AMR job list in use
   const ACTS = [['load', '적재'], ['unload', '하역'], ['charge', '충전'], ['wait', '대기']];
@@ -1253,7 +1259,7 @@
       <div class="sep"></div>
       <div class="grp"><span>시점</span><button type="button" data-v="all">전체</button><button type="button" data-v="front">정면</button><button type="button" data-v="top">상면</button><button type="button" data-v="inside" title="공장 안 눈높이 시점 (누를 때마다 다음 위치)">내부</button><button type="button" data-v="roofs" title="지붕 (트러스 · 지붕판 · 조명)을 숨기거나 보입니다">지붕 숨기기</button><select id="fbLabelMode" title="화면 라벨: 구역 이름 · 재고 · 상태"><option value="all">라벨: 모두</option><option value="stock">라벨: 재고 · 상태</option><option value="name">라벨: 바닥 이름만</option><option value="off">라벨: 끄기</option></select>
         <i class="vsep"></i><select id="fbTarget" title="볼 객체 (3D나 목록에서 선택하면 따라 바뀝니다)"></select><button type="button" data-v="look" title="고른 객체로 카메라를 옮깁니다">객체 보기</button><button type="button" data-v="follow" title="고른 AMR·작업자를 따라갑니다. 다시 누르거나 Esc, 화면을 끌면 멈춥니다">추적</button></div>
-      <div class="grp push"><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
+      <div class="grp push"><button type="button" data-t="des" title="이 배치를 ONE SIM에서 생산 시뮬레이션합니다: 컨베이어 흐름과 컨베이어 옆 설비(공정)로 몇 시간치 생산·병목·재공을 계산하고 3D로 다시 봅니다">▶ 라인 시뮬레이션</button><button type="button" data-t="save" class="primary strong">저장 · ONE MONITOR로 보내기</button></div>`;
     $('.view').appendChild(bar);
     // simulation controls: the shared cycle panel at the bottom centre of the 3D view (js/sim-panel.js)
     simBox = window.SimPanel.mount($('.view'), {
@@ -1313,6 +1319,13 @@
     on('[data-t=example]', () => { if (!doc.objects.length || confirm(`예시 공정 테스트1을 엽니다. 지금 배치(객체 ${doc.objects.length}개)는 Ctrl+Z로 되돌릴 수 있습니다.`)) loadExample(); });
     on('[data-t=load]', () => { const b = $('#loadFactory'); if (b) b.click(); });
     on('[data-t=save]', () => { const b = $('#saveStation'); if (b) b.click(); });
+    // ONE SIM on this layout (the default example line has its own detailed model; any other layout is converted from the belts)
+    on('[data-t=des]', () => {
+      store();
+      if (doc.objects.some(o => o.type === 'ufmodel' && (o.params || {}).model === 'e3_egr_module_line')) { location.href = 'sim.html'; return; }
+      if (!doc.objects.some(o => o.type === 'conveyor')) { note('라인 시뮬레이션에는 컨베이어가 필요합니다. 컨베이어를 놓고 한쪽 끝에 "투입", 다른 끝에 "배출"을 켜 주세요'); return; }
+      location.href = 'sim.html?src=builder';
+    });
     on('[data-t=clear]', clearAll);
     on('[data-t=undo]', undo);
     bar.querySelector('[data-t=snap]').onchange = e => setSnap(e.target.checked);
@@ -1500,7 +1513,7 @@
       const p = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {});
       // a model's 모델 choice lists the same category only (a column swaps for another building part, not a robot)
       const sameCat = (k, mn) => (o.type === 'ufmodel' && k === 'model' && mc ? mn.filter(([key]) => (U.CATALOG[key] || {}).cat === mc.cat) : mn);
-      html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k], st, sameCat(k, mn), mx)).join('')}</div>`;
+      html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k] ?? SIMDEF[k], st, sameCat(k, mn), mx)).join('')}</div>`;
       if (o.type === 'conveyor') html += conveyorInfo(o);
       if (o.type === 'mine') {
         const tmp = { objects: (p.parts || []).map((q, i) => Object.assign({}, q, { id: '__m' + i, name: TYPE_LABEL[q.type] })) }, rows = FR().bom(tmp), [fw, fd] = window.FactoryElements.footprint(o);
@@ -1807,7 +1820,9 @@
     // ONE BUILDER always opens on an empty floor grid, ready to place things; the example opens only from 예시 공정 보기 and earlier
     // work from 불러오기 (the last local workspace stays one click away: 불러오기 → 이전 작업)
     const prev = initialDoc(); if (prev && prev.objects.length) { try { localStorage.setItem(STORE + '.last', JSON.stringify(prev)); } catch (e) {} }
-    doc = emptyDoc();
+    // back from ONE SIM (▶ 라인 시뮬레이션): reopen the layout that was simulated
+    const resume = /[?&]resume=1\b/.test(location.search); if (resume) history.replaceState(null, '', location.pathname + location.hash);
+    doc = resume && prev && prev.objects.length ? prev : emptyDoc();
     rebuildAll();
     ensureGizmo().then(() => select(null)).catch(e => note(e.message, true));
     // GLB models (js/factory-assets.js) load in the background; rebuild what uses them once they arrive

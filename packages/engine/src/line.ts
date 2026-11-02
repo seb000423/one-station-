@@ -18,8 +18,11 @@ import { Scheduler, type Ev } from './des';
 import { Rng, type Dist } from './rng';
 
 export type NodeDef =
-  | { kind: 'source'; id: string; name?: string; interarrival?: Dist; limit?: number; lot?: number; gap?: number }
-  | { kind: 'buffer'; id: string; name?: string; cap: number; transit?: number; /** time from the first waiting place to the next stop */ index?: number }
+  | { kind: 'source'; id: string; name?: string; interarrival?: Dist; limit?: number; lot?: number; gap?: number;
+      /** with interarrival: an arrival that finds no room waits, and is put on once there is room (the next interval
+       *  counts from then), so nothing piles up out of sight at the source */ hold?: boolean }
+  | { kind: 'buffer'; id: string; name?: string; cap: number; transit?: number; /** time from the first waiting place to the next stop */ index?: number;
+    /** the head asks the stop ahead for its turn this long before it would reach it (at its waiting place); default 0 */ request?: number }
   | {
     kind: 'station'; id: string; name?: string; ct: Dist; okRate?: number; mtbf?: Dist; mttr?: Dist; ng?: string; operators?: number;
     /** time to pass an empty pallet */ emptyCt?: number;
@@ -39,7 +42,7 @@ export type StationState = 'idle' | 'busy' | 'blocked' | 'down' | 'setup';
 export type WorkMode = 'work' | 'reject' | 'empty';
 export interface Part {
   id: number; seq: number; born: number; at: string; next: string | null; ng: boolean; empty: boolean; readyAt: number; enteredAt: number; src: string;
-  carrier: number | null; pool: string | null;
+  carrier: number | null; pool: string | null; /** the node it came from */ prev: string | null;
 }
 export type LogKind = 'create' | 'enter' | 'arrive' | 'start' | 'finish' | 'fail' | 'repair' | 'block' | 'exit' | 'ng' | 'reject' | 'setup' | 'ready' | 'lift' | 'top' | 'return';
 export interface LogEntry { t: number; kind: LogKind; part: number; node: string }
@@ -60,7 +63,7 @@ interface N {
   // buffer
   levelArea: number; levelSince: number; maxLevel: number; headEv: Ev | null;
   // source
-  created: number; arrivalEv: Ev | null; lotStart: number; holdEv: Ev | null;
+  created: number; arrivalEv: Ev | null; lotStart: number; holdEv: Ev | null; pending: boolean;
   /** pallets still on their place that already belong to the next station but have not set off yet */ held: Part[];
 }
 
@@ -90,7 +93,7 @@ export class LineSim {
         def, id: def.id, out: [], waiters: [], q: [], rng: root.fork(def.id),
         state: 'idle', since: 0, ttf: Infinity, remaining: 0, ev: null, mode: 'work', ctNow: 0, workStart: 0, arriveAt: 0, freeSince: -Infinity, good: 0, lastSetupAt: 0, willFail: false,
         acc: { idle: 0, busy: 0, blocked: 0, down: 0, setup: 0 }, done: 0, ngCount: 0,
-        levelArea: 0, levelSince: 0, maxLevel: 0, headEv: null, created: 0, arrivalEv: null, lotStart: -Infinity, holdEv: null, held: [],
+        levelArea: 0, levelSince: 0, maxLevel: 0, headEv: null, created: 0, arrivalEv: null, lotStart: -Infinity, holdEv: null, pending: false, held: [],
       });
     }
     for (const r of model.routes) {
@@ -148,7 +151,7 @@ export class LineSim {
     }
   }
   private accept(n: N, p: Part, from: N | null): void {
-    p.at = n.id; p.next = null; p.enteredAt = this.now;
+    p.prev = from ? from.def.id : null; p.at = n.id; p.next = null; p.enteredAt = this.now;
     this.note('enter', p, n.id);
     switch (n.def.kind) {
       case 'sink': {
@@ -231,14 +234,14 @@ export class LineSim {
     if (u.def.kind === 'source') return this.sourceNext(u);
     const p = u.q[0];
     if (!p) return;
-    if (u.def.kind === 'buffer' && p.readyAt > this.now) return this.bufferHead(u);
+    if (u.def.kind === 'buffer' && p.readyAt - (u.def.request ?? 0) > this.now + 1e-9) return this.bufferHead(u);
     if (u.def.kind === 'station' && u.state !== 'blocked') return;
     this.push(u, p);
   }
 
   /* ---------- sources ---------- */
   private newPart(src: N): Part {
-    const p: Part = { id: this.nextId++, seq: src.created, born: this.now, at: src.id, next: null, ng: false, empty: false, readyAt: this.now, enteredAt: this.now, src: src.id, carrier: null, pool: null };
+    const p: Part = { id: this.nextId++, seq: src.created, born: this.now, at: src.id, next: null, ng: false, empty: false, readyAt: this.now, enteredAt: this.now, src: src.id, carrier: null, pool: null, prev: null };
     this.parts.set(p.id, p); src.created++; this.wipChange(1); this.note('create', p, src.id);
     return p;
   }
@@ -247,6 +250,7 @@ export class LineSim {
     if (d.interarrival !== undefined) {
       const arrive = () => {
         if (d.limit !== undefined && n.created >= d.limit) return;
+        if (d.hold) { n.pending = true; n.arrivalEv = null; this.sourceNext(n); return; }
         n.q.push(this.newPart(n));
         if (n.q.length === 1) this.sourceNext(n);
         n.arrivalEv = this.sched.after(n.rng.sample(d.interarrival!), arrive);
@@ -260,6 +264,15 @@ export class LineSim {
   private sourceNext(n: N): void {
     const d = n.def as Extract<NodeDef, { kind: 'source' }>;
     if (d.interarrival !== undefined) {
+      if (d.hold) {
+        if (!n.pending) return;
+        const probe = this.nodes.get(n.out[0]!.to)!;
+        if (!this.canAccept(probe)) { if (!probe.waiters.includes(n.id)) probe.waiters.push(n.id); return; }
+        n.pending = false;
+        const p = this.newPart(n); n.q.push(p); this.push(n, p);
+        n.arrivalEv = this.sched.after(n.rng.sample(d.interarrival), () => { n.arrivalEv = null; if (d.limit !== undefined && n.created >= d.limit) return; n.pending = true; this.sourceNext(n); });
+        return;
+      }
       const p = n.q[0]; if (p) this.push(n, p);
       return;
     }
@@ -301,7 +314,8 @@ export class LineSim {
   private bufferHead(n: N): void {
     const p = n.q[0]; if (!p) return;
     this.sched.cancel(n.headEv); n.headEv = null;
-    if (p.readyAt > this.now) { n.headEv = this.sched.at(p.readyAt, () => { n.headEv = null; this.bufferHead(n); }); return; }
+    const ask = p.readyAt - (n.def.kind === 'buffer' ? n.def.request ?? 0 : 0); // a merge asks at the waiting place, so two items never race for the point
+    if (ask > this.now + 1e-9) { n.headEv = this.sched.at(ask, () => { n.headEv = null; this.bufferHead(n); }); return; }
     this.push(n, p);
   }
 
@@ -395,7 +409,7 @@ export class LineSim {
     for (const pl of this.pools.values()) pools[pl.def.id] = { top: pl.top ? { ...pl.top } : null, lower: pl.lower.map(l => ({ ...l })), returning: [...pl.returning.entries()].map(([id, since]) => ({ id, since })), liftFreeAt: pl.liftFreeAt };
     return {
       t: this.now, states, stations, buffers, pools,
-      parts: [...this.parts.values()].map(p => ({ id: p.id, seq: p.seq, at: p.at, ng: p.ng, empty: p.empty, enteredAt: p.enteredAt, readyAt: p.readyAt, carrier: p.carrier })),
+      parts: [...this.parts.values()].map(p => ({ id: p.id, seq: p.seq, at: p.at, prev: p.prev, ng: p.ng, empty: p.empty, enteredAt: p.enteredAt, readyAt: p.readyAt, carrier: p.carrier })),
     };
   }
   /** created = in the line + left (good, NG at a sink or taken off at a reject station) — checked by tests */
@@ -412,7 +426,7 @@ export interface Snapshot {
   stations: Record<string, { state: StationState; part: number | null; mode: WorkMode; progress: number; arriveAt: number; ct: number; good: number; since: number; willFail: boolean }>;
   buffers: Record<string, number[]>;
   pools: Record<string, { top: { id: number; at: number; part: number | null } | null; lower: { id: number; readyAt: number }[]; returning: { id: number; since: number }[]; liftFreeAt: number }>;
-  parts: { id: number; seq: number; at: string; ng: boolean; empty: boolean; enteredAt: number; readyAt: number; carrier: number | null }[];
+  parts: { id: number; seq: number; at: string; prev: string | null; ng: boolean; empty: boolean; enteredAt: number; readyAt: number; carrier: number | null }[];
 }
 
 export interface LineResult {

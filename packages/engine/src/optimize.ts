@@ -7,7 +7,7 @@
  */
 import { Rng } from './rng';
 import { buildDemoLine, type DemoParams } from './demo-line';
-import { simulateLine } from './line';
+import { simulateLine, type LineModel } from './line';
 
 export interface Gene { key: string; label: string; min: number; max: number; apply: (p: DemoParams, v: number) => void }
 export interface Candidate { genes: number[]; score: number; throughput: number; cost: number }
@@ -17,6 +17,8 @@ export interface OptimizeOptions {
   horizon?: number; warmup?: number; evalSeeds?: number[];
   costPerUnit?: Record<string, number>; // score penalty per unit of each gene (parts / h)
   onGeneration?: (g: Generation) => void;
+  /** the line for a set of parameters (default: the demo line) */
+  build?: (p: DemoParams) => LineModel;
 }
 
 export const palletGene: Gene = { key: 'pallets', label: '지그 팔레트 수', min: 4, max: 24, apply: (p, v) => { p.pallets = v; } };
@@ -43,7 +45,7 @@ export function* optimizeSteps(o: OptimizeOptions): Generator<Generation, void, 
     const key = genes.join(','); const hit = cache.get(key); if (hit) return hit;
     const p: DemoParams = structuredClone(o.base ?? {});
     o.genes.forEach((g, i) => g.apply(p, genes[i]!));
-    const model = buildDemoLine(p).model;
+    const model = o.build ? o.build(p) : buildDemoLine(p).model;
     const th = seeds.reduce((a, s) => a + simulateLine(model, horizon, { seed: s, warmup }).throughputPerHour, 0) / seeds.length;
     const cost = o.genes.reduce((a, g, i) => a + (o.costPerUnit?.[g.key] ?? 0) * genes[i]!, 0);
     const c = { genes, score: th - cost, throughput: th, cost };
