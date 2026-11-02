@@ -56,8 +56,8 @@
     els = cubes.map(() => { const g = document.createElementNS(NS, 'g'); const f = [0, 1, 2].map(() => { const p = document.createElementNS(NS, 'path'); g.appendChild(p); return p; }); world.appendChild(g); return { g, f }; });
   }
 
-  /* ---------------------------------------------------------------- camera: perspective, a little from above and the right */
-  const cam = { yaw: -0.24, pitch: 0.27, fov: 0.62 };
+  /* ---------------------------------------------------------------- camera: perspective, straight on (front view) */
+  const cam = { yaw: 0, pitch: 0.06, fov: 0.62 };
   let C = null;
   function setCam() {
     const D = Math.max(W0, H0 * 2.4) * 1.9, cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
