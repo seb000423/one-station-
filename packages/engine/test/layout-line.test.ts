@@ -57,6 +57,23 @@ describe('a BUILDER line as a DES model', () => {
     expect(c.created).toBe(c.inLine + c.out);
     expect(sim.result().produced).toBeGreaterThan(500);
   });
+  it('a robot moves the item from the end of one belt onto another (not joined): the line carries on from there', () => {
+    const L = buildLayoutLine({
+      pitch: 0.45,
+      belts: [
+        { id: 'a', name: 'A', len: 3, speed: 0.3, next: null, source: { interval: 8 } },
+        { id: 'b', name: 'B', len: 4, speed: 0.3, next: null, sink: true },
+      ],
+      stations: [{ id: 'r', name: '이송 로봇', belt: 'a', s: 2.75, ct: 6, to: { belt: 'b', s: 0.25 } }, { id: 'q', name: '검사', belt: 'b', s: 2.5, ct: 5 }],
+    });
+    expect(L.warnings).toEqual([]);
+    const after = L.model.routes.find(r => r.from === 'r')!.to;
+    expect(L.paths[after]!.pieces).toEqual([{ belt: 'b', s0: 0.25, s1: 2.5 }]);
+    expect(L.stations.map(s => s.id)).toEqual(['r', 'q']);
+    const sim = new LineSim(L.model, { seed: 1 }).run(3600), c = sim.conservation();
+    expect(c.created).toBe(c.inLine + c.out);
+    expect(sim.result().produced).toBeGreaterThan(400);
+  });
   it('two close stations link directly (no waiting place); open ends and loops are reported, not crashed', () => {
     const L = buildLayoutLine({ pitch: 0.45, belts: [{ id: 'b', name: 'B', len: 5, speed: 0.3, next: null, source: { interval: 5 } }],
       stations: [{ id: 'x', name: 'X', belt: 'b', s: 2, ct: 5 }, { id: 'y', name: 'Y', belt: 'b', s: 2.6, ct: 5 }] });

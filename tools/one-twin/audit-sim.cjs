@@ -16,6 +16,7 @@ const LAYOUT_CASES = [
   ['merge', 'as drawn', {}, 0, 1200], ['merge', 'later (queues full)', {}, 3000, 4200], ['merge', 'deterministic', { deterministic: true }, 0, 1800],
   ['merge', 'fast assembly', { stations: { w1: { ct: 6 } } }, 0, 1800],
   ['bend', 'as drawn (NG, failures)', {}, 0, 2400], ['bend', 'slow last check', { stations: { m3: { ct: 30 } } }, 0, 2400],
+  ['transfer', 'as drawn', {}, 0, 1800], ['transfer', 'next belt full (slow check)', { stations: { q1: { ct: 25 } } }, 0, 2400],
 ];
 const CASES = [
   ['8 pallets', { pallets: 8 }, 0, 1200],
@@ -54,7 +55,7 @@ const server = http.createServer((q, r) => {
       if (d !== docName) continue;
       const r = await q.evaluate(([params, t0, t1]) => { const S = window.ONE_SIM; S.load(params, 'audit'); S.setPlaying(false); return S.audit(t0, t1, 0.1); }, [params, t0, t1]);
       const ok = r.overlaps === 0 && r.jumps === 0; if (!ok) failed++;
-      console.log(`${ok ? 'ok  ' : 'FAIL'} ${('builder ' + d + ': ' + name).padEnd(40)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}  robot carrying ${r.carried}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
+      console.log(`${ok ? 'ok  ' : 'FAIL'} ${('builder ' + d + ': ' + name).padEnd(40)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}  robot carrying ${r.carried}  welding ${r.welding}  shape change ${r.morphing}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
     }
     await q.close();
   }

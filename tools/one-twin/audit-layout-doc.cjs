@@ -21,8 +21,20 @@ const bend = {
     conv('a', '투입', -3, 0, 0, 4, { source: true, interval: 7, itemLook: 'product', item: 0.32 }),
     conv('k', '곡선', -0.375, 0.275, 0, 0, { shape: 'curve', radius: 0.9, turn: 'right' }),
     conv('b', '배출', -0.1, 2.9, -Math.PI / 2, 4, { sink: true }),
-    { id: 'r', type: 'ufmodel', name: '용접 로봇', x: -3, z: -0.6, rot: 0, params: { model: 'e3_fr10', scale: 1, simCt: 8, simOk: 92, simMtbf: 15, simMttr: 1.5 } },
+    { id: 'r', type: 'ufmodel', name: '용접 로봇', x: -3, z: -0.6, rot: 0, params: { model: 'e3_fr10', scale: 1, simCt: 8, simOk: 92, simMtbf: 15, simMttr: 1.5, simRobot: 'weld' } },
     Object.assign(bench('m1', '체결 1', 0.65, 1.9, 6), { params: { kind: 'assembly', length: 0.5, depth: 0.8, height: 0.9, worker: true, cycle: 6, simLook: 'box' } }), bench('m2', '체결 2', 0.65, 2.5, 6), bench('m3', '검사', 0.65, 4.7, 5),
   ],
 };
-module.exports = { merge, bend };
+// a robot moving parts between two belts that are not joined: the end of A and the start of B (parallel, 1.2 m apart);
+// a welding robot on B, then a check whose part turns into a carton (packing) as the work goes on
+const transfer = {
+  version: 2, factory: { width: 20, depth: 14, height: 6 },
+  objects: [
+    conv('a', '투입', -2.5, 0, 0, 3, { source: true, interval: 9, itemLook: 'tote', item: 0.4, itemW: 0.3, itemH: 0.15 }),
+    conv('b', '배출', -2.5, 1.2, Math.PI, 3, { sink: true }),
+    { id: 't1', type: 'ufmodel', name: '이송 로봇', x: -0.81, z: 0.9, rot: Math.PI / 2, params: { model: 'e3_fr10', scale: 1, simCt: 7 } },
+    { id: 'w1', type: 'ufmodel', name: '용접 로봇', x: -2.0, z: 1.75, rot: Math.PI, params: { model: 'e3_fr10', scale: 1, simCt: 10, simRobot: 'weld' } },
+    Object.assign(bench('q1', '포장', -3.6, 2.0, 8), { params: { kind: 'pack', length: 0.5, depth: 0.8, height: 0.9, worker: true, cycle: 8, simLook: 'box' } }),
+  ],
+};
+module.exports = { merge, bend, transfer };

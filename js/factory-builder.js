@@ -59,8 +59,9 @@
   const SIMF = [['simOn', '라인 시뮬레이션', 'select', [['', '자동 (컨베이어 옆이면 공정)'], ['on', '공정으로 넣기'], ['off', '공정에서 빼기']]],
     ['simCt', '시뮬 사이클 (s, 0 = 설비 값)', 0.5, 0, 3600, p => p.simOn !== 'off'], ['simOk', '양품률 (%)', 0.5, 50, 100, p => p.simOn !== 'off'],
     ['simMtbf', '평균 고장 간격 (분, 0 = 없음)', 1, 0, 6000, p => p.simOn !== 'off'], ['simMttr', '평균 수리 시간 (분)', 0.5, 0, 600, p => p.simOn !== 'off' && p.simMtbf > 0],
+    ['simRobot', '로봇 작업', 'select', [['', '집어 옮기기 (끝에 다른 컨베이어가 닿으면 그쪽으로)'], ['weld', '용접 (부품 위 모서리를 따라)']], null, p => p.simOn !== 'off' && !!window.FactoryUnity && window.FactoryUnity.catOf(p.model) === '로봇'],
     ['simLook', '공정 후 부품 모양', 'select', [['', '그대로'], ['box', '골판지 상자']].concat(window.FactoryFlow ? window.FactoryFlow.looks().slice(1) : []), null, p => p.simOn !== 'off']];
-  const SIMDEF = { simOn: '', simCt: 0, simOk: 100, simMtbf: 0, simMttr: 5, simLook: '' };
+  const SIMDEF = { simOn: '', simCt: 0, simOk: 100, simMtbf: 0, simMttr: 5, simLook: '', simRobot: '' };
   const FIELDS = { // building element settings: key, label, step, min, max
     column: [['w', '가로 (m)', 0.1, 0.1, 3], ['d', '세로 (m)', 0.1, 0.1, 3], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],

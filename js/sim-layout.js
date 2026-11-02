@@ -8,6 +8,10 @@
 // waiting one item apart in front of a busy station, standing at the station while it works); an item never moves faster
 // than its belt, never backwards, and never closer than one item to the one in front. Machines move only while their
 // station works on an item. Items are put on at the 투입 end and taken off at the 배출 end, as the layout says.
+// Robots (js/sim-robot.js) pick the part up and put it down again, or move it from the open end of one belt to the open
+// start of another in their reach (a transfer; taken out with a warning if the arm cannot reach both), or weld along it
+// (로봇 작업 = 용접: the bead stays on the part). A process that changes the part's look grows the new shape from the
+// bottom up as the work goes on; nothing is swapped at once.
 (() => {
   'use strict';
   const E = window.OneTwinSim, FE = window.FactoryElements, FF = window.FactoryFlow, FU = window.FactoryUnity;
@@ -28,7 +32,7 @@
   // a machine's ONE SIM settings (ONE BUILDER properties: 라인 시뮬레이션 / 시뮬 사이클 / 양품률 / 고장 간격 / 수리 시간)
   const simOf = o => { const p = o.params || {}, s = p.sim || {};
     return { on: p.simOn === 'on' || s.on === true ? true : p.simOn === 'off' || s.on === false ? false : null,
-      ct: +(p.simCt || s.ct || 0), ok: +(p.simOk ?? s.ok ?? 100), mtbf: +(p.simMtbf || s.mtbf || 0), mttr: +(p.simMttr || s.mttr || 0), cv: +(s.cv || 0), look: p.simLook || s.look || '' }; };
+      ct: +(p.simCt || s.ct || 0), ok: +(p.simOk ?? s.ok ?? 100), mtbf: +(p.simMtbf || s.mtbf || 0), mttr: +(p.simMttr || s.mttr || 0), cv: +(s.cv || 0), look: p.simLook || s.look || '', robot: p.simRobot || s.robot || '' }; };
   const isStation = o => {
     const sim = simOf(o);
     if (sim.on === false) return false;
@@ -49,7 +53,10 @@
     const lx = c * dx - s * dz, lz = s * dx + c * dz; // into the object's frame (three.js yaw)
     return Math.hypot(Math.max(0, Math.abs(lx) - fp[0] / 2), Math.max(0, Math.abs(lz) - fp[1] / 2));
   }
-  const stationsIn = [], objOf = new Map(), warnIn = [], farOff = [], ROBOT = new Set(), LOOK_AFTER = new Map();
+  const stationsIn = [], objOf = new Map(), warnIn = [], farOff = [], ROBOT = new Map(), LOOK_AFTER = new Map(), TRANSFER = new Map();
+  // a belt end that leads nowhere (no next belt, not 배출) and a belt start that nothing feeds (not 투입): a robot in reach of both moves parts across
+  const fedBelts = new Set(B.filter(b => b.next).map(b => b.next.id));
+  const openEnds = B.filter(b => !b.next && !b.p.sink), openStarts = B.filter(b => !b.p.source && !fedBelts.has(b.id));
   for (const o of doc.objects) {
     if (!isStation(o)) continue;
     let best = null;
@@ -67,7 +74,18 @@
     for (let i = 0; i <= n; i++) { const sb = best.b.len * i / n, q = best.b.at(sb); if (rectDist(o, q[0], q[1]) <= best.d + 0.35) { const c = Math.hypot(q[0] - o.x, q[1] - o.z); if (c < cbest) { cbest = c; s0 = sb; } } }
     const sim = simOf(o);
     const st = { id: o.id, name: o.name || '설비', belt: best.b.id, s: +s0.toFixed(3), ct: ctOf(o), equip: o.id };
-    if (isRobot) ROBOT.add(o.id);
+    if (isRobot) {
+      ROBOT.set(o.id, sim.robot === 'weld' ? 'weld' : 'pick');
+      if (sim.robot !== 'weld') { // the nearest pair of an open end and an open start, both in reach: a transfer between belts
+        let tr = null;
+        for (const a of openEnds) for (const b of openStarts) {
+          if (a === b) continue;
+          const ea = a.at(a.len), sb = b.at(0), da = Math.hypot(ea[0] - o.x, ea[1] - o.z), db = Math.hypot(sb[0] - o.x, sb[1] - o.z);
+          if (da <= reach && db <= reach && (!tr || da + db < tr.d)) tr = { a, b, d: da + db };
+        }
+        if (tr) { st.belt = tr.a.id; TRANSFER.set(o.id, tr); }
+      }
+    }
     if (sim.look) LOOK_AFTER.set(o.id, sim.look === 'box' ? '' : sim.look); // the part looks different after this process
     if (sim.ok > 0 && sim.ok < 100) st.okRate = sim.ok / 100;
     if (sim.mtbf > 0 && sim.mttr > 0) { st.mtbf = sim.mtbf * 60; st.mttr = sim.mttr * 60; }
@@ -83,6 +101,9 @@
   // what each source puts on (js/factory-flow.js itemSpec: carton / tote / part model, length × width × height)
   const SPEC = new Map(srcBelts.map(b => [b.id, FF.itemSpec(b.p, b)]));
   const pitch = Math.max(0.15, ...[...SPEC.values()].map(x => x.size + GAP), 0.45);
+  // a transfer robot takes the part at the very end of its belt and puts it down at the start of the next (the part fully on it)
+  { const half = Math.max(...[...SPEC.values()].map(x => x.size / 2), 0.2) + 0.02;
+    for (const st of stationsIn) { const tr = TRANSFER.get(st.id); if (!tr) continue; st.s = +Math.max(0, tr.a.len - half).toFixed(3); st.to = { belt: tr.b.id, s: +Math.min(tr.b.len, half).toFixed(3) }; } }
   const INPUT = {
     pitch,
     belts: B.map(b => ({ id: b.id, name: b.name || '컨베이어', len: b.len, speed: b.speed, next: b.next ? { id: b.next.id, s: b.next.s, gap: b.next.s > 1e-6 ? sideGap(b) : 0 } : null, source: b.p.source ? { interval: b.p.interval } : null, sink: !!b.p.sink })),
@@ -182,6 +203,48 @@
     return { key: at, d: Math.max(0, Math.min(free, cap)), at };
   }
 
+  /* ---- part meshes: replacing, the gradual change of shape, weld beads, sparks ---- */
+  renderer.localClippingEnabled = true;
+  function swapMesh(v, mesh) {
+    if (v.beads) for (const b of v.beads.values()) mesh.add(b); // beads stay on the part
+    mesh.position.copy(v.mesh.position); mesh.rotation.copy(v.mesh.rotation);
+    scene.remove(v.mesh); v.mesh = mesh; scene.add(mesh);
+    if (v.morph) clip(mesh, v.morph.above);
+  }
+  const clip = (mesh, plane) => mesh.traverse(m => { if (!m.isMesh) return; m.material = (Array.isArray(m.material) ? m.material : [m.material]).map(x => { const c = x.clone(); c.clippingPlanes = [plane]; return c; }); if (m.material.length === 1) m.material = m.material[0]; });
+  const CAP_MAT = new THREE.MeshStandardMaterial({ color: 0x9a6a38, roughness: 0.9 });
+  function startMorph(v, spec) {
+    if (v.morph) scene.remove(v.morph.mesh);
+    const mesh = FF.itemMesh(spec), below = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0), above = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    clip(mesh, below); clip(v.mesh, above);
+    if (mesh.userData.ng) mesh.userData.ng.visible = false;
+    // a solid new shape (carton) gets a lid at the work front so it never looks hollow while it grows
+    let cap = null; if (!spec.look) { cap = new THREE.Mesh(new THREE.BoxGeometry(spec.size * 0.995, 0.002, spec.w * 0.995), CAP_MAT); cap.raycast = () => {}; mesh.add(cap); }
+    scene.add(mesh); v.morph = { spec, mesh, below, above, cap, f: 0 };
+  }
+  function endMorph(v, gone) {
+    if (!v.morph) return;
+    scene.remove(v.morph.mesh); v.morph.mesh.traverse(m => { if (m.isMesh && m !== v.morph.cap) [].concat(m.material).forEach(x => x.dispose()); });
+    v.morph = null; if (!gone) swapMesh(v, FF.itemMesh(v.spec)); // plain materials again
+  }
+  const BEAD_MAT = new THREE.MeshStandardMaterial({ color: 0x4a4038, metalness: 0.6, roughness: 0.4 }), BEAD_GEO = new THREE.CylinderGeometry(0.007, 0.007, 1, 8).rotateZ(Math.PI / 2);
+  function bead(v, seam, u) {
+    if (!seam) return;
+    v.beads = v.beads || new Map(); let b = v.beads.get(seam);
+    if (!b) { b = new THREE.Mesh(BEAD_GEO, BEAD_MAT); b.castShadow = true; b.raycast = () => {}; v.beads.set(seam, b); v.mesh.add(b); }
+    const [[x0, y, z], [x1]] = seam, len = Math.max(1e-4, (x1 - x0) * u);
+    b.scale.set(len, 1, 1); b.position.set(x0 + len / 2, y + 0.002, z);
+    if (b.parent !== v.mesh) v.mesh.add(b);
+  }
+  const SPARK = new Map();
+  function spark(id, at, t) {
+    let S = SPARK.get(id);
+    if (!S) { S = new THREE.Group(); const m = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff6d8, transparent: true, opacity: 0.95, depthWrite: false })); const l = new THREE.PointLight(0xbfe0ff, 0, 2.5); S.add(m, l); S.userData = { m, l }; scene.add(S); SPARK.set(id, S); }
+    S.visible = !!at; if (!at) return;
+    S.position.copy(at); const f = 0.6 + 0.4 * Math.abs(Math.sin(t * 53.1) * Math.cos(t * 31.7));
+    S.userData.m.scale.setScalar(0.7 + f * 0.8); S.userData.l.intensity = 3 * f;
+  }
+
   /* ---- one frame ---- */
   function frame(dt) {
     const s = sim.snapshot(), t = s.t, seen = new Set();
@@ -190,8 +253,14 @@
       const tg = target(p, s, t, v); if (!tg) continue;
       if (!v) { const spec = specOfPart(p), mesh = FF.itemMesh(spec); scene.add(mesh); v = { mesh, spec, key: tg.key, d: tg.d, p, lastAt: p.at }; views.set(p.id, v); }
       // leaving a process that changes the part: from here on it looks like what the process made
-      if (v.lastAt !== p.at) { const nl = LOOK_AFTER.get(v.lastAt); if (nl !== undefined && nl !== v.spec.look) { v.spec = changeLook(v.spec, nl); scene.remove(v.mesh); v.mesh = FF.itemMesh(v.spec); scene.add(v.mesh); } v.lastAt = p.at; }
-      if (v.mesh.userData.pending && FF.lookReady(v.spec.look)) { scene.remove(v.mesh); v.mesh = FF.itemMesh(v.spec); scene.add(v.mesh); } // its model has loaded
+      if (v.lastAt !== p.at) { const nl = LOOK_AFTER.get(v.lastAt); if (nl !== undefined && nl !== v.spec.look) { v.spec = changeLook(v.spec, nl); swapMesh(v, FF.itemMesh(v.spec)); } endMorph(v); v.lastAt = p.at; }
+      if (v.mesh.userData.pending && FF.lookReady(v.spec.look)) swapMesh(v, FF.itemMesh(v.spec)); // its model has loaded
+      // in a process that changes the part: the new shape grows from the bottom up as the work goes on (never swapped at once)
+      const nl = LOOK_AFTER.get(p.at), sp = s.stations[p.at];
+      if (nl !== undefined && nl !== v.spec.look && sp && sp.part === p.id && t >= sp.arriveAt) {
+        if (!v.morph || (v.morph.mesh.userData.pending && FF.lookReady(nl))) startMorph(v, changeLook(v.spec, nl));
+        v.morph.f = sp.state === 'blocked' ? 1 : Math.max(0, Math.min(1, (sp.progress - 0.15) / 0.7));
+      } else if (v.morph) endMorph(v);
       v.p = p; v.tg = tg; seen.add(p.id);
       const snap = dt > 30;
       if (snap) { v.key = tg.key; v.d = tg.d; continue; }
@@ -204,7 +273,7 @@
         v.key = tg.key; v.d = 0; // the next stretch starts where this one ended
       }
     }
-    for (const [id, v] of views) if (!seen.has(id)) { scene.remove(v.mesh); views.delete(id); } // taken off at the 배출 end
+    for (const [id, v] of views) if (!seen.has(id)) { scene.remove(v.mesh); endMorph(v, true); views.delete(id); } // taken off at the 배출 end
     // keep one item apart on every belt (front first); across a belt join / merge point too
     const onBelt = new Map();
     for (const v of views.values()) { const bp = beltPoint(pathOf(v.key), v.d); v.bp = bp; (onBelt.get(bp.belt) ?? onBelt.set(bp.belt, []).get(bp.belt)).push(v); }
@@ -224,25 +293,48 @@
       if (v.mesh.userData.ng) v.mesh.userData.ng.visible = !!v.p.ng;
       v.prevKey = v.key; v.prevD = v.d; v.prevS = v.bp.s;
     }
-    // robots: pick the part off the stop, take it to the work position, hold it for the process, put it back
+    // robots: pick the part off the stop and put it down (the same stop, or the start of the next belt), or weld along it
+    const dirOf = ya => new THREE.Vector3(Math.cos(ya), 0, -Math.sin(ya));
     for (const st of L.stations) {
       if (!ROBOT.has(st.id)) continue;
       const g = built.get(st.id); if (!g) continue;
       let R = ROBOTS.get(st.id);
       if (R && R.g !== g) R = null; // the model was rebuilt (loaded)
       if (!R) {
-        const pt = L.points[st.id], q = posOn(pt.belt, pt.s), spec = ITEM0, ya = q[2];
-        R = window.SimRobot ? window.SimRobot.rig(g, { pick: new THREE.Vector3(q[0], q[3] + spec.h / 2 + 0.005, q[1]), along: new THREE.Vector3(Math.cos(ya), 0, -Math.sin(ya)), width: spec.w, height: spec.h }) : { why: 'joints' };
+        const pt = L.points[st.id], q = posOn(pt.belt, pt.s), spec = ITEM0, lift = spec.h / 2 + 0.005;
+        const o = { mode: ROBOT.get(st.id), pick: new THREE.Vector3(q[0], q[3] + lift, q[1]), along: dirOf(q[2]), width: spec.w, height: spec.h, length: spec.size };
+        if (st.to) { const qb = posOn(st.to.belt, st.to.s); o.place = new THREE.Vector3(qb[0], qb[3] + lift, qb[1]); o.alongPlace = dirOf(qb[2]); }
+        R = window.SimRobot ? window.SimRobot.rig(g, o) : { why: 'joints' };
         R.g = g; ROBOTS.set(st.id, R);
-        if (R.why === 'reach') { warnIn.push(`${st.name}: 로봇 팔이 정지 위치까지 닿지 않아 집기 동작 없이 돌립니다 (컨베이어에 더 가깝게 놓거나 높이를 올리세요)`); showWarnings(); }
-        if (R.home) R.home();
+        if (R.why === 'reach' && TRANSFER.has(st.id)) { // never let a part jump between belts: take the transfer out and start again
+          TRANSFER.delete(st.id); delete stationsIn.find(x => x.id === st.id).to;
+          warnIn.push(`${st.name}: 로봇 팔이 두 컨베이어에 다 닿지 않아 옮겨 싣기를 빼고 다시 시작했습니다 (로봇을 두 컨베이어 끝 사이에 더 가깝게 놓으세요)`);
+          ROBOTS.delete(st.id); newSim(); return frame(0);
+        }
+        if (R.why === 'reach') { warnIn.push(`${st.name}: 로봇 팔이 정지 위치까지 닿지 않아 ${ROBOT.get(st.id) === 'weld' ? '용접' : '집기'} 동작 없이 돌립니다 (컨베이어에 더 가깝게 놓거나 높이를 올리세요)`); showWarnings(); }
+        if (R.idle) R.idle(1e9);
       }
       if (!R.pose) continue;
       const ss = s.stations[st.id];
-      if (ss && ss.part !== null && (ss.state === 'busy' || ss.state === 'down') && t >= ss.arriveAt - 1e-9 && ss.mode !== 'empty') {
-        const r = R.pose(ss.progress * ss.ct, ss.ct), v = views.get(ss.part);
-        if (r.carry && v) { const tp = R.tip(); v.mesh.position.copy(tp); v.carried = true; }
-      } else R.home();
+      if (ss && R.part !== undefined && R.part !== null && ss.part !== R.part) R.leftAt = t; // the line took the part on
+      R.part = ss ? ss.part : null;
+      let r = null;
+      if (ss && ss.part !== null && t >= ss.arriveAt - 1e-9 && ss.mode !== 'empty') {
+        if (ss.state === 'blocked') r = R.hold();
+        else if (ss.state === 'busy' || ss.state === 'down') r = R.pose(ss.progress * ss.ct, ss.ct);
+      }
+      if (!r) R.idle(t - (R.leftAt ?? -1e9));
+      const v = ss && ss.part !== null ? views.get(ss.part) : null;
+      if (r && r.carry && v) { v.mesh.position.copy(R.tip()); v.mesh.rotation.y = R.yaw(); v.carried = true; }
+      // the weld bead grows behind the torch and stays on the part
+      if (r && v && R.mode === 'weld') { for (const k of r.done || []) bead(v, R.seams[k], 1); if (r.weld) bead(v, R.seams[r.weld.seam], r.weld.u); }
+      spark(st.id, r && r.weld ? R.torch() : null, t);
+    }
+    for (const v of views.values()) if (v.morph) { // the growing new shape on the same footing, the old one cut above the work front
+      const M = v.morph, bottom = v.mesh.position.y - v.spec.h / 2, yc = bottom + M.f * Math.max(v.spec.h, M.spec.h) + (M.f >= 1 ? 1 : 0);
+      M.mesh.position.set(v.mesh.position.x, bottom + M.spec.h / 2, v.mesh.position.z); M.mesh.rotation.y = v.mesh.rotation.y;
+      M.below.constant = yc; M.above.constant = -yc;
+      if (M.cap) { M.cap.visible = M.f > 0 && M.f < 1 && yc < bottom + M.spec.h; M.cap.position.set(0, yc - 0.001 - M.mesh.position.y, 0); }
     }
     // machines work only while their station has an item in work
     for (const st of L.stations) {
@@ -360,9 +452,9 @@
   // no-magic audit (same contract as the demo view): items closer than one item on a belt, and moves without the motion behind them
   function audit(t0, t1, dt = 0.1) {
     seekTo(t0); setPlaying(false);
-    const out = { overlaps: [], jumps: [], frames: 0, carried: 0 }, prev = new Map();
+    const out = { overlaps: [], jumps: [], frames: 0, carried: 0, welding: 0, morphing: 0 }, prev = new Map();
     for (let t = t0 + dt; t <= t1 + 1e-9; t += dt) {
-      advance(t); frame(dt); out.frames++; if ([...views.values()].some(v => v.carried)) out.carried++;
+      advance(t); frame(dt); out.frames++; if ([...views.values()].some(v => v.carried)) out.carried++; if ([...SPARK.values()].some(x => x.visible)) out.welding++; if ([...views.values()].some(v => v.morph && v.morph.f > 0)) out.morphing++;
       const list = [...views.entries()];
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
         const a = list[i][1].mesh.position, b = list[j][1].mesh.position;
@@ -373,7 +465,7 @@
         prev.set(id, v.mesh.position.clone()); }
       for (const id of [...prev.keys()]) if (!views.has(id)) prev.delete(id);
     }
-    return { frames: out.frames, carried: out.carried, overlaps: out.overlaps.length, firstOverlaps: out.overlaps.slice(0, 8), jumps: out.jumps.length, firstJumps: out.jumps.slice(0, 8) };
+    return { frames: out.frames, carried: out.carried, welding: out.welding, morphing: out.morphing, overlaps: out.overlaps.length, firstOverlaps: out.overlaps.slice(0, 8), jumps: out.jumps.length, firstJumps: out.jumps.slice(0, 8) };
   }
 
   /* ---------------------------------------------------------------- the line for the compare / optimise pages */

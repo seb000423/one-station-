@@ -15,6 +15,7 @@
  *    merge point, two pitches of travel after the last (they meet at an angle); items from each side wait one pitch
  *    before it and ask for their turn there. A belt joining from the
  *    side carries its items across the main belt's edge to its centre line (the transfer, `next.gap`).
+ * A station with `to` (a robot moving the item from the end of one belt onto another) sends it on from that point.
  * Every node keeps the belt pieces it covers ({@link LayoutPath}), so the renderer can put each item on its belt.
  */
 import type { LineModel, NodeDef } from './line';
@@ -30,6 +31,8 @@ export interface LayoutBelt {
 export interface LayoutStation {
   id: string; name: string; belt: string; s: number; ct: number;
   cv?: number; okRate?: number; mtbf?: number; mttr?: number; kind?: string; equip?: string;
+  /** a robot that puts the item down on another belt (at distance s along it) instead of letting it ride on */
+  to?: { belt: string; s: number };
 }
 export interface LayoutInput { belts: LayoutBelt[]; stations: LayoutStation[]; pitch: number }
 export interface LayoutPiece { belt: string; s0: number; s1: number }
@@ -58,7 +61,10 @@ export function buildLayoutLine(input: LayoutInput, params: LayoutParams = {}): 
   const pitch = Math.max(0.05, input.pitch), det = !!params.deterministic;
   const belts = new Map(input.belts.map(b => [b.id, b])), warnings: string[] = [];
   const nodes: NodeDef[] = [], routes: LineModel['routes'] = [], paths: LayoutLine['paths'] = {}, points: LayoutLine['points'] = {}, into: LayoutLine['into'] = {};
-  const st = input.stations.filter(s => belts.has(s.belt)).map(s => ({ ...s, ...(params.stations?.[s.id] ?? {}), s: Math.max(0, Math.min(belts.get(s.belt)!.len, s.s)) }));
+  const st = input.stations.filter(s => belts.has(s.belt)).map(s => {
+    const to = s.to && belts.has(s.to.belt) && s.to.belt !== s.belt ? { belt: s.to.belt, s: Math.max(0, Math.min(belts.get(s.to.belt)!.len, s.to.s)) } : undefined;
+    return { ...s, ...(params.stations?.[s.id] ?? {}), s: Math.max(0, Math.min(belts.get(s.belt)!.len, s.s)), to };
+  });
   // points on each belt where a stretch ends: stations, and where other belts join from the side (merge points)
   const stationsOn = new Map<string, typeof st>();
   for (const s of st) (stationsOn.get(s.belt) ?? stationsOn.set(s.belt, []).get(s.belt)!).push(s);
@@ -171,7 +177,7 @@ export function buildLayoutLine(input: LayoutInput, params: LayoutParams = {}): 
     if (!det && s.mtbf && s.mttr) { def.mtbf = { kind: 'exp', mean: s.mtbf }; def.mttr = { kind: 'lognormal', mean: s.mttr, sd: s.mttr * 0.5 }; }
     nodes.push(def); points[s.id] = { belt: s.belt, s: s.s };
     const out = { ...s, turnover, ...(approach !== undefined ? { approach } : {}) }; outStations.push(out);
-    const nx = from(s.belt, s.s, 'station', out);
+    const nx = s.to ? from(s.to.belt, s.to.s, 'station', out) : from(s.belt, s.s, 'station', out);
     routes.push({ from: s.id, to: nx });
     return s.id;
   }
