@@ -85,7 +85,7 @@ const windowsOf = k => { const runs = palRuns(k).filter(r => near(r.z, 1.3)), ou
   let prevEnd = conv0;
   for (const [id, , s0, s1] of STATIONS) { const r0 = find(STOP[s0], t), r1 = s1 ? find(STOP[s1], r0.t1) : r0;
     const a = r0.t0, b = r1.t1 + DT - (hasPins(s1 ?? s0) ? 0.9 : 0.3);
-    out['CV_' + id] = { a: +prevEnd.toFixed(3), b: +a.toFixed(3), x0: null, x1: STOP[s0] }; out[id] = { a: +a.toFixed(3), b: +b.toFixed(3), x: STOP[s0] };
+    out['CV_' + id] = { a: +prevEnd.toFixed(3), b: +a.toFixed(3), x1: STOP[s0] }; out[id] = { a: +a.toFixed(3), b: +b.toFixed(3), x: STOP[s0] };
     prevEnd = b; t = r1.t1; }
   out.RETURN = { a: +prevEnd.toFixed(3) };
   return out; };
@@ -106,14 +106,15 @@ WIN.A1.a = +(robotA - 0.3).toFixed(3);
 // the empty pallet's way back: exit stop → exit lift → lower return conveyor → start lift → merge stop
 const retRuns = palRuns(1); const back = retRuns.find(r => near(r.x, STOP.merge) && r.t0 > 300);
 let topAt = null; for (let tau = back.t0; tau < back.t0 + 10; tau += DT) if (palPos(1, tau)[1] > 0.849) { topAt = tau; break; }
-WIN.RETURN.lower = +back.t0.toFixed(3); WIN.RETURN.top = +topAt.toFixed(3);
+WIN.RETURN.lower = +back.t0.toFixed(3); WIN.RETURN.top = +topAt.toFixed(3); WIN.RETURN.liftX = STOP.merge;
+{ let tau = WIN.RETURN.a; while (tau < back.t0 && !(palPos(1, tau)[1] < 0.5 && palPos(1, tau + DT)[0] < palPos(1, tau)[0] - 1e-4)) tau += DT; WIN.RETURN.lowRun = +tau.toFixed(3); }
 const liftDown = lastMove('Lift_In.translation', back.t0 - 3, back.t0 + 12);
 WIN.RETURN.liftFree = +liftDown.toFixed(3);
 // waiting places on the lower return conveyor in front of the start lift: τ where the pallet passes x = merge + j·pitch
 const tauAtX = (k, x, from, to, dir) => { for (let tau = from; tau <= to; tau += DT) { const p = palPos(k, lapOf(k) + tau)[0]; if (dir > 0 ? p >= x : p <= x) return tau; } return to; };
 WIN.RETURN.queue = [1, 2, 3, 4, 5, 6, 7, 8].map(j => +tauAtX(1, STOP.merge + j * PITCH, WIN.RETURN.a + 5, back.t0, -1).toFixed(3));
 // accumulation: τ where a pallet waiting behind the one at a stop stands (one pitch per place), per conveyor
-for (const [key, w] of Object.entries(WIN)) if (key.startsWith('CV_')) { w.queue = []; for (let j = 1; j <= 8; j++) { const x = w.x1 - j * PITCH, tau = tauAtX(1, x, w.a, w.b, 1); if (tau <= w.a + 0.95) break; w.queue.push(+tau.toFixed(3)); } }
+for (const [key, w] of Object.entries(WIN)) if (key.startsWith('CV_')) { w.queue = []; w.x0 = +palPos(1, w.a)[0].toFixed(3); for (let j = 1; j <= 8; j++) { const x = w.x1 - j * PITCH; if (x < w.x0 + 0.305) break; w.queue.push(+tauAtX(1, x, w.a, w.b, 1).toFixed(3)); } } // places clear of the stop behind
 
 // NG trip at the NG stop of cell A (part 6 fails the dispensing check): measured on part 6, replayed for every NG stop
 const r6 = palRuns(6), ngIn = r6.find(r => near(r.x, STOP.ngA) && near(r.z, 1.3)), ngOut = r6.find(r => near(r.x, STOP.ngA) && near(r.z, 1.3) && r.t0 > ngIn.t1 + 1);
@@ -159,7 +160,7 @@ const des = {
   stations: Object.fromEntries(STATIONS.map(([id]) => [id, r(WIN[id].b - WIN[id].a)])),
   turnover: Object.fromEntries(STATIONS.map(([id, , s0]) => { const w = WIN[id], last = lastMove('Stop_' + s0 + '.translation', w.a, w.b + 6), cv = WIN['CV_' + id];
     const index = cv.queue.length ? cv.b - cv.queue[0] : 0; return [id, r(Math.max(index, last == null ? 0 : last - w.b))]; })),
-  conveyors: Object.fromEntries(STATIONS.map(([id]) => { const w = WIN['CV_' + id]; return [id, { transit: r(w.b - w.a), places: Math.max(1, w.queue.length), index: w.queue.length ? r(w.b - w.queue[0]) : r(w.b - w.a) }]; })),
+  conveyors: Object.fromEntries(STATIONS.map(([id]) => { const w = WIN['CV_' + id]; return [id, { transit: r(w.b - w.a), places: w.queue.length, index: w.queue.length ? r(w.b - w.queue[0]) : r(w.b - w.a) }]; })),
   ngTrip: r(NG.b - NG.a), emptyPass: r(EMPTY_PASS.b - EMPTY_PASS.a),
   returnTrip: r(WIN.RETURN.lower - WIN.RETURN.a), liftUp: r(WIN.RETURN.top - WIN.RETURN.lower), liftCycle: r(WIN.RETURN.liftFree - WIN.RETURN.lower), liftIndex: r(WIN.RETURN.lower - WIN.RETURN.queue[0]),
   tote: { lot: 8, gap: r(TOTE.back - TOTE.lastPartA0 - (TOTE.pick - WIN.A0.a)) },

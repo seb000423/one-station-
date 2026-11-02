@@ -25,7 +25,7 @@ export interface DemoStation {
   id: string; name: string; cell: Cell;
   ct: number; cv?: number; // mean cycle time (s) and coefficient of variation (normal distribution)
   okRate?: number; mtbf?: number; mttr?: number; operators?: number; kind: 'robot' | 'auto' | 'manual' | 'inspect' | 'transfer';
-  emptyCt?: number; reject?: number; setup?: { every: number; time: number }; turnover?: number; pool?: string;
+  emptyCt?: number; reject?: number; setup?: { every: number; time: number }; turnover?: number; pool?: string; approach?: number;
 }
 export type LineMap = typeof MAP;
 export const LINE_MAP: LineMap = MAP;
@@ -85,14 +85,17 @@ export function buildDemoLine(params: DemoParams = {}): DemoLine {
     else if (s.id !== 'A0') {
       const cv = (D.conveyors as Record<string, { transit: number; places: number; index: number }>)[s.id]!;
       const id = `CV_${s.id}`;
-      nodes.push({ kind: 'buffer', id, name: `컨베이어 → ${s.id}`, cap: cv.places + (params.extraBuffer?.[s.id] ?? 0), transit: cv.transit });
-      layout.push({ id, kind: 'buffer', cell: s.cell, name: `컨베이어 → ${s.name}` }); link(id);
+      if (cv.places + (params.extraBuffer?.[s.id] ?? 0) === 0) s.approach = cv.transit; // stops too close for a pallet in between: it waits on the stop before
+      else {
+        nodes.push({ kind: 'buffer', id, name: `컨베이어 → ${s.id}`, cap: cv.places + (params.extraBuffer?.[s.id] ?? 0), transit: cv.transit, index: cv.index });
+        layout.push({ id, kind: 'buffer', cell: s.cell, name: `컨베이어 → ${s.name}` }); link(id);
+      }
     }
     const ct: Dist = det || !s.cv ? s.ct : { kind: 'normal', mean: s.ct, sd: s.ct * s.cv, min: s.ct * 0.7 };
     const def: Extract<NodeDef, { kind: 'station' }> = { kind: 'station', id: s.id, name: s.name, ct };
     if (!det && s.okRate !== undefined) def.okRate = s.okRate;
     if (!det && s.mtbf && s.mttr) { def.mtbf = { kind: 'exp', mean: s.mtbf }; def.mttr = { kind: 'lognormal', mean: s.mttr, sd: s.mttr * 0.5 }; }
-    for (const k of ['operators', 'emptyCt', 'reject', 'setup', 'turnover', 'pool'] as const) if (s[k] !== undefined) (def as Record<string, unknown>)[k] = s[k];
+    for (const k of ['operators', 'emptyCt', 'reject', 'setup', 'turnover', 'pool', 'approach'] as const) if (s[k] !== undefined) (def as Record<string, unknown>)[k] = s[k];
     nodes.push(def); layout.push({ id: s.id, kind: 'station', cell: s.cell, name: s.name }); link(s.id);
   }
   nodes.push({ kind: 'sink', id: 'OUT', name: '출하 (카톤)' }); layout.push({ id: 'OUT', kind: 'sink', cell: 'E', name: '출하' }); link('OUT');
@@ -107,7 +110,7 @@ export const slowestCycle = (stations: DemoStation[]): { id: string; cycle: numb
 export function palletLoop(line: DemoLine): number {
   let t = line.pool.liftUp + line.pool.returnTrip;
   for (const n of line.model.nodes) {
-    if (n.kind === 'station' && n.id !== 'A0') t += typeof n.ct === 'number' ? n.ct : 0;
+    if (n.kind === 'station' && n.id !== 'A0') t += (typeof n.ct === 'number' ? n.ct : 0) + (n.approach ?? 0);
     if (n.kind === 'buffer' && n.id !== 'LANE') t += n.transit ?? 0;
   }
   return t;

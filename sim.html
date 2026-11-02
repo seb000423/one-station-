@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ONE SIM · 라인 시뮬레이션</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* ONE SIM: the demo line run by the DES, replayed in 3D on the same clock. Single dark look (black bars, one yellow accent). */
+:root{
+  --bg:#000; --panel:#0a0a0b; --panel2:#141516; --line:#26282b; --fg:#ececec; --mute:#8f9296; --dim:#5d6064;
+  --accent:#eec539; --accent-ink:#1d1600; --busy:#3ddc84; --idle:#5d6064; --blocked:#f08a24; --down:#ff4d4f; --setup:#4aa3ff;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden;word-break:keep-all}
+button,select,input{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-rows:52px 1fr auto}
+.top{display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--line);padding:0 max(16px,env(safe-area-inset-left,0px));position:relative}
+.back{color:var(--fg);text-decoration:none;border:1px solid var(--line);padding:5px 10px;font-size:12px;border-radius:3px;white-space:nowrap}
+.back:hover{border-color:var(--accent);color:var(--accent)}
+.logo{position:absolute;left:50%;transform:translateX(-50%);font-family:var(--mono);font-weight:600;letter-spacing:.42em;font-size:16px;white-space:nowrap;padding-left:.42em}
+.logo em{font-style:normal;color:var(--accent)}
+.crumb{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{display:grid;grid-template-columns:minmax(0,1fr) 360px;min-height:0}
+.view{position:relative;min-width:0;min-height:0;overflow:hidden}
+#c{display:block;width:100%;height:100%;cursor:grab}
+#c:active{cursor:grabbing}
+#tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tag{position:absolute;transform:translate(-50%,-100%);font-family:var(--mono);font-size:10.5px;padding:2px 5px 2px 4px;border-radius:2px;background:rgba(10,10,11,.82);border:1px solid var(--line);white-space:nowrap;display:flex;align-items:center;gap:4px}
+.tag i{width:7px;height:7px;border-radius:50%;display:block;background:var(--idle)}
+.tag.bn{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.tag.sel{background:var(--accent);color:var(--accent-ink)}
+.st-busy{background:var(--busy)!important}.st-idle{background:var(--idle)!important}.st-blocked{background:var(--blocked)!important}.st-down{background:var(--down)!important}.st-setup{background:var(--setup)!important}
+#loading{position:absolute;inset:0;display:grid;place-items:center;background:#000;font-family:var(--mono);color:var(--mute);letter-spacing:.1em}
+.views{position:absolute;top:12px;left:12px;display:flex;gap:4px;flex-wrap:wrap}
+.chip{background:rgba(10,10,11,.85);border:1px solid var(--line);border-radius:3px;padding:4px 9px;font-size:12px;cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.legend{position:absolute;left:12px;bottom:12px;display:flex;gap:10px;font-size:11.5px;color:var(--mute);background:rgba(10,10,11,.85);border:1px solid var(--line);padding:5px 9px;border-radius:3px}
+.legend span{display:flex;align-items:center;gap:5px}.legend i{width:8px;height:8px;border-radius:50%;display:block}
+aside{border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;min-height:0}
+section{padding:14px 16px;border-bottom:1px solid var(--line)}
+h2{margin:0 0 10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mute);font-weight:500;text-transform:uppercase;display:flex;justify-content:space-between}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:8px 10px}
+.kpi b{display:block;font-family:var(--mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi span{font-size:11.5px;color:var(--mute)}
+.kpi small{font-family:var(--mono);color:var(--dim);font-size:11px;margin-left:3px}
+.bn-box{background:var(--panel2);border:1px solid var(--accent);border-radius:3px;padding:9px 10px;display:grid;gap:4px}
+.bn-box b{color:var(--accent);font-size:13.5px}
+.bn-box span{color:var(--mute);font-size:12px}
+.row{display:grid;grid-template-columns:30px 1fr 52px;gap:6px;align-items:center;padding:3px 0;font-size:12px;cursor:pointer}
+.row:hover{color:var(--accent)}
+.row .id{font-family:var(--mono);font-size:11px;display:flex;align-items:center;gap:4px}
+.row .id i{width:7px;height:7px;border-radius:50%;display:block}
+.row .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.util{height:6px;background:#1c1d1f;border-radius:1px;display:flex;overflow:hidden}
+.util u{display:block;height:100%}
+.row .pc{font-family:var(--mono);font-size:11px;color:var(--mute);text-align:right}
+.row.bn .nm{color:var(--accent)}
+.cell{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin:8px 0 2px;letter-spacing:.1em}
+#log{font-family:var(--mono);font-size:11.5px;display:grid;gap:3px;max-height:220px;overflow-y:auto}
+#log div{display:grid;grid-template-columns:64px 1fr;gap:6px;color:var(--mute)}
+#log div b{font-weight:400;color:var(--fg)}
+#log .e-fail b{color:var(--down)}#log .e-reject b{color:var(--blocked)}#log .e-setup b{color:var(--setup)}#log .e-repair b{color:var(--busy)}
+.form{display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;font-size:12.5px}
+.form output{font-family:var(--mono);color:var(--accent);min-width:28px;text-align:right}
+.form input[type=range]{accent-color:var(--accent);width:100%}
+.form label.ck{grid-column:1/-1;display:flex;gap:8px;align-items:center;color:var(--mute)}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:6px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.note{color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:8px}
+footer{border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:8px max(16px,env(safe-area-inset-left,0px));background:var(--bg);flex-wrap:wrap}
+#play{width:38px;height:30px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font-size:14px;cursor:pointer}
+.speeds{display:flex;gap:2px}
+.speeds button{background:var(--panel2);border:1px solid var(--line);padding:4px 8px;font-family:var(--mono);font-size:11.5px;cursor:pointer;border-radius:2px}
+.speeds button.on{border-color:var(--accent);color:var(--accent)}
+#clock{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums;min-width:86px}
+#seek{flex:1;min-width:160px;accent-color:var(--accent)}
+#horizonL{font-family:var(--mono);color:var(--mute);font-size:11.5px}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:minmax(300px,55vh) auto}aside{border-left:0;border-top:1px solid var(--line)}body{overflow:auto}.app{height:auto;min-height:100%}.logo{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <a class="back" href="/">← ONE STATION</a>
+    <span class="crumb">데모 라인 · 용접 모듈 라인 (5셀) · DES 실행</span>
+    <div class="logo">ONE <em>SIM</em></div>
+  </header>
+  <main>
+    <div class="view">
+      <canvas id="c"></canvas>
+      <div id="tags"></div>
+      <div class="views" id="views"></div>
+      <div class="legend"><span><i class="st-busy"></i>가동</span><span><i class="st-idle"></i>대기</span><span><i class="st-blocked"></i>막힘</span><span><i class="st-down"></i>고장</span><span><i class="st-setup"></i>교체</span></div>
+      <div id="loading">3D 라인 불러오는 중…</div>
+    </div>
+    <aside>
+      <section>
+        <h2>결과 <span id="kpiNote">0시간 경과</span></h2>
+        <div class="kpis">
+          <div class="kpi"><b id="kOut">0</b><span>생산 (양품)</span></div>
+          <div class="kpi"><b id="kRate">–</b><span>시간당 생산 <small id="kRate1">최근 1시간 –</small></span></div>
+          <div class="kpi"><b id="kLt">–</b><span>리드타임 (투입→포장)</span></div>
+          <div class="kpi"><b id="kWip">0</b><span>재공 (라인 위 부품)</span></div>
+          <div class="kpi"><b id="kNg">0</b><span>NG 배출</span></div>
+          <div class="kpi"><b id="kPal">0 / 0</b><span>지그 팔레트 사용 / 전체</span></div>
+        </div>
+      </section>
+      <section>
+        <h2>병목</h2>
+        <div class="bn-box"><b id="bnName">–</b><span id="bnWhy">실행하면 표시됩니다</span></div>
+      </section>
+      <section>
+        <h2>공정 <span>가동 · 막힘 · 고장</span></h2>
+        <div id="rows"></div>
+      </section>
+      <section>
+        <h2>이벤트</h2>
+        <div id="log"></div>
+      </section>
+      <section>
+        <h2>조건</h2>
+        <div class="form">
+          <span>지그 팔레트</span><input id="pal" type="range" min="4" max="24" step="1" value="8"><output id="palO">8</output>
+          <span>난수 시드</span><input id="seed" type="range" min="1" max="9" step="1" value="1"><output id="seedO">1</output>
+          <span>실행 시간</span><input id="hor" type="range" min="1" max="24" step="1" value="8"><output id="horO">8 h</output>
+          <label class="ck"><input id="det" type="checkbox"> 변동·고장·NG 없이 (손계산 확인용)</label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px"><button class="btn pri" id="apply">이 조건으로 다시 실행</button></div>
+        <p class="note">모든 시간은 3D 라인의 실제 동작(정지·로봇·리프트·작업자)에서 측정한 값입니다. 같은 시드는 항상 같은 결과를 냅니다.</p>
+      </section>
+    </aside>
+  </main>
+  <footer>
+    <button id="play" title="재생 / 일시정지 (Space)">▶</button>
+    <div class="speeds" id="speeds"></div>
+    <span id="clock">00:00:00</span>
+    <input id="seek" type="range" min="0" max="28800" step="1" value="0" aria-label="시뮬레이션 시각">
+    <span id="horizonL">8 h</span>
+  </footer>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/meshopt_decoder.js"></script>
+<script src="js/one-twin-sim.js"></script>
+<script src="js/sim-run.js"></script>
+</body>
+</html>

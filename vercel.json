@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/builder", "destination": "/console.html" },
-    { "source": "/monitor", "destination": "/console2.html" }
+    { "source": "/monitor", "destination": "/console2.html" },
+    { "source": "/sim", "destination": "/sim.html" }
   ]
 }

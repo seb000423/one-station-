@@ -7,9 +7,16 @@ describe('demo line (times measured from the 3D motion)', () => {
     expect(d.model.nodes.filter(n => n.kind === 'station')).toHaveLength(DEMO_STATIONS.length);
     expect(DEMO_STATIONS.map(s => s.id).slice(2)).toEqual(LINE_MAP.stations);
     expect(() => new LineSim(d.model)).not.toThrow();
-    // measured values are physical: every station and conveyor takes time, at least one pallet place per conveyor
+    // measured values are physical: every station and conveyor takes time; where two stops are too close for a pallet
+    // in between there is no waiting place (the pallet waits on the stop before and then travels straight on)
     for (const s of DEMO_STATIONS) expect(s.ct).toBeGreaterThan(0.5);
-    for (const c of Object.values(LINE_MAP.des.conveyors)) { expect(c.transit).toBeGreaterThan(1); expect(c.places).toBeGreaterThanOrEqual(1); }
+    for (const [id, c] of Object.entries(LINE_MAP.des.conveyors)) {
+      expect(c.transit).toBeGreaterThan(1); expect(c.places).toBeGreaterThanOrEqual(0);
+      const buf = d.model.nodes.find(n => n.id === 'CV_' + id), st = d.model.nodes.find(n => n.id === id);
+      if (c.places === 0) { expect(buf).toBeUndefined(); expect(st && st.kind === 'station' && st.approach).toBe(c.transit); }
+      else expect(buf && buf.kind === 'buffer' && buf.cap).toBe(c.places);
+    }
+    expect(Object.values(LINE_MAP.des.conveyors).filter(c => c.places === 0).length).toBeGreaterThan(0);
   });
   it('deterministic, enough pallets: throughput = 3600 / slowest station cycle (hand calculation)', () => {
     const d = buildDemoLine({ deterministic: true, pallets: 30 });

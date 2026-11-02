@@ -19,7 +19,7 @@ import { Rng, type Dist } from './rng';
 
 export type NodeDef =
   | { kind: 'source'; id: string; name?: string; interarrival?: Dist; limit?: number; lot?: number; gap?: number }
-  | { kind: 'buffer'; id: string; name?: string; cap: number; transit?: number }
+  | { kind: 'buffer'; id: string; name?: string; cap: number; transit?: number; /** time from the first waiting place to the next stop */ index?: number }
   | {
     kind: 'station'; id: string; name?: string; ct: Dist; okRate?: number; mtbf?: Dist; mttr?: Dist; ng?: string; operators?: number;
     /** time to pass an empty pallet */ emptyCt?: number;
@@ -27,6 +27,7 @@ export type NodeDef =
     /** after every `every` good parts the station is set up for `time` s (e.g. a full carton is changed) */ setup?: { every: number; time: number };
     /** loads the part onto a pallet from this pool (the pallet must stand at the stop) */ pool?: string;
     /** after a pallet leaves, the next can arrive at the stop no sooner than this (stop blade back up / approach) */ turnover?: number;
+    /** coming straight from the station before (no waiting place in between): travel time from that stop to this one */ approach?: number;
   }
   | { kind: 'sink'; id: string; name?: string };
 export interface RouteDef { from: string; to: string; ratio?: number }
@@ -54,12 +55,13 @@ interface N {
   rng: Rng;
   // station
   state: StationState; since: number; ttf: number; remaining: number; ev: Ev | null; mode: WorkMode;
-  ctNow: number; workStart: number; arriveAt: number; freeSince: number; good: number; lastSetupAt: number;
+  ctNow: number; workStart: number; arriveAt: number; freeSince: number; good: number; lastSetupAt: number; willFail: boolean;
   acc: Record<StationState, number>; done: number; ngCount: number;
   // buffer
   levelArea: number; levelSince: number; maxLevel: number; headEv: Ev | null;
   // source
   created: number; arrivalEv: Ev | null; lotStart: number; holdEv: Ev | null;
+  /** pallets still on their place that already belong to the next station but have not set off yet */ held: Part[];
 }
 
 export class ModelError extends Error {}
@@ -86,9 +88,9 @@ export class LineSim {
       if (this.nodes.has(def.id)) throw new ModelError(`duplicate node ${def.id}`);
       this.nodes.set(def.id, {
         def, id: def.id, out: [], waiters: [], q: [], rng: root.fork(def.id),
-        state: 'idle', since: 0, ttf: Infinity, remaining: 0, ev: null, mode: 'work', ctNow: 0, workStart: 0, arriveAt: 0, freeSince: -Infinity, good: 0, lastSetupAt: 0,
+        state: 'idle', since: 0, ttf: Infinity, remaining: 0, ev: null, mode: 'work', ctNow: 0, workStart: 0, arriveAt: 0, freeSince: -Infinity, good: 0, lastSetupAt: 0, willFail: false,
         acc: { idle: 0, busy: 0, blocked: 0, down: 0, setup: 0 }, done: 0, ngCount: 0,
-        levelArea: 0, levelSince: 0, maxLevel: 0, headEv: null, created: 0, arrivalEv: null, lotStart: -Infinity, holdEv: null,
+        levelArea: 0, levelSince: 0, maxLevel: 0, headEv: null, created: 0, arrivalEv: null, lotStart: -Infinity, holdEv: null, held: [],
       });
     }
     for (const r of model.routes) {
@@ -136,7 +138,7 @@ export class LineSim {
   private canAccept(n: N): boolean {
     switch (n.def.kind) {
       case 'sink': return true;
-      case 'buffer': return n.q.length < n.def.cap;
+      case 'buffer': return n.q.length + n.held.length < n.def.cap;
       case 'station': {
         if (n.q.length !== 0 || n.state !== 'idle') return false;
         if (n.def.pool) { const top = this.pools.get(n.def.pool)!.top; return !!top && top.at <= this.now && top.part === null; }
@@ -167,7 +169,8 @@ export class LineSim {
         n.q.push(p);
         if (n.def.pool) { const pl = this.pools.get(n.def.pool)!; pl.top!.part = p.id; p.carrier = pl.top!.id; p.pool = pl.def.id; }
         // a pallet that had to wait behind the stop moves up only once the stop is free again (blade up, previous pallet clear)
-        const arrive = from && from.def.kind === 'buffer' ? Math.max(p.readyAt, n.freeSince + (n.def.turnover ?? 0)) : this.now;
+        const arrive = from && from.def.kind === 'buffer' ? Math.max(p.readyAt, n.freeSince + (n.def.turnover ?? 0))
+          : from && from.def.kind === 'station' && n.def.approach ? Math.max(this.now + n.def.approach, n.freeSince + (n.def.turnover ?? 0)) : this.now;
         n.arriveAt = arrive;
         if (arrive > this.now + 1e-9) { this.note('arrive', p, n.id); n.ev = this.sched.at(arrive, () => { n.ev = null; this.startWork(n, p); }); }
         else this.startWork(n, p);
@@ -190,6 +193,13 @@ export class LineSim {
     if (n.def.kind === 'buffer') this.level(n);
     if (i >= 0) n.q.splice(i, 1);
     this.accept(d, p, n);
+    // a pallet whose stop ahead is not ready yet stays where it is (waiting place / the stop before) until it has to set off
+    const run = d.def.kind !== 'station' ? 0 : n.def.kind === 'buffer' ? (n.def.index ?? n.def.transit ?? 0) : n.def.kind === 'station' ? (d.def.approach ?? 0) : 0;
+    const depart = d.def.kind === 'station' && (n.def.kind === 'buffer' || d.def.approach) ? d.arriveAt - run : this.now;
+    if (depart > this.now + 1e-9) {
+      if (n.def.kind === 'buffer') { n.held.push(p); this.sched.at(depart, () => { n.held.splice(n.held.indexOf(p), 1); this.freed(n); }); return true; }
+      if (n.def.kind === 'station') { this.sched.at(depart, () => this.freed(n)); return true; } // stays 'blocked' with the pallet on its stop
+    }
     this.freed(n);
     return true;
   }
@@ -282,7 +292,7 @@ export class LineSim {
     pl.lower.shift();
     pl.top = { id: h.id, at: this.now + pl.def.liftUp, part: null };
     pl.liftFreeAt = this.now + pl.def.liftCycle;
-    if (pl.lower.length) pl.lower[0]!.readyAt = Math.max(pl.lower[0]!.readyAt, pl.liftFreeAt - pl.def.liftCycle + pl.def.liftIndex);
+    if (pl.lower.length) pl.lower[0]!.readyAt = Math.max(pl.lower[0]!.readyAt, pl.liftFreeAt + pl.def.liftIndex); // the next pallet moves onto the lift once it is down again
     this.note('lift', h.id, pl.def.id);
     this.sched.after(pl.def.liftUp, () => { this.note('top', h.id, pl.def.id); if (pl.station) this.wake(this.nodes.get(pl.station)!); });
   }
@@ -301,6 +311,8 @@ export class LineSim {
     n.mode = p.empty ? 'empty' : d.reject !== undefined && p.ng ? 'reject' : 'work';
     this.setState(n, 'busy'); this.note('start', p, n.id);
     n.ctNow = n.mode === 'empty' ? (d.emptyCt ?? n.rng.sample(d.ct)) : n.mode === 'reject' ? d.reject! : n.rng.sample(d.ct);
+    // the check's verdict is drawn when the work starts (the 3D view shows the NG lamp during the test, not after it)
+    n.willFail = n.mode === 'work' && d.okRate !== undefined && d.okRate < 1 && n.rng.next() >= d.okRate;
     n.remaining = n.ctNow; n.workStart = this.now;
     this.work(n, p);
   }
@@ -327,7 +339,7 @@ export class LineSim {
     if (n.mode === 'reject') { p.empty = true; n.ngCount++; this.ngExit++; this.wipChange(-1); this.note('reject', p, n.id); }
     else if (n.mode === 'work') {
       n.done++;
-      if (d.okRate !== undefined && d.okRate < 1 && n.rng.next() >= d.okRate) { p.ng = true; n.ngCount++; }
+      if (n.willFail) { p.ng = true; n.ngCount++; }
       if (!p.ng) n.good++;
     }
     this.note('finish', p, n.id);
@@ -376,8 +388,8 @@ export class LineSim {
           const left = n.state === 'busy' && n.ev ? Math.max(0, n.remaining - (this.now - n.workStart)) : n.state === 'down' ? n.remaining : n.state === 'blocked' ? 0 : n.remaining;
           progress = n.arriveAt > this.now ? 0 : Math.min(1, Math.max(0, 1 - left / n.ctNow));
         }
-        stations[n.id] = { state: n.state, part: p?.id ?? null, mode: n.mode, progress, arriveAt: n.arriveAt, ct: n.ctNow, good: n.good, since: n.since };
-      } else if (n.def.kind === 'buffer') buffers[n.id] = n.q.map(p => p.id);
+        stations[n.id] = { state: n.state, part: p?.id ?? null, mode: n.mode, progress, arriveAt: n.arriveAt, ct: n.ctNow, good: n.good, since: n.since, willFail: !!p && n.willFail };
+      } else if (n.def.kind === 'buffer') buffers[n.id] = [...n.held, ...n.q].map(p => p.id); // the ones about to set off for the next stop first
     }
     const pools: Snapshot['pools'] = {};
     for (const pl of this.pools.values()) pools[pl.def.id] = { top: pl.top ? { ...pl.top } : null, lower: pl.lower.map(l => ({ ...l })), returning: [...pl.returning.entries()].map(([id, since]) => ({ id, since })), liftFreeAt: pl.liftFreeAt };
@@ -397,7 +409,7 @@ export class LineSim {
 export interface Snapshot {
   t: number;
   states: Record<string, StationState>;
-  stations: Record<string, { state: StationState; part: number | null; mode: WorkMode; progress: number; arriveAt: number; ct: number; good: number; since: number }>;
+  stations: Record<string, { state: StationState; part: number | null; mode: WorkMode; progress: number; arriveAt: number; ct: number; good: number; since: number; willFail: boolean }>;
   buffers: Record<string, number[]>;
   pools: Record<string, { top: { id: number; at: number; part: number | null } | null; lower: { id: number; readyAt: number }[]; returning: { id: number; since: number }[]; liftFreeAt: number }>;
   parts: { id: number; seq: number; at: string; ng: boolean; empty: boolean; enteredAt: number; readyAt: number; carrier: number | null }[];

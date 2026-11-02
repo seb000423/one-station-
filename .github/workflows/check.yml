@@ -18,4 +18,4 @@ jobs:
         run: |
           npm run gen:twin
           npm run bundle:twin
-          git diff --exit-code -- schemas docs/one-twin assets/one-twin js/one-twin.js
+          git diff --exit-code -- schemas docs/one-twin assets/one-twin js/one-twin.js js/one-twin-sim.js
