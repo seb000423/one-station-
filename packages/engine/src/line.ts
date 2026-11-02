@@ -13,7 +13,7 @@ import { Scheduler, type Ev } from './des';
 import { Rng, type Dist } from './rng';
 
 export type NodeDef =
-  | { kind: 'source'; id: string; name?: string; interarrival?: Dist; limit?: number }
+  | { kind: 'source'; id: string; name?: string; interarrival?: Dist; limit?: number; carriers?: number; carrierReturn?: number }
   | { kind: 'buffer'; id: string; name?: string; cap: number; transit?: number }
   | { kind: 'station'; id: string; name?: string; ct: Dist; okRate?: number; mtbf?: Dist; mttr?: Dist; ng?: string; operators?: number }
   | { kind: 'sink'; id: string; name?: string };
@@ -21,8 +21,8 @@ export interface RouteDef { from: string; to: string; ratio?: number }
 export interface LineModel { nodes: NodeDef[]; routes: RouteDef[] }
 
 export type StationState = 'idle' | 'busy' | 'blocked' | 'down';
-export interface Part { id: number; born: number; at: string; next: string | null; ng: boolean; readyAt: number; enteredAt: number }
-export type LogKind = 'create' | 'enter' | 'start' | 'finish' | 'fail' | 'repair' | 'block' | 'exit' | 'ng';
+export interface Part { id: number; born: number; at: string; next: string | null; ng: boolean; readyAt: number; enteredAt: number; src: string }
+export type LogKind = 'create' | 'enter' | 'start' | 'finish' | 'fail' | 'repair' | 'block' | 'exit' | 'ng' | 'carrier';
 export interface LogEntry { t: number; kind: LogKind; part: number; node: string }
 export interface RunOptions { seed?: number; warmup?: number; log?: boolean | number }
 
@@ -38,7 +38,7 @@ interface N {
   // buffer
   levelArea: number; levelSince: number; maxLevel: number; headEv: Ev | null;
   // source
-  created: number; arrivalEv: Ev | null;
+  created: number; arrivalEv: Ev | null; freeCarriers: number;
 }
 
 export class ModelError extends Error {}
@@ -66,6 +66,7 @@ export class LineSim {
         def, id: def.id, out: [], waiters: [], q: [], rng: root.fork(def.id),
         state: 'idle', since: 0, ttf: Infinity, remaining: 0, ev: null, acc: { idle: 0, busy: 0, blocked: 0, down: 0 }, done: 0, ngCount: 0,
         levelArea: 0, levelSince: 0, maxLevel: 0, headEv: null, created: 0, arrivalEv: null,
+        freeCarriers: def.kind === 'source' && def.carriers !== undefined ? def.carriers : Infinity,
       });
     }
     for (const r of model.routes) {
@@ -121,6 +122,7 @@ export class LineSim {
     switch (n.def.kind) {
       case 'sink': {
         this.parts.delete(p.id); this.wipChange(-1);
+        this.carrierBack(p);
         if (p.ng) { this.ngExit++; this.note('ng', p, n.id); }
         else { this.exitCount++; if (p.born >= this.statsFrom || this.statsFrom === 0) this.exits.push(this.now - p.born); this.note('exit', p, n.id); }
         return;
@@ -174,8 +176,8 @@ export class LineSim {
 
   /* ---------- sources ---------- */
   private newPart(src: N): Part {
-    const p: Part = { id: this.nextId++, born: this.now, at: src.id, next: null, ng: false, readyAt: this.now, enteredAt: this.now };
-    this.parts.set(p.id, p); src.created++; this.wipChange(1); this.note('create', p, src.id);
+    const p: Part = { id: this.nextId++, born: this.now, at: src.id, next: null, ng: false, readyAt: this.now, enteredAt: this.now, src: src.id };
+    this.parts.set(p.id, p); src.created++; src.freeCarriers--; this.wipChange(1); this.note('create', p, src.id);
     return p;
   }
   private startSource(n: N): void {
@@ -200,11 +202,19 @@ export class LineSim {
       return;
     }
     if (d.limit !== undefined && n.created >= d.limit) return;
+    if (n.freeCarriers <= 0) return; // every jig pallet is in use; one comes back when a part leaves
     // decide the destination before creating, so no part waits at the source
     const probe = n.out.length === 1 ? this.nodes.get(n.out[0]!.to)! : null;
     if (probe && !this.canAccept(probe)) { if (!probe.waiters.includes(n.id)) probe.waiters.push(n.id); return; }
     const p = this.newPart(n); n.q.push(p);
     this.push(n, p);
+  }
+
+  /** a part left the line: its carrier (jig pallet) returns to the source after the return trip */
+  private carrierBack(p: Part): void {
+    const src = this.nodes.get(p.src);
+    if (!src || src.def.kind !== 'source' || src.def.carriers === undefined) return;
+    this.sched.after(src.def.carrierReturn ?? 0, () => { src.freeCarriers++; this.note('carrier', p, src.id); this.sourceNext(src); });
   }
 
   /* ---------- buffers ---------- */
