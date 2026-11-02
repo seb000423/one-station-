@@ -85,13 +85,14 @@
 
   /* ---------------------------------------------------------------- the simulation */
   const cfg = { pallets: 8, seed: 1, horizon: 8 * 3600, deterministic: false, stations: undefined };
-  let line = null, sim = null, simT = 0, playing = false, speed = 5;
+  let TURN = {}, line = null, sim = null, simT = 0, playing = false, speed = 5;
   let views = new Map(), palViews = new Map(), ghosts = [], logView = [], exitsT = [], partSeq = new Map();
   let tote = { t0: null, shown: 0, swapped: false }, carton = { count: 0, placed: new Set(), t3: null, gone: false }, lastResult = null;
 
   const newSim = () => {
     line = E.buildDemoLine({ pallets: cfg.pallets, deterministic: cfg.deterministic, stations: cfg.stations });
     sim = new E.LineSim(line.model, { seed: cfg.seed, log: true });
+    TURN = Object.fromEntries(line.stations.map(s => [s.id, s.turnover ?? 0]));
     simT = 0; exitsT = []; logView = []; ghosts = []; partSeq = new Map(); tote = { t0: null, shown: 0, swapped: false }; carton = { count: 0, placed: new Set(), t3: null, gone: false }; toteTaken = new Set();
     for (const v of views.values()) root.remove(v.x); for (const v of palViews.values()) root.remove(v.x);
     views = new Map(); palViews = new Map();
@@ -110,7 +111,8 @@
     if (at.startsWith('CV_')) {
       const X = at.slice(3), w = W[at], i = (s.buffers[at] || []).indexOf(p.id), ns = s.stations[X];
       const held = i > 0 || ns.part !== null || ns.state !== 'idle';
-      const free = w.a + (t - p.enteredAt), cap = held ? (w.queue[i] ?? w.a + 0.05) : w.b;
+      // a free stop takes the next pallet no sooner than its turnover after the last one left (as the DES counts it)
+      const free = w.a + (t - p.enteredAt), cap = held ? (w.queue[i] ?? w.a + 0.05) : Math.max(w.queue[0] ?? w.a, w.b - Math.max(0, ns.since + (TURN[X] ?? 0) - t));
       const pose = { dom: 'n', k: 1, tau: Math.min(free, cap), eq: Math.max(Math.min(free, w.a + 3), 0), empty: p.empty, start: w.a };
       if (X === 'A2') { pose.kPrev = kTote(p); pose.kAt = w.a + 0.05; } // robot A's lane: the reference part stays the tote one until the pallet moves
       return pose;
@@ -127,7 +129,8 @@
       let k = 1;
       if (at === 'E3' && st.willFail) k = 3;
       if (at === 'E7') { if (!partSeq.has(p.id)) partSeq.set(p.id, st.good % 3); k = SLOT_REF[partSeq.get(p.id)] ?? 1; }
-      return { dom: 'n', k, tau: w.a + f * (w.b - w.a), eq: tail, kPrev: 1, kAt: w.a, kUntil: w.b };
+      // a station set faster than the 3D motion (scenario / optimisation) plays its motion faster: rate = clip length / cycle
+      return { dom: 'n', k, tau: w.a + f * (w.b - w.a), eq: tail, kPrev: 1, kAt: w.a, kUntil: w.b, rate: Math.max(1, (w.b - w.a) / Math.max(0.1, st.ct)) };
     }
     return null;
   }
@@ -162,10 +165,10 @@
       if (v.pose && v.pose.kUntil != null && v.pose.k !== pose.k && v.tau < v.pose.kUntil - 1e-6 && !(v.kHold && v.kHold.until === v.pose.kUntil)) v.kHold = { k: v.pose.k, until: v.pose.kUntil };
       if (v.dom !== pose.dom) {
         const end = v.dom === 'n' ? (pose.from ?? v.tau) : (v.endTau ?? v.tau);
-        if (v.tau < end - 1e-6) { v.tau = Math.min(end, v.tau + dt); return; } // finish the old way first (v.pose stays)
+        if (v.tau < end - 1e-6) { v.tau = Math.min(end, v.tau + dt * (v.pose?.rate || 1)); return; } // finish the old way first (v.pose stays)
         v.dom = pose.dom; v.tau = pose.start ?? pose.tau; v.endTau = pose.end;
       }
-      if (pose.tau > v.tau) v.tau = Math.min(pose.tau, v.tau + dt);
+      if (pose.tau > v.tau) v.tau = Math.min(pose.tau, v.tau + dt * Math.max(pose.rate || 1, v.pose && v.pose !== pose && v.tau < (v.pose.kUntil ?? -Infinity) ? v.pose.rate || 1 : 1));
       v.pose = pose;
     };
     // 1. every part's place on its lap
@@ -349,7 +352,14 @@
   }
   const bindRange = (id, out, fmt, set) => { const el = $(id); const f = () => { $(out).textContent = fmt(+el.value); }; el.oninput = f; f(); return () => set(+el.value); };
   const getPal = bindRange('pal', 'palO', v => v, v => (cfg.pallets = v)), getSeed = bindRange('seed', 'seedO', v => v, v => (cfg.seed = v)), getHor = bindRange('hor', 'horO', v => v + ' h', v => (cfg.horizon = v * 3600));
-  $('apply').onclick = () => { getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true); };
+  $('apply').onclick = () => { $('scn').hidden = true; cfg.stations = undefined; getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true); };
+  // run a scenario from the compare / optimisation pages (pallets + per-station overrides) in 3D
+  function load(params, label) {
+    cfg.pallets = params.pallets ?? 8; cfg.stations = params.stations && Object.keys(params.stations).length ? params.stations : undefined; cfg.deterministic = !!params.deterministic;
+    $('pal').value = cfg.pallets; $('pal').oninput(); $('det').checked = cfg.deterministic;
+    $('scn').textContent = label || ''; $('scn').hidden = !label;
+    if (!root) return; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true);
+  }
 
   /* ---------------------------------------------------------------- load and run */
   const loader = new THREE.GLTFLoader(); loader.setMeshoptDecoder(window.MeshoptDecoder);
@@ -374,7 +384,7 @@
     $('loading').hidden = true; setPlaying(true);
     let last = performance.now(), panelAt = 0;
     const loop = now => {
-      const dtw = Math.min(0.1, (now - last) / 1000); last = now;
+      const dtw = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
       if (playing && !seeking && simT < cfg.horizon) { const dt = dtw * speed; advance(simT + dt); frame(dt); if (simT >= cfg.horizon) setPlaying(false); }
       if (now - panelAt > 400) { updatePanel(); panelAt = now; if (!seeking) $('seek').value = simT; }
       if (!seeking) $('clock').textContent = hhmmss(simT);
@@ -401,9 +411,9 @@
         if (Math.abs(a.y - b.y) < 0.2 && Math.abs(a.z - b.z) < 0.25 && Math.abs(a.x - b.x) < 0.29) out.overlaps.push({ t: +t.toFixed(2), a: pals[i].key, b: pals[j].key, x: +a.x.toFixed(3), y: +a.y.toFixed(2), d: +Math.abs(a.x - b.x).toFixed(3) });
       }
       for (const o of objs) {
-        const q = prev.get(o.key), st = { dom: o.v.dom, k: o.v.k, tau: o.v.tau, s: stateOf(o.v) };
+        const q = prev.get(o.key), st = { dom: o.v.dom, k: o.v.k, tau: o.v.tau, s: stateOf(o.v), rate: o.v.pose?.rate || 1 };
         if (q) { const d = q.p.distanceTo(o.p), dtau = st.tau - q.tau, switched = q.dom !== st.dom || q.k !== st.k;
-          if (d > 0.03 && (switched || dtau > dt + 1e-6 || dtau < -1e-6)) out.jumps.push({ t: +t.toFixed(2), key: o.key, d: +d.toFixed(3), from: q.s + '@' + (q.tau ?? 0).toFixed(2), to: st.s + '@' + (st.tau ?? 0).toFixed(2), at: o.p.toArray().map(x => +x.toFixed(2)) });
+          if (d > 0.03 && (switched || dtau > dt * Math.max(st.rate, q.rate) + 1e-6 || dtau < -1e-6)) out.jumps.push({ t: +t.toFixed(2), key: o.key, d: +d.toFixed(3), from: q.s + '@' + (q.tau ?? 0).toFixed(2), to: st.s + '@' + (st.tau ?? 0).toFixed(2), at: o.p.toArray().map(x => +x.toFixed(2)) });
           else if (d / dt > 3) out.fast++; }
         prev.set(o.key, { p: o.p, ...st });
       }
@@ -415,5 +425,5 @@
     for (const [id, v] of views) out.parts.push({ id, at: v.p.at, empty: v.p.empty, carrier: v.p.carrier, dom: v.dom, k: v.k, tau: +(v.tau ?? 0).toFixed(2), target: +(v.pose?.tau ?? 0).toFixed(2), st: s.stations[v.p.at] ? { state: s.stations[v.p.at].state, arr: +s.stations[v.p.at].arriveAt.toFixed(2), f: +s.stations[v.p.at].progress.toFixed(2) } : (s.buffers[v.p.at] || null) });
     out.pals = [...palViews].map(([id, v]) => { const wp = new THREE.Vector3(); v.body.getWorldPosition(wp); return { id, dom: v.dom, x: +wp.x.toFixed(3), y: +wp.y.toFixed(2), tau: v.tau && +v.tau.toFixed(2) }; });
     return out; }
-  window.ONE_SIM = { audit, debug, get TR() { return TR; }, clipT, get sim() { return sim; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance };
+  window.ONE_SIM = { audit, debug, load, get TR() { return TR; }, clipT, get sim() { return sim; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance };
 })();

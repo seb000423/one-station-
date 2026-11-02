@@ -23,8 +23,19 @@ export const palletGene: Gene = { key: 'pallets', label: '지그 팔레트 수',
 export const bufferGene = (station: string, label: string, max = 4): Gene => ({
   key: `buf_${station}`, label, min: 0, max, apply: (p, v) => { (p.extraBuffer ??= {})[station] = v; },
 });
+/** a faster version of a station (an upgrade): level v runs the cycle at (1 − step·v) of `ct` */
+export const ctGene = (station: string, label: string, ct: number, levels = 3, step = 0.1): Gene => ({
+  key: `ct_${station}`, label, min: 0, max: levels, apply: (p, v) => { if (v > 0) ((p.stations ??= {})[station] ??= {}).ct = +(ct * (1 - step * v)).toFixed(3); },
+});
 
 export function optimize(o: OptimizeOptions): Generation[] {
+  const history: Generation[] = [];
+  for (const g of optimizeSteps(o)) history.push(g);
+  return history;
+}
+
+/** the same search one generation at a time (a UI can draw each generation before asking for the next) */
+export function* optimizeSteps(o: OptimizeOptions): Generator<Generation, void, void> {
   const rng = new Rng(o.seed ?? 1), P = o.population ?? 16, G = o.generations ?? 12;
   const seeds = o.evalSeeds ?? [11, 12], horizon = o.horizon ?? 9 * 3600, warmup = o.warmup ?? 3600;
   const cache = new Map<string, Candidate>();
@@ -44,12 +55,11 @@ export function optimize(o: OptimizeOptions): Generation[] {
   const baseGenes = o.genes.map(g => clamp(g, g.key === 'pallets' ? (o.base?.pallets ?? 8) : 0));
   let pop: Candidate[] = [evaluate(baseGenes)];
   while (pop.length < P) pop.push(evaluate(o.genes.map(rand)));
-  const history: Generation[] = [];
   const pick = () => { const a = pop[Math.floor(rng.next() * pop.length)]!, b = pop[Math.floor(rng.next() * pop.length)]!; return a.score >= b.score ? a : b; };
   for (let gi = 0; gi < G; gi++) {
     pop.sort((a, b) => b.score - a.score);
     const gen: Generation = { index: gi, best: pop[0]!, mean: pop.reduce((a, c) => a + c.score, 0) / pop.length, population: pop.slice() };
-    history.push(gen); o.onGeneration?.(gen);
+    o.onGeneration?.(gen); yield gen;
     const next = pop.slice(0, 2); // elitism
     while (next.length < P) {
       const a = pick(), b = pick();
@@ -62,5 +72,4 @@ export function optimize(o: OptimizeOptions): Generation[] {
     }
     pop = next;
   }
-  return history;
 }

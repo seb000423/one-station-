@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDemoLine, simulateLine, LineSim, DEMO_STATIONS, LINE_MAP, slowestCycle, palletLoop } from '@one-twin/engine';
+import { buildDemoLine, simulateLine, LineSim, DEMO_STATIONS, LINE_MAP, slowestCycle, palletLoop, capacity } from '@one-twin/engine';
 
 describe('demo line (times measured from the 3D motion)', () => {
   it('builds a valid model: tote → loader → lane → robot A (pallet) → 29 stops → carton', () => {
@@ -28,6 +28,15 @@ describe('demo line (times measured from the 3D motion)', () => {
     const d = buildDemoLine({ deterministic: true, pallets: 3 });
     const r = simulateLine(d.model, 12 * 3600, { warmup: 3600 });
     expect(r.throughputPerHour).toBeCloseTo((3 / palletLoop(d)) * 3600, 0);
+  });
+  it('hand-calculated capacity = min(station limit, pallet limit) matches the deterministic run for any pallet count', () => {
+    for (const n of [4, 8, 12, 16, 24]) {
+      const d = buildDemoLine({ deterministic: true, pallets: n }), c = capacity(d);
+      expect(c.perHour).toBe(Math.min(c.station.perHour, c.pallets.perHour));
+      expect(simulateLine(d.model, 12 * 3600, { warmup: 3600 }).throughputPerHour).toBeCloseTo(c.perHour, 0);
+      // with variation, NG and failures the real run stays below the hand calculation
+      expect(simulateLine(buildDemoLine({ pallets: n }).model, 12 * 3600, { seed: 1, warmup: 3600 }).throughputPerHour).toBeLessThan(c.perHour);
+    }
   });
   it('the real demo run: plausible, reproducible, conserves parts and pallets', () => {
     const d = buildDemoLine();

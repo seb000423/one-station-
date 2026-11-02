@@ -18,7 +18,7 @@
  */
 import MAP from '../../../assets/one-twin/module-line-map.json';
 import type { LineModel, NodeDef, PoolDef } from './line';
-import type { Dist } from './rng';
+import { mean, type Dist } from './rng';
 
 export type Cell = 'A' | 'B' | 'C' | 'D' | 'E';
 export interface DemoStation {
@@ -106,12 +106,22 @@ export function buildDemoLine(params: DemoParams = {}): DemoLine {
 export const slowestCycle = (stations: DemoStation[]): { id: string; cycle: number } =>
   stations.filter(s => s.id !== 'A0' && s.id !== 'A1').map(s => ({ id: s.id, cycle: s.ct + (s.turnover ?? 0) })).sort((a, b) => b.cycle - a.cycle)[0]!;
 
-/** Hand calculation: one pallet's round trip when nothing waits (lift up, robot A, every conveyor and station, return trip). */
+/** Hand calculation: one pallet's round trip when nothing waits (lift up, robot A, every conveyor and station at its mean time, return trip). */
 export function palletLoop(line: DemoLine): number {
   let t = line.pool.liftUp + line.pool.returnTrip;
   for (const n of line.model.nodes) {
-    if (n.kind === 'station' && n.id !== 'A0') t += (typeof n.ct === 'number' ? n.ct : 0) + (n.approach ?? 0);
+    if (n.kind === 'station' && n.id !== 'A0') t += mean(n.ct) + (n.approach ?? 0);
     if (n.kind === 'buffer' && n.id !== 'LANE') t += n.transit ?? 0;
   }
   return t;
+}
+
+/**
+ * Hand calculation of the line's capacity (parts / h) without variation, NG and failures: the slowest station's
+ * cycle limits it, and so does the pallet loop (each pallet makes one part per round trip).
+ */
+export function capacity(line: DemoLine): { station: { id: string; cycle: number; perHour: number }; pallets: { count: number; loop: number; perHour: number }; perHour: number } {
+  const slow = slowestCycle(line.stations), loop = palletLoop(line);
+  const station = { ...slow, perHour: 3600 / slow.cycle }, pallets = { count: line.pool.count, loop, perHour: line.pool.count * 3600 / loop };
+  return { station, pallets, perHour: Math.min(station.perHour, pallets.perHour) };
 }
