@@ -1,0 +1,82 @@
+import { z } from 'zod';
+import { Fidelity, Id, Params, Transform, Vec3 } from './common';
+import { Io, Joint, ProcessModel, Socket } from './block';
+import { Spec, emptySpec } from './spec';
+
+export const MACHINE_SCHEMA = 'one-twin/machine@1';
+
+export const MachineNode = z.object({
+  id: Id,
+  type: z.enum(['block', 'glb', 'group']),
+  blockType: z.string().optional(),
+  name: z.string().default(''),
+  params: Params.default({}),
+  transform: Transform,
+  parent: Id.nullable().default(null),
+  sockets: z.array(Socket).default([]),
+});
+export type MachineNode = z.infer<typeof MachineNode>;
+
+export const TrajectorySegment = z.object({
+  type: z.enum(['PTP', 'LIN', 'CIRC', 'PATH']),
+  points: z.array(z.array(z.number())),
+  speed: z.number().positive(),
+  blend: z.number().nonnegative().default(0),
+  tool: z.string().optional(),
+});
+export const Trajectory = z.object({
+  id: z.string(),
+  segments: z.array(TrajectorySegment),
+  process: z.array(z.object({ segment: z.number().int(), tag: z.string(), params: Params.default({}) })).default([]),
+});
+export const RobotDef = z.object({
+  urdf: z.string(),
+  tcp: z.array(z.number()).length(6).describe('x, y, z mm, rx, ry, rz deg'),
+  tcp_vmax: z.number().positive(),
+  tcp_amax: z.number().positive(),
+  payload: z.number().nonnegative(),
+  derating: z.array(z.object({ payload: z.number(), factor: z.number() })).default([]),
+  override: z.number().min(1).max(100).default(100),
+});
+
+/** One step of the simple sequence editor: wait for a condition, then set outputs. */
+export const SequenceStep = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  wait: z.array(z.object({ tag: z.string(), op: z.enum(['==', '!=', '>', '<', '>=', '<=']).default('=='), value: z.union([z.boolean(), z.number()]) })).default([]),
+  set: z.array(z.object({ tag: z.string(), value: z.union([z.boolean(), z.number()]) })).default([]),
+  delay: z.number().nonnegative().optional(),
+  timeout: z.number().positive().optional(),
+  next: z.array(z.string()).optional().describe('parallel branches: ids of the steps that start after this one'),
+});
+
+export const MachineCard = z.object({
+  cycle_time: z.number().nonnegative().nullable().default(null),
+  ok_rate: z.number().min(0).max(1).nullable().default(null),
+  footprint: z.tuple([z.number(), z.number()]).nullable().default(null),
+  operators: z.number().nonnegative().default(0),
+  inlet: z.string().nullable().default(null),
+  outlet: z.string().nullable().default(null),
+});
+
+export const Machine = z.object({
+  schema: z.literal(MACHINE_SCHEMA),
+  meta: z.object({
+    id: Id,
+    name: z.string(),
+    bbox: Vec3.describe('W × D × H mm'),
+    fidelity: Fidelity.default('L1'),
+    thumbnail: z.string().optional(),
+    version: z.number().int().positive().default(1),
+  }),
+  card: MachineCard.default(MachineCard.parse({})),
+  nodes: z.array(MachineNode).default([]),
+  joints: z.array(Joint).default([]),
+  robot: RobotDef.nullable().default(null),
+  trajectories: z.array(Trajectory).default([]),
+  io: z.array(Io).default([]),
+  sequence: z.object({ steps: z.array(SequenceStep).default([]) }).default({ steps: [] }),
+  process: ProcessModel.nullable().default(null),
+  spec: Spec.default(emptySpec()),
+});
+export type Machine = z.infer<typeof Machine>;

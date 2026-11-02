@@ -1,0 +1,690 @@
+{
+  "$id": "https://one-station-beta.vercel.app/schemas/spec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "electrical": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "voltage": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "phase": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "1P",
+                    "3P"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "frequency": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rated_power": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rated_current": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "inrush_current": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "control_voltage": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "control_power": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "connector": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "breaker_rating": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "cable_spec": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "power_drop_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "panel_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "io": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "di_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "do_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ai_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ao_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "io_list": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "dir": {
+                        "type": "string",
+                        "enum": [
+                          "in",
+                          "out"
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "bool",
+                          "int",
+                          "real"
+                        ]
+                      },
+                      "signal": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "address": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "terminal": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "cable": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "dir",
+                      "type"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sensor_wiring": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "safety_io": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {}
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "comm": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "protocol": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "ip_address": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "node_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "port": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "tag_map": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string"
+                      },
+                      "address": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "address"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "network_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "safety_protocol": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pneumatic": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "supply_pressure": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "air_consumption": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "port_size": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "valve_count": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "air_drop_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hydraulic": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pressure": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "flow": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "unit_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gas": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "flow": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "pressure": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "gas_drop_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "water": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "flow": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "temp": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "pressure": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "exhaust": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "flow": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "safety": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pl": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sil": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "emo_group": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "physical": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "weight": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "noise": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "heat_output": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "product": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "maker": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "serial": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "manual_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cad_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "price": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "lead_time": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "maintenance": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "interval": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "last_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "spare_parts": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "spec_version": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "spec_version",
+        "verified"
+      ]
+    }
+  },
+  "required": [
+    "electrical",
+    "io",
+    "comm",
+    "pneumatic",
+    "hydraulic",
+    "gas",
+    "water",
+    "exhaust",
+    "safety",
+    "physical",
+    "product",
+    "maintenance",
+    "meta"
+  ]
+}

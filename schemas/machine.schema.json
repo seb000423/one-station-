@@ -1,0 +1,1511 @@
+{
+  "$id": "https://one-station-beta.vercel.app/schemas/machine.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "one-twin/machine@1"
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string"
+        },
+        "bbox": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "W × D × H mm"
+        },
+        "fidelity": {
+          "default": "L1",
+          "type": "string",
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ]
+        },
+        "thumbnail": {
+          "type": "string"
+        },
+        "version": {
+          "default": 1,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "bbox"
+      ]
+    },
+    "card": {
+      "default": {
+        "cycle_time": null,
+        "ok_rate": null,
+        "footprint": null,
+        "operators": 0,
+        "inlet": null,
+        "outlet": null
+      },
+      "type": "object",
+      "properties": {
+        "cycle_time": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok_rate": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "footprint": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operators": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "inlet": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outlet": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "nodes": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "block",
+              "glb",
+              "group"
+            ]
+          },
+          "blockType": {
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "params": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "transform": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "rotation": {
+                "default": [
+                  0,
+                  0,
+                  0
+                ],
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "scale": {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "items": false,
+                "minItems": 3,
+                "maxItems": 3
+              }
+            },
+            "required": [
+              "position"
+            ]
+          },
+          "parent": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sockets": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "position": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "normal": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "mount",
+                    "inlet",
+                    "outlet",
+                    "surface",
+                    "tool"
+                  ]
+                },
+                "compatible": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "position",
+                "normal",
+                "kind"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "transform"
+        ]
+      }
+    },
+    "joints": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "node": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "rot",
+              "lin",
+              "surface"
+            ]
+          },
+          "axis": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "onoff",
+              "position",
+              "continuous"
+            ]
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "home": {
+            "default": 0,
+            "type": "number"
+          },
+          "vmax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "amax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "jmax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "effort": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "cushion_time": {
+            "type": "number",
+            "minimum": 0
+          },
+          "verified": {
+            "default": {
+              "vmax": false,
+              "amax": false
+            },
+            "type": "object",
+            "properties": {
+              "vmax": {
+                "type": "boolean"
+              },
+              "amax": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "vmax",
+              "amax"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "node",
+          "type",
+          "axis",
+          "mode",
+          "min",
+          "max",
+          "vmax",
+          "amax"
+        ]
+      }
+    },
+    "robot": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "urdf": {
+              "type": "string"
+            },
+            "tcp": {
+              "minItems": 6,
+              "maxItems": 6,
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "x, y, z mm, rx, ry, rz deg"
+            },
+            "tcp_vmax": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "tcp_amax": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "payload": {
+              "type": "number",
+              "minimum": 0
+            },
+            "derating": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "payload": {
+                    "type": "number"
+                  },
+                  "factor": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "payload",
+                  "factor"
+                ]
+              }
+            },
+            "override": {
+              "default": 100,
+              "type": "number",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "required": [
+            "urdf",
+            "tcp",
+            "tcp_vmax",
+            "tcp_amax",
+            "payload"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "trajectories": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "PTP",
+                    "LIN",
+                    "CIRC",
+                    "PATH"
+                  ]
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "speed": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "blend": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "tool": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "points",
+                "speed"
+              ]
+            }
+          },
+          "process": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "segment": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "params": {
+                  "default": {},
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "segment",
+                "tag"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "segments"
+        ]
+      }
+    },
+    "io": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tag": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^[A-Z0-9_]+$"
+          },
+          "dir": {
+            "type": "string",
+            "enum": [
+              "in",
+              "out"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "bool",
+              "int",
+              "real"
+            ]
+          },
+          "binding": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "joint",
+                  "sensor",
+                  "process",
+                  "carrier",
+                  "trajectory"
+                ]
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "target"
+            ]
+          },
+          "default": {
+            "type": [
+              "boolean",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "tag",
+          "dir",
+          "type"
+        ]
+      }
+    },
+    "sequence": {
+      "default": {
+        "steps": []
+      },
+      "type": "object",
+      "properties": {
+        "steps": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "wait": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tag": {
+                      "type": "string"
+                    },
+                    "op": {
+                      "default": "==",
+                      "type": "string",
+                      "enum": [
+                        "==",
+                        "!=",
+                        ">",
+                        "<",
+                        ">=",
+                        "<="
+                      ]
+                    },
+                    "value": {
+                      "type": [
+                        "boolean",
+                        "number"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tag",
+                    "value"
+                  ]
+                }
+              },
+              "set": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "tag": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "boolean",
+                        "number"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "tag",
+                    "value"
+                  ]
+                }
+              },
+              "delay": {
+                "type": "number",
+                "minimum": 0
+              },
+              "timeout": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "next": {
+                "description": "parallel branches: ids of the steps that start after this one",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    "process": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cycle_time": {
+              "type": "number",
+              "minimum": 0
+            },
+            "ok_rate": {
+              "default": 1,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "batch_size": {
+              "default": 1,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "consumable": {
+              "type": "string"
+            },
+            "state_in": {
+              "type": "string"
+            },
+            "state_out": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cycle_time"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "spec": {
+      "default": {
+        "electrical": null,
+        "io": null,
+        "comm": null,
+        "pneumatic": null,
+        "hydraulic": null,
+        "gas": null,
+        "water": null,
+        "exhaust": null,
+        "safety": null,
+        "physical": null,
+        "product": null,
+        "maintenance": null,
+        "meta": {
+          "spec_version": "1.0",
+          "verified": false
+        }
+      },
+      "type": "object",
+      "properties": {
+        "electrical": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "voltage": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "phase": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "1P",
+                        "3P"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "frequency": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rated_power": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "rated_current": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "inrush_current": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "control_voltage": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "control_power": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "connector": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "breaker_rating": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "cable_spec": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "power_drop_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "panel_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "io": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "di_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "do_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ai_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ao_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "io_list": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tag": {
+                            "type": "string"
+                          },
+                          "dir": {
+                            "type": "string",
+                            "enum": [
+                              "in",
+                              "out"
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "bool",
+                              "int",
+                              "real"
+                            ]
+                          },
+                          "signal": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "address": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "terminal": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cable": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "dir",
+                          "type"
+                        ]
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sensor_wiring": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "safety_io": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {}
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comm": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "protocol": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "ip_address": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "node_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "port": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "tag_map": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "tag": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "tag",
+                          "address"
+                        ]
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "network_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "safety_protocol": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pneumatic": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "supply_pressure": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "air_consumption": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "port_size": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "valve_count": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "air_drop_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hydraulic": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "pressure": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "flow": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "unit_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gas": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "flow": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "pressure": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "gas_drop_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "water": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "flow": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "temp": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "pressure": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exhaust": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "flow": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "safety": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "sil": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "emo_group": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "physical": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "weight": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "noise": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "heat_output": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "maker": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "serial": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "manual_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cad_ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "price": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "lead_time": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maintenance": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "interval": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "last_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "spare_parts": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "spec_version": {
+              "type": "string"
+            },
+            "verified": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "spec_version",
+            "verified"
+          ]
+        }
+      },
+      "required": [
+        "electrical",
+        "io",
+        "comm",
+        "pneumatic",
+        "hydraulic",
+        "gas",
+        "water",
+        "exhaust",
+        "safety",
+        "physical",
+        "product",
+        "maintenance",
+        "meta"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "meta"
+  ]
+}

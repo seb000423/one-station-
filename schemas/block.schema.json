@@ -1,0 +1,419 @@
+{
+  "$id": "https://one-station-beta.vercel.app/schemas/block.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "meta": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "structure",
+            "transport",
+            "pneumatic",
+            "electric",
+            "robot",
+            "sensor",
+            "work",
+            "feeder",
+            "process",
+            "mover",
+            "factory"
+          ]
+        },
+        "fidelity": {
+          "type": "string",
+          "enum": [
+            "L1",
+            "L2",
+            "L3"
+          ]
+        },
+        "thumbnail": {
+          "type": "string"
+        },
+        "maker_note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "name",
+        "category",
+        "fidelity"
+      ]
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "params": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "dimTable": {
+          "type": "string"
+        },
+        "glbRef": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "params"
+      ]
+    },
+    "sockets": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "position": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "normal": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mount",
+              "inlet",
+              "outlet",
+              "surface",
+              "tool"
+            ]
+          },
+          "compatible": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "position",
+          "normal",
+          "kind"
+        ]
+      }
+    },
+    "joints": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "rot",
+              "lin",
+              "surface"
+            ]
+          },
+          "axis": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "items": false,
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "onoff",
+              "position",
+              "continuous"
+            ]
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "home": {
+            "default": 0,
+            "type": "number"
+          },
+          "vmax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "amax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "jmax": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "effort": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "cushion_time": {
+            "type": "number",
+            "minimum": 0
+          },
+          "verified": {
+            "default": {
+              "vmax": false,
+              "amax": false
+            },
+            "type": "object",
+            "properties": {
+              "vmax": {
+                "type": "boolean"
+              },
+              "amax": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "vmax",
+              "amax"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "axis",
+          "mode",
+          "min",
+          "max",
+          "vmax",
+          "amax"
+        ]
+      }
+    },
+    "ioTemplate": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "variant": {
+            "type": "string"
+          },
+          "binding": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "joint",
+                  "sensor",
+                  "process",
+                  "carrier",
+                  "trajectory"
+                ]
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "target"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      }
+    },
+    "process": {
+      "type": "object",
+      "properties": {
+        "cycle_time": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ok_rate": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "batch_size": {
+          "default": 1,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "consumable": {
+          "type": "string"
+        },
+        "state_in": {
+          "type": "string"
+        },
+        "state_out": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cycle_time"
+      ]
+    },
+    "carrier": {
+      "type": "object",
+      "properties": {
+        "capacity": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "layout": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "rows × cols × layers"
+        },
+        "pitch": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "items": false,
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "capacity",
+        "layout",
+        "pitch"
+      ]
+    },
+    "detect": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "ray",
+            "segment",
+            "area",
+            "volume"
+          ]
+        },
+        "range": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "target": {
+          "default": "work",
+          "type": "string",
+          "enum": [
+            "work",
+            "carrier",
+            "any"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "range"
+      ]
+    }
+  },
+  "required": [
+    "meta",
+    "geometry"
+  ]
+}

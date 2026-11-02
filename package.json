@@ -2,8 +2,23 @@
   "name": "one-station",
   "private": true,
   "type": "module",
-  "description": "ONE STATION site: static pages plus Vercel functions (api/) that save and list console 1 stations in Vercel Blob",
+  "description": "ONE STATION site: static pages, Vercel functions (api/) that save stations in Vercel Blob, and the ONE Twin schema / edit API packages (packages/)",
   "dependencies": {
     "@vercel/blob": "2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.0",
+    "esbuild": "0.25.10",
+    "immer": "10.1.1",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7",
+    "zod": "4.6.7"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p .",
+    "check": "tsc -p . && vitest run",
+    "gen:twin": "esbuild tools/one-twin/gen.ts --bundle --platform=node --format=esm --packages=external --outfile=.cache/one-twin-gen.mjs --log-level=warning && node .cache/one-twin-gen.mjs",
+    "bundle:twin": "esbuild tools/one-twin/bundle-entry.ts --bundle --format=iife --global-name=OneTwin --target=es2020 --minify --legal-comments=none --outfile=js/one-twin.js --log-level=warning"
   }
 }
