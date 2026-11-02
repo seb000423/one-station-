@@ -11,7 +11,7 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "baseUrl": ".",
-    "paths": { "@one-twin/schema": ["packages/schema/src/index.ts"], "@one-twin/core": ["packages/core/src/index.ts"] }
+    "paths": { "@one-twin/schema": ["packages/schema/src/index.ts"], "@one-twin/core": ["packages/core/src/index.ts"], "@one-twin/engine": ["packages/engine/src/index.ts"] }
   },
   "include": ["packages/*/src", "packages/*/test", "tools/one-twin/*.ts"]
 }
