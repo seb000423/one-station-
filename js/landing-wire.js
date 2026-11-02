@@ -1,6 +1,6 @@
 // Landing hero (index.html): small line-drawn blocks float scattered in empty space, then fly together and
 // build "ONE AUTOMATION" in the company logo's colours (white / ink, the N's first stem in the logo teal); after
-// that a gentle wave runs through the word. Hidden-line drawing (faces filled with the background, edges drawn,
+// that the word stays still. Hidden-line drawing (faces filled with the background, edges drawn,
 // back to front), tweened with anime.js (js/vendor/anime.min.js, MIT). Colours come from CSS (light / dark).
 //
 // Every block is one object from start to end: it flies to its place; nothing pops in or out.
@@ -43,9 +43,10 @@
     const r = stage.getBoundingClientRect(); wide = r.width / Math.max(1, r.height) > 1.25;
     const accN = (ch, x) => ch === 'N' && x === 0; // the "1" of the logo
     let one, auto;
-    if (wide) { one = word('ONE', 2, 0, 0, accN); auto = word('AUTOMATION', 1, one.w + 5, 0); }
-    else { auto = word('AUTOMATION', 1, 0, 0); one = word('ONE', 2, (auto.w - word('ONE', 2, 0, 0).w) / 2, 9, accN); }
-    const W = wide ? one.w + 5 + auto.w : auto.w, H = wide ? 14 : 23;
+    // a stacked lockup: a large ONE centred over AUTOMATION (about the same width)
+    auto = word('AUTOMATION', 1, 0, 0); const oneW = word('ONE', 3, 0, 0).w;
+    one = word('ONE', 3, Math.round((auto.w - oneW) / 2), 10, accN);
+    const W = auto.w, H = 31;
     W0 = W; H0 = H;
     cubes = [...one.blocks, ...auto.blocks].map(b => {
       // where it floats before the build: spread wide around, above, below and behind the word
@@ -89,7 +90,7 @@
       if (C.pos[0] > x + s) faces.push([P(x + s, y, z), P(x + s, y + s, z), P(x + s, y + s, z + s), P(x + s, y, z + s)]);
       else if (C.pos[0] < x) faces.push([P(x, y, z), P(x, y + s, z), P(x, y + s, z + s), P(x, y, z + s)]);
       e.f.forEach((p, k) => p.setAttribute('d', faces[k] ? 'M' + faces[k].map(pt).join('L') + 'Z' : ''));
-      e.g.setAttribute('class', c.acc || c.lift > 0.12 ? 'b acc' : 'b');
+      e.g.setAttribute('class', c.acc ? 'b acc' : 'b');
       world.appendChild(e.g);
     }
   }
@@ -110,10 +111,6 @@
   }
   function finish() { stopAll(); cubes.forEach(c => Object.assign(c, { x: c.tx, y: c.ty, z: c.tz, float: 0, lift: 0 })); idle = !reduce; t0 = performance.now(); if (replayB) replayB.hidden = false; }
   function tick(now) {
-    if (idle && !reduce) { // the wave: blocks lift a little and turn teal as it passes, left to right
-      const t = (now - t0) / 1000, period = 4.5, u = (t % period) / period, xs = W0 / 2 + 6, wx = -xs + u * xs * 2;
-      for (const c of cubes) { const d = (c.tx + 0.5 - wx) / 2.2; c.lift = 0.5 * Math.exp(-d * d); }
-    }
     render(now / 1000);
     requestAnimationFrame(tick);
   }
