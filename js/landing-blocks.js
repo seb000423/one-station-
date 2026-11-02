@@ -1,11 +1,12 @@
-// Landing hero (index.html): scattered blocks assemble into a small smart factory that runs, then gather into the
-// "one" mark. Plain SVG boxes drawn in an isometric view, tweened with anime.js (js/vendor/anime.min.js, MIT).
+// Landing hero (index.html): scattered blocks fly together into a small robot-cell factory and, beside it, the
+// "one" mark; then the factory runs. Plain SVG boxes (isometric for the factory, a front view for the letters),
+// tweened with anime.js (js/vendor/anime.min.js, MIT).
 //
-// Every block is one box (min corner i, j, k and size a × b × c, in grid units; i to the right-front, j to the
-// left-front, k up) and stays the same object through all four phases: it flies, it never pops in or out.
-// While the factory runs, the parts ride a closed loop conveyor in index steps (all move one pitch, then wait), the
-// press and the robot's tool come down onto the part standing under them during the wait (touching its top, never
-// through it), and the AGV drives its tote between two stations along the yellow lane.
+// Every block is one box (min corner i, j, k and size a × b × c; i to the right-front, j to the left-front, k up)
+// and stays the same object from the scatter to the end: it flies, it never pops in or out. While the factory runs,
+// the parts ride a closed loop conveyor in index steps (all move one pitch, then wait), the press and the robot's
+// tool come down onto the part standing under them during the wait (touching its top, never through it), and the
+// AGV drives its tote between two stations along the yellow lane.
 (() => {
   'use strict';
   const svg = document.getElementById('stage'), world = document.getElementById('world');
@@ -53,41 +54,25 @@
   for (const ri of [1.0, 7.0]) { box(ri, 0.2, 0, 3.4, 1.0, 0.12, C.rack); box(ri, 0.2, 1.1, 3.4, 1.0, 0.12, C.rack); for (const bi of [0.2, 1.3, 2.4]) box(ri + bi, 0.35, 0.12, 0.8, 0.7, 0.6, C.box); box(ri + 0.6, 0.35, 1.22, 0.8, 0.7, 0.6, C.box); }
   box(12.0, 1.0, 0, 1.2, 0.7, 2.2, C.cab); box(12.5, 1.7, 1.55, 0.2, 0.05, 0.2, C.lampY, 'blink');
 
-  /* ---------------------------------------------------------------- the "one" mark (front view: i across, k up) */
+  /* ---------------------------------------------------------------- the "one" mark (front view: across, up) */
   const GLYPH = {
     o: ['.###.', '#...#', '#...#', '#...#', '.###.'],
     n: ['####.', '#...#', '#...#', '#...#', '#...#'],
     e: ['.###.', '#...#', '#####', '#....', '.####'],
   };
-  const PIX = [];
+  const NF = B.length; // blocks 0 … NF−1 build the factory, the rest spell "one"
   ['o', 'n', 'e'].forEach((ch, li) => GLYPH[ch].forEach((row, r) => [...row].forEach((c, x) => {
     if (c !== '#') return;
     const teal = ch === 'n' && (x === 0 || (r === 0 && x === 1)); // the logo's "1" in the n
-    PIX.push({ i: li * 6 + x, k: 4 - r, col: teal ? C.teal : C.white });
+    B.push({ role: 'letter', px: li * 6 + x, row: r, col: hex(teal ? C.teal : C.white) });
   })));
-  const LW = 17; // letters span 0 … 17
-  // what is left over lies as a low stage under the letters
-  const rest = B.length - PIX.length, rows = Math.max(1, Math.ceil(rest / 19)), L = PIX.map(p => ({ i: p.i - LW / 2 + 0.05, j: 0, k: p.k + 0.35, a: 0.9, b: 0.9, c: 0.9, col: hex(p.col) }));
-  for (let r = 0, n = 0; r < rows; r++) { const cnt = Math.ceil((rest - n) / (rows - r)), w = (LW + 2) / cnt; for (let c = 0; c < cnt; c++, n++) L.push({ i: -LW / 2 - 1 + c * w + 0.04, j: 0.4 + r * 0.95, k: -0.05, a: w - 0.08, b: 0.85, c: 0.22, col: hex(C.plinth) }); }
+  const LW = 17; // the letters span 17 pixels across, 5 down
 
-  /* ---------------------------------------------------------------- views: isometric ↔ front (oblique) */
+  /* ---------------------------------------------------------------- views: isometric (factory) and front (letters) */
+  // m = 0: isometric; m = 1: a front view (x across, y down; a little depth up and to the right)
   const proj = (i, j, k, m) => [(i - j) * 0.866 * (1 - m) + (i - 0.3 * j) * m, (i + j) * 0.5 * (1 - m) + (0.3 * j) * m - k];
   const corners = s => { const o = []; for (const di of [0, s.a]) for (const dj of [0, s.b]) for (const dk of [0, s.c]) o.push([s.i + di, s.j + dj, s.k + dk]); return o; };
   const bounds = (list, m) => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const s of list) for (const [i, j, k] of corners(s)) { const [x, y] = proj(i, j, k, m); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { x0, x1, y0, y1 }; };
-
-  /* ---------------------------------------------------------------- state */
-  // scatter: unit-ish cubes spread over a wide field, drifting
-  const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
-  const PAL = [C.part, C.tote, C.steel, C.white, C.teal, C.wall];
-  const S = B.map(() => { const sz = 0.5 + rnd() * 0.5; return { i: -9 + rnd() * 32, j: -9 + rnd() * 26, k: rnd() * 7 - 1, a: sz, b: sz, c: sz, col: hex(PAL[Math.floor(rnd() * PAL.length)]) }; });
-  const cur = S.map(s => ({ i: s.i, j: s.j, k: s.k, a: s.a, b: s.b, c: s.c, r: s.col[0], g: s.col[1], bl: s.col[2], o: 1 }));
-  const view = { m: 0, x: 0, y: 0, w: 40, drift: 1, op: 0 }; // m: 0 isometric … 1 front; drift: floating of the scattered blocks; op: the factory runs
-  let opT = 0, last = performance.now();
-
-  // SVG: one group of three faces per block
-  const els = B.map(() => { const g = document.createElementNS(NS, 'g'), f = ['t', 'r', 'l'].map(() => { const p = document.createElementNS(NS, 'path'); g.appendChild(p); return p; }); world.appendChild(g); return { g, f }; });
-  const shade = (r, g, b, k) => `rgb(${Math.round(Math.min(255, r * k))},${Math.round(Math.min(255, g * k))},${Math.round(Math.min(255, b * k))})`;
-  const shadeUp = (r, g, b) => `rgb(${Math.round(r + (255 - r) * 0.16)},${Math.round(g + (255 - g) * 0.16)},${Math.round(b + (255 - b) * 0.16)})`;
 
   /* ---------------------------------------------------------------- the running factory */
   const ease = u => u * u * (3 - 2 * u), clamp = u => Math.max(0, Math.min(1, u));
@@ -108,39 +93,61 @@
       else if (b.role === 'blink') { const on = Math.floor(t * 1.6) % 2 === 0, c = hex(on ? C.lampY : '#5a4a10'); o.r = c[0]; o.g = c[1]; o.bl = c[2]; }
     });
   }
-  // the factory targets = the running factory at time 0 (so the run starts exactly where the assembly ends)
-  const F = B.map(b => ({ i: b.F.i, j: b.F.j, k: b.F.k, a: b.F.a, b: b.F.b, c: b.F.c, r: b.F.col[0], g: b.F.col[1], bl: b.F.col[2] }));
+  // the factory as it stands when it starts running
+  const F = B.slice(0, NF).map(b => ({ i: b.F.i, j: b.F.j, k: b.F.k, a: b.F.a, b: b.F.b, c: b.F.c, r: b.F.col[0], g: b.F.col[1], bl: b.F.col[2], m: 0 }));
   factoryAt(0, F);
+  const FB = bounds(F, 0);
+
+  /* ---------------------------------------------------------------- layout: where the factory, the letters and the text go */
+  const finale = document.getElementById('finale'), fin = [...finale.children], replayB = document.getElementById('replay');
+  const view = { x: 0, y: 0, w: 40, drift: 1, op: 0 };
+  let T = null; // targets of every block for the current screen
+  function layout() {
+    const r = svg.getBoundingClientRect(), W = Math.max(1, r.width), H = Math.max(1, r.height), wide = W / H > 1.15 && W > 760;
+    // fractions of the stage: Rf the factory, Rl the letters (the text sits under the letters, or at the bottom on a phone)
+    const Rf = wide ? { x0: 0.47, w: 0.5, y0: 0.13, h: 0.8 } : { x0: 0.03, w: 0.94, y0: 0.27, h: 0.36 };
+    const Rl = wide ? { x0: 0.07, w: 0.3, y0: 0.21, h: 0.2 } : { x0: 0.14, w: 0.72, y0: 0.13, h: 0.1 };
+    const u = Math.max((FB.x1 - FB.x0) / (Rf.w * W), (FB.y1 - FB.y0) / (Rf.h * H)); // viewBox units per pixel
+    const left = (FB.x0 + FB.x1) / 2 - (Rf.x0 + Rf.w / 2) * W * u, top = (FB.y0 + FB.y1) / 2 - (Rf.y0 + Rf.h / 2) * H * u;
+    Object.assign(view, { x: left + W * u / 2, y: top + H * u / 2, w: W * u });
+    const lw = Rl.w * W * u, lh = Rl.h * H * u, s = Math.min(lw / (LW + 0.3), lh / 5.4), lx = left + Rl.x0 * W * u + (wide ? 0 : (lw - LW * s) / 2), ly = top + Rl.y0 * H * u;
+    const c = s * 0.88;
+    T = B.map((b, x) => x < NF ? F[x] : { i: lx + b.px * s, j: 0, k: -(ly + b.row * s) - c, a: c, b: c, c, r: b.col[0], g: b.col[1], bl: b.col[2], m: 1 });
+    // the text block: under the letters (wide) or along the bottom (phone)
+    if (wide) Object.assign(finale.style, { left: (Rl.x0 * 100) + '%', top: ((Rl.y0 + Rl.h) * H + 18) + 'px', right: 'auto', bottom: 'auto', width: (Rl.w * 100 + 6) + '%', textAlign: 'left' });
+    else Object.assign(finale.style, { left: '0', right: '0', top: 'auto', bottom: 'max(5vh, 28px)', width: 'auto', textAlign: 'center' });
+    finale.classList.toggle('wide', wide);
+    return { W, H, u };
+  }
+
+  /* ---------------------------------------------------------------- state */
+  const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const PAL = [C.part, C.tote, C.steel, C.white, C.teal, C.wall];
+  const cur = B.map(() => ({ i: 0, j: 0, k: 0, a: 1, b: 1, c: 1, r: 0, g: 0, bl: 0, m: 0, o: 1 }));
+  const seeds = B.map(() => [rnd(), rnd(), rnd(), rnd(), Math.floor(rnd() * PAL.length)]);
+  function scatter() { // unit-ish cubes spread over the whole stage (isometric), drifting
+    const { W, H, u } = layout(), x0 = view.x - view.w / 2, y0 = view.y - H * u / 2;
+    cur.forEach((c, x) => {
+      const [p, q, h, z, ci] = seeds[x], sx = x0 + p * W * u, sy = y0 + (0.08 + q * 0.86) * H * u, k = h * 4 - 1, sz = (0.45 + z * 0.5) * u * 26;
+      const a = sx / 0.866, b = 2 * (sy + k); // invert the isometric view
+      const col = hex(PAL[ci]); Object.assign(c, { i: (a + b) / 2, j: (b - a) / 2, k, a: sz, b: sz, c: sz, r: col[0], g: col[1], bl: col[2], m: 0, o: 1 });
+    });
+  }
+  let opT = 0, last = performance.now();
+  const worldF = document.createElementNS(NS, 'g'), worldL = document.createElementNS(NS, 'g'); world.append(worldF, worldL);
+  const els = B.map((b, x) => { const g = document.createElementNS(NS, 'g'), f = ['t', 'r', 'l'].map(() => { const p = document.createElementNS(NS, 'path'); g.appendChild(p); return p; }); (x < NF ? worldF : worldL).appendChild(g); return { g, f }; });
+  const shade = (r, g, b, k) => `rgb(${Math.round(Math.min(255, r * k))},${Math.round(Math.min(255, g * k))},${Math.round(Math.min(255, b * k))})`;
+  const shadeUp = (r, g, b) => `rgb(${Math.round(r + (255 - r) * 0.16)},${Math.round(g + (255 - g) * 0.16)},${Math.round(b + (255 - b) * 0.16)})`;
 
   /* ---------------------------------------------------------------- drawing */
-  let order = null;
-  function render(now) {
-    const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (view.op > 0) { opT += dt; factoryAt(opT, cur); }
-    const m = view.m, tt = now / 1000;
-    // the camera: a viewBox around (x, y) of width w, fitted to the element's aspect
-    const r = svg.getBoundingClientRect(), asp = Math.max(0.3, r.width / Math.max(1, r.height)), h = view.w / asp;
-    svg.setAttribute('viewBox', `${(view.x - view.w / 2).toFixed(3)} ${(view.y - h / 2).toFixed(3)} ${view.w.toFixed(3)} ${h.toFixed(3)}`);
-    const bx = [];
-    cur.forEach((s, x) => {
-      const fl = view.drift * 0.35 * Math.sin(tt * 0.9 + x * 1.7), i = s.i, j = s.j, k = s.k + fl, a = s.a, b = s.b, c = s.c;
-      const P = (di, dj, dk) => proj(i + di, j + dj, k + dk, m), pt = p => p[0].toFixed(3) + ' ' + p[1].toFixed(3);
-      const top = [P(0, 0, c), P(a, 0, c), P(a, b, c), P(0, b, c)], ri = [P(a, 0, 0), P(a, b, 0), P(a, b, c), P(a, 0, c)], le = [P(0, b, 0), P(a, b, 0), P(a, b, c), P(0, b, c)];
-      const e = els[x];
-      e.f[0].setAttribute('d', 'M' + top.map(pt).join('L') + 'Z'); e.f[1].setAttribute('d', 'M' + ri.map(pt).join('L') + 'Z'); e.f[2].setAttribute('d', 'M' + le.map(pt).join('L') + 'Z');
-      e.f[0].setAttribute('fill', shadeUp(s.r, s.g, s.bl)); e.f[1].setAttribute('fill', shade(s.r, s.g, s.bl, 0.82)); e.f[2].setAttribute('fill', shade(s.r, s.g, s.bl, 0.6));
-      e.g.setAttribute('opacity', s.o.toFixed(3));
-      const xs = [...top, ...ri, ...le].map(p => p[0]), ys = [...top, ...ri, ...le].map(p => p[1]);
-      bx.push({ x, i0: i, i1: i + a, j0: j, j1: j + b, k0: k, k1: k + c, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) });
-    });
-    // painter's order: a box is drawn before every box it lies behind (the visible faces are +i, +j, +k in both views,
-    // so a box entirely at smaller i, smaller j or lower k is behind); only boxes whose pictures overlap are compared
-    const E = 1e-4, behind = (A, Bx) => {
-      if (A.k1 <= Bx.k0 + E) return true; if (Bx.k1 <= A.k0 + E) return false;
-      if (A.i1 <= Bx.i0 + E) return true; if (Bx.i1 <= A.i0 + E) return false;
-      if (A.j1 <= Bx.j0 + E) return true; if (Bx.j1 <= A.j0 + E) return false;
-      return (A.i0 + A.i1 + A.j0 + A.j1 + A.k0 + A.k1) < (Bx.i0 + Bx.i1 + Bx.j0 + Bx.j1 + Bx.k0 + Bx.k1);
-    };
+  const orders = [null, null];
+  const E = 1e-4, behind = (A, Bx) => { // the visible faces are +i, +j, +k in both views: a box wholly at lower k, i or j is behind
+    if (A.k1 <= Bx.k0 + E) return true; if (Bx.k1 <= A.k0 + E) return false;
+    if (A.i1 <= Bx.i0 + E) return true; if (Bx.i1 <= A.i0 + E) return false;
+    if (A.j1 <= Bx.j0 + E) return true; if (Bx.j1 <= A.j0 + E) return false;
+    return (A.i0 + A.i1 + A.j0 + A.j1 + A.k0 + A.k1) < (Bx.i0 + Bx.i1 + Bx.j0 + Bx.j1 + Bx.k0 + Bx.k1);
+  };
+  function paintOrder(bx, slot, parent) { // painter's order (a box before every box it lies behind), only where pictures overlap
     const back = bx.map(() => []);
     for (let p = 0; p < bx.length; p++) for (let q = p + 1; q < bx.length; q++) {
       const A = bx[p], Q = bx[q];
@@ -150,91 +157,53 @@
     const seen = new Uint8Array(bx.length), out = [];
     const visit = p => { if (seen[p]) return; seen[p] = 1; for (const q of back[p]) visit(q); out.push(p); };
     for (let p = 0; p < bx.length; p++) visit(p);
-    const ord = out.join();
-    if (ord !== order) { order = ord; for (const x of out) world.appendChild(els[x].g); }
+    const ord = out.join(); if (ord !== orders[slot]) { orders[slot] = ord; for (const p of out) parent.appendChild(els[bx[p].x].g); }
+  }
+  function render(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (view.op > 0) { opT += dt; factoryAt(opT, cur); }
+    const tt = now / 1000, r = svg.getBoundingClientRect(), asp = Math.max(0.3, r.width / Math.max(1, r.height)), h = view.w / asp;
+    svg.setAttribute('viewBox', `${(view.x - view.w / 2).toFixed(3)} ${(view.y - h / 2).toFixed(3)} ${view.w.toFixed(3)} ${h.toFixed(3)}`);
+    const bf = [], bl = [];
+    cur.forEach((s, x) => {
+      const fl = view.drift * 0.3 * Math.sin(tt * 0.9 + x * 1.7), i = s.i, j = s.j, k = s.k + fl, a = s.a, b = s.b, c = s.c, m = s.m;
+      const P = (di, dj, dk) => proj(i + di, j + dj, k + dk, m), pt = p => p[0].toFixed(3) + ' ' + p[1].toFixed(3);
+      const top = [P(0, 0, c), P(a, 0, c), P(a, b, c), P(0, b, c)], ri = [P(a, 0, 0), P(a, b, 0), P(a, b, c), P(a, 0, c)], le = [P(0, b, 0), P(a, b, 0), P(a, b, c), P(0, b, c)];
+      const e = els[x];
+      e.f[0].setAttribute('d', 'M' + top.map(pt).join('L') + 'Z'); e.f[1].setAttribute('d', 'M' + ri.map(pt).join('L') + 'Z'); e.f[2].setAttribute('d', 'M' + le.map(pt).join('L') + 'Z');
+      e.f[0].setAttribute('fill', shadeUp(s.r, s.g, s.bl)); e.f[1].setAttribute('fill', shade(s.r, s.g, s.bl, 0.82)); e.f[2].setAttribute('fill', shade(s.r, s.g, s.bl, 0.6));
+      const xs = [...top, ...ri, ...le].map(p => p[0]), ys = [...top, ...ri, ...le].map(p => p[1]);
+      (x < NF ? bf : bl).push({ x, i0: i, i1: i + a, j0: j, j1: j + b, k0: k, k1: k + c, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) });
+    });
+    paintOrder(bf, 0, worldF); paintOrder(bl, 1, worldL);
     requestAnimationFrame(render);
   }
 
-  /* ---------------------------------------------------------------- the camera for each phase */
-  const camFor = (list, m, opt = {}) => {
-    const bb = bounds(list, m), r = svg.getBoundingClientRect(), asp = Math.max(0.3, r.width / Math.max(1, r.height));
-    const pad = opt.pad || 1.18, bw = (bb.x1 - bb.x0) * pad, bh = (bb.y1 - bb.y0) * pad / (opt.hFrac || 0.82);
-    const w = Math.max(bw, bh * asp), h = w / asp;
-    // shift so the content sits in the part of the stage it is meant for (hFrac of the height, from yTop)
-    const cy = (bb.y0 + bb.y1) / 2 + (opt.yShift || 0) * h;
-    return { x: (bb.x0 + bb.x1) / 2, y: cy, w };
-  };
-  const narrow = () => innerWidth < 640;
-  const FCAM = () => ({ pad: narrow() ? 1.04 : 1.08, hFrac: narrow() ? 0.62 : 0.84, yShift: 0.01 });
-  const LCAM = () => ({ pad: narrow() ? 1.12 : 1.6, hFrac: narrow() ? 0.3 : 0.38, yShift: narrow() ? 0.17 : 0.15 });
-
-  /* ---------------------------------------------------------------- phases */
-  const steps = [...document.querySelectorAll('#steps li')], finale = document.getElementById('finale'), fin = [...finale.children];
-  const skipB = document.getElementById('skip'), replayB = document.getElementById('replay');
-  const setStep = n => steps.forEach((li, x) => { li.classList.toggle('on', x === n); li.classList.toggle('done', x < n); });
+  /* ---------------------------------------------------------------- play: blocks → factory and "one" together → running */
   let anims = [], timers = [];
   const later = (ms, fn) => timers.push(setTimeout(fn, ms));
-  const run = a => { anims.push(a); return a; };
   const stopAll = () => { anims.forEach(a => a.pause()); anims = []; timers.forEach(clearTimeout); timers = []; };
-  const tween = (targets, to, o) => run(anime(Object.assign({ targets, easing: 'easeOutExpo', duration: 1600 }, typeof to === 'function' ? {} : to, o)));
-  const toProps = (list, keys) => Object.fromEntries(keys.map(k => [k, (el, x) => list[x][k]]));
-  const KEYS = ['i', 'j', 'k', 'a', 'b', 'c', 'r', 'g', 'bl'];
-
-  function phaseScatter() {
-    setStep(0); view.m = 0; view.op = 0; view.drift = 1;
-    cur.forEach((c, x) => Object.assign(c, { i: S[x].i, j: S[x].j, k: S[x].k, a: S[x].a, b: S[x].b, c: S[x].c, r: S[x].col[0], g: S[x].col[1], bl: S[x].col[2], o: 1 }));
-    Object.assign(view, camFor(S, 0, { pad: 0.85, hFrac: 1 }));
-    fin.forEach(e => { e.style.opacity = 0; e.style.transform = 'translateY(14px)'; });
-    document.getElementById('steps').style.opacity = 1;
-  }
-  function phaseAssemble() {
-    setStep(1);
-    // the floor lands first, then walls and machines; low blocks before high ones
-    const rank = B.map((b, x) => [x, F[x].k * 3 + (F[x].i + F[x].j) * 0.12]).sort((p, q) => p[1] - q[1]), pos = new Map(rank.map((p, n) => [p[0], n]));
-    run(anime(Object.assign({ targets: cur, easing: 'easeOutExpo', duration: 1500, delay: (el, x) => pos.get(x) * 16 }, toProps(F, KEYS))));
-    run(anime({ targets: view, drift: 0, duration: 900, easing: 'easeOutQuad' }));
-    run(anime(Object.assign({ targets: view, duration: 1800, easing: 'easeInOutCubic' }, camFor(F, 0, FCAM()))));
-  }
-  function phaseRun() { setStep(2); opT = 0; view.op = 1; }
-  function phaseOne() {
-    setStep(3); view.op = 0;
-    // blocks fly to the letters in order across the screen (left blocks to left pixels), the view turns to face them
-    const sx = s => proj(s.i + s.a / 2, s.j + s.b / 2, s.k, 0)[0];
-    const from = cur.map((c, x) => [x, sx(c)]).sort((p, q) => p[1] - q[1]).map(p => p[0]);
-    const toL = L.map((l, x) => [x, l.i + (l.k > 0.2 ? 0 : 100)]).sort((p, q) => p[1] - q[1]).map(p => p[0]); // letters first, the stage after
-    const big = from.slice().sort((p, q) => (B[q].F.a * B[q].F.b * B[q].F.c) - (B[p].F.a * B[p].F.b * B[p].F.c));
-    // the biggest blocks (floor, walls) become the stage; the rest become the letters, matched left to right
-    const stageN = L.length - PIX.length, stageSet = new Set(big.slice(0, stageN)), letterFrom = from.filter(x => !stageSet.has(x)), stageFrom = from.filter(x => stageSet.has(x));
-    const letterTo = toL.filter(x => x < PIX.length), stageTo = toL.filter(x => x >= PIX.length).sort((p, q) => L[p].i - L[q].i);
-    const map = new Map(); letterFrom.forEach((x, n) => map.set(x, letterTo[n])); stageFrom.forEach((x, n) => map.set(x, stageTo[n]));
-    const T = cur.map((c, x) => L[map.get(x)]), tk = T.map(t => ({ i: t.i, j: t.j, k: t.k, a: t.a, b: t.b, c: t.c, r: t.col[0], g: t.col[1], bl: t.col[2] }));
-    run(anime(Object.assign({ targets: cur, easing: 'easeInOutExpo', duration: 1700, delay: (el, x) => (map.get(x) % 40) * 14 }, toProps(tk, KEYS))));
-    const cam = camFor(L, 1, LCAM());
-    run(anime(Object.assign({ targets: view, m: 1, duration: 1900, easing: 'easeInOutCubic' }, cam)));
-    later(1500, () => {
-      document.getElementById('steps').style.opacity = 0.0;
-      run(anime({ targets: fin, opacity: [0, 1], translateY: [14, 0], duration: 900, delay: anime.stagger(140), easing: 'easeOutCubic' }));
-      skipB.hidden = true; replayB.hidden = false;
-    });
-  }
+  const KEYS = ['i', 'j', 'k', 'a', 'b', 'c', 'r', 'g', 'bl', 'm'];
+  const showText = now => { if (now) fin.forEach(e => { e.style.opacity = 1; e.style.transform = 'none'; }); else anims.push(anime({ targets: fin, opacity: [0, 1], translateY: [14, 0], duration: 800, delay: anime.stagger(110), easing: 'easeOutCubic' })); };
   function play() {
-    stopAll(); phaseScatter(); skipB.hidden = false; replayB.hidden = true;
-    later(1100, phaseAssemble);
-    later(1100 + 2600, phaseRun);
-    later(1100 + 2600 + 7000, phaseOne);
+    stopAll(); scatter(); view.op = 0; view.drift = 1; replayB.hidden = true;
+    fin.forEach(e => { e.style.opacity = 0; e.style.transform = 'translateY(14px)'; });
+    // the floor lands first, then walls and machines, low before high; the letters fill in left to right alongside
+    const rank = B.map((b, x) => [x, x < NF ? F[x].k * 3 + (F[x].i + F[x].j) * 0.12 : 2 + b.px * 0.35]).sort((p, q) => p[1] - q[1]), pos = new Map(rank.map((p, n) => [p[0], n]));
+    later(350, () => {
+      anims.push(anime(Object.assign({ targets: cur, easing: 'easeOutExpo', duration: 1300, delay: (el, x) => pos.get(x) * 9 }, Object.fromEntries(KEYS.map(k => [k, (el, x) => T[x][k]])))));
+      anims.push(anime({ targets: view, drift: 0, duration: 700, easing: 'easeOutQuad' }));
+    });
+    later(1500, () => showText(false));
+    later(2300, () => { opT = 0; view.op = 1; replayB.hidden = false; });
   }
-  function finish() { // straight to the end (skip, reduced motion)
-    stopAll(); phaseScatter(); view.drift = 0;
-    phaseOne(); anims.forEach(a => a.seek(a.duration));
-    timers.forEach(clearTimeout); timers = [];
-    document.getElementById('steps').style.opacity = 0; fin.forEach(e => { e.style.opacity = 1; e.style.transform = 'none'; });
-    skipB.hidden = true; replayB.hidden = false;
+  function finish(run) { // straight to the end (reduced motion: standing still)
+    stopAll(); layout(); cur.forEach((c, x) => Object.assign(c, T[x], { o: 1 })); view.drift = 0; view.op = run ? 1 : 0; opT = 0; showText(true); replayB.hidden = false;
   }
-  skipB.onclick = finish; replayB.onclick = play;
-  addEventListener('resize', () => { if (view.m > 0.99) Object.assign(view, camFor(L, 1, LCAM())); else if (view.op) Object.assign(view, camFor(F, 0, FCAM())); });
-  // run only while the stage is on screen (start when first seen)
+  replayB.onclick = play;
+  addEventListener('resize', () => { const done = view.op > 0 || view.drift === 0; layout(); if (done) cur.forEach((c, x) => { if (x >= NF) Object.assign(c, T[x]); }); });
   let started = false;
-  new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && !started) { started = true; reduce ? finish() : play(); } })).observe(svg);
-  phaseScatter(); requestAnimationFrame(render);
-  window.ONE_LANDING = { play, finish, view, cur, B, L, F };
+  new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting && !started) { started = true; reduce ? finish(false) : play(); } })).observe(svg);
+  scatter(); requestAnimationFrame(render);
+  window.ONE_LANDING = { play, finish, view, cur, B, T: () => T };
 })();
