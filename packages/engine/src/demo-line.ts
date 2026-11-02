@@ -1,104 +1,114 @@
 /**
  * The demo line: the default example (welding module line, five cells A–E) as a DES model.
- * One jig-pallet conveyor runs along the spine (x, metres, the same station positions as the 3D model in
- * tools/egr-line-v3/module-line.js); every station is a pallet stop; empty pallets return on the lower
- * level. The number of jig pallets limits the parts in the line (CONWIP), exactly as in the real line.
  *
- * Cycle times, OK rates and failure figures are demo assumptions (generic values, no customer data);
- * every one of them can be overridden per scenario.
+ * Every time in this model is MEASURED from the line's 3D motion (assets/one-twin/module-line-map.json,
+ * written by tools/one-twin/clip-map.mjs from the baked model): how long each station's robot / press /
+ * worker actually takes, how long a pallet needs between two stops, how many pallets fit in between, the
+ * return trip and the lifts. So the numbers and the 3D replay run on one time base.
+ *
+ * Flow: tote (8 cores per tote, a worker changes it) → loader → infeed lane → robot A puts the core on the
+ * jig pallet at the merge stop → 29 stops → the packer puts the cooler in the carton (3 per carton, a worker
+ * changes it) → the pallet goes down the exit lift, back on the lower conveyor and up the start lift.
+ * NG at the weighing check (A5) or the leak test (E3) is taken off at the next NG stop (A6 / E6) into the
+ * closed NG store; the empty pallet runs on.
+ *
+ * Variation, OK rates and failure figures are demo assumptions (generic values, no customer data); each can
+ * be overridden per scenario. Cycle times can be overridden too (the 3D replay then runs that station's
+ * motion faster or slower).
  */
-import type { LineModel, NodeDef } from './line';
+import MAP from '../../../assets/one-twin/module-line-map.json';
+import type { LineModel, NodeDef, PoolDef } from './line';
 import type { Dist } from './rng';
 
+export type Cell = 'A' | 'B' | 'C' | 'D' | 'E';
 export interface DemoStation {
-  id: string; name: string; cell: 'A' | 'B' | 'C' | 'D' | 'E'; x: number;
+  id: string; name: string; cell: Cell;
   ct: number; cv?: number; // mean cycle time (s) and coefficient of variation (normal distribution)
-  okRate?: number; ng?: string; mtbf?: number; mttr?: number; operators?: number; kind: 'robot' | 'auto' | 'manual' | 'inspect';
+  okRate?: number; mtbf?: number; mttr?: number; operators?: number; kind: 'robot' | 'auto' | 'manual' | 'inspect' | 'transfer';
+  emptyCt?: number; reject?: number; setup?: { every: number; time: number }; turnover?: number; pool?: string;
 }
-export const BELT_SPEED = 0.4; // m/s, pallet conveyor
-export const RETURN_SPEED = 1.0; // m/s, lower return conveyor
-export const PALLET_PITCH = 0.32; // m, pallet 300 mm + gap
+export type LineMap = typeof MAP;
+export const LINE_MAP: LineMap = MAP;
+const D = MAP.des;
 
+/** what each station does (kind) and the demo assumptions on variation, quality and failures */
+const CARD: Record<string, Pick<DemoStation, 'kind' | 'cv' | 'okRate' | 'mtbf' | 'mttr' | 'operators'>> = {
+  A0: { kind: 'transfer', cv: 0.01 }, A1: { kind: 'robot', cv: 0.01, mtbf: 6 * 3600, mttr: 240 },
+  A2: { kind: 'inspect' }, A3: { kind: 'robot', cv: 0.02, mtbf: 3 * 3600, mttr: 300 }, A4: { kind: 'inspect' }, A5: { kind: 'inspect', okRate: 0.98 }, A6: { kind: 'transfer' },
+  B1: { kind: 'transfer' }, B2: { kind: 'auto', mtbf: 6 * 3600, mttr: 180 }, B3: { kind: 'auto', cv: 0.02 }, B4: { kind: 'auto', cv: 0.02 }, B5: { kind: 'inspect' },
+  B6: { kind: 'robot', cv: 0.02, mtbf: 8 * 3600, mttr: 900 }, B7: { kind: 'transfer' },
+  C1: { kind: 'auto' }, C2: { kind: 'robot', cv: 0.02, mtbf: 5 * 3600, mttr: 300 }, C3: { kind: 'robot', cv: 0.02, mtbf: 5 * 3600, mttr: 300 }, C4: { kind: 'transfer' },
+  C5: { kind: 'robot', cv: 0.02, mtbf: 5 * 3600, mttr: 300 }, C6: { kind: 'robot', cv: 0.02, mtbf: 5 * 3600, mttr: 300 }, C7: { kind: 'manual', cv: 0.12, operators: 1 },
+  D1: { kind: 'inspect' }, D2: { kind: 'auto', cv: 0.03 }, D3: { kind: 'manual', cv: 0.15, operators: 1 },
+  E1: { kind: 'transfer' }, E2: { kind: 'inspect' }, E3: { kind: 'robot', cv: 0.02, okRate: 0.97, mtbf: 6 * 3600, mttr: 600 }, E4: { kind: 'auto' },
+  E5: { kind: 'auto', cv: 0.03 }, E6: { kind: 'transfer' }, E7: { kind: 'robot', cv: 0.01 },
+};
+const cellOf = (id: string) => id[0] as Cell;
+
+/** stations in flow order with measured times */
 export const DEMO_STATIONS: DemoStation[] = [
-  { id: 'A1', name: '코어 투입·팔레트 로딩 (로봇)', cell: 'A', x: 2.1, ct: 14, cv: 0.05, kind: 'robot', mtbf: 4 * 3600, mttr: 240 },
-  { id: 'A2', name: '프로파일 검사', cell: 'A', x: 2.8, ct: 10, kind: 'inspect' },
-  { id: 'A3', name: '페이스트 도포', cell: 'A', x: 3.6, ct: 25, cv: 0.04, kind: 'robot', mtbf: 3 * 3600, mttr: 300 },
-  { id: 'A4', name: '노즐·도포 비전', cell: 'A', x: 4.25, ct: 8, kind: 'inspect' },
-  { id: 'A5', name: '계량 판정', cell: 'A', x: 4.9, ct: 8, kind: 'inspect', okRate: 0.98, ng: 'NG_A' },
-  { id: 'B1', name: '팔레트 90° 회전', cell: 'B', x: 6.4, ct: 5, kind: 'auto' },
-  { id: 'B2', name: '엔드 탱크 공급', cell: 'B', x: 7.3, ct: 15, kind: 'auto', mtbf: 6 * 3600, mttr: 180 },
-  { id: 'B3', name: '1차 압입', cell: 'B', x: 8.15, ct: 20, cv: 0.03, kind: 'auto' },
-  { id: 'B4', name: '2차 압입', cell: 'B', x: 8.9, ct: 20, cv: 0.03, kind: 'auto' },
-  { id: 'B5', name: '압입 비전', cell: 'B', x: 9.6, ct: 8, kind: 'inspect', okRate: 0.995, ng: 'NG_B' },
-  { id: 'B6', name: '레이저 용접 (로봇 이재·캐빈)', cell: 'B', x: 10.3, ct: 42, cv: 0.03, kind: 'robot', mtbf: 8 * 3600, mttr: 900 },
-  { id: 'C1', name: '플랜지 공급', cell: 'C', x: 12.7, ct: 15, kind: 'auto' },
-  { id: 'C2', name: 'MIG 용접 로봇 1', cell: 'C', x: 13.5, ct: 30, cv: 0.04, kind: 'robot', mtbf: 5 * 3600, mttr: 300 },
-  { id: 'C3', name: 'MIG 용접 로봇 2', cell: 'C', x: 14.5, ct: 30, cv: 0.04, kind: 'robot', mtbf: 5 * 3600, mttr: 300 },
-  { id: 'C4', name: '팔레트 180° 회전', cell: 'C', x: 15.0, ct: 5, kind: 'auto' },
-  { id: 'C5', name: 'MIG 용접 로봇 3', cell: 'C', x: 15.5, ct: 30, cv: 0.04, kind: 'robot', mtbf: 5 * 3600, mttr: 300 },
-  { id: 'C6', name: 'MIG 용접 로봇 4', cell: 'C', x: 16.5, ct: 30, cv: 0.04, kind: 'robot', mtbf: 5 * 3600, mttr: 300 },
-  { id: 'C7', name: '수동 MIG 보완 용접', cell: 'C', x: 18.1, ct: 35, cv: 0.15, kind: 'manual', operators: 1 },
-  { id: 'D1', name: 'C/F 검사', cell: 'D', x: 19.3, ct: 20, kind: 'inspect' },
-  { id: 'D2', name: '외부 도포', cell: 'D', x: 20.4, ct: 25, cv: 0.05, kind: 'auto' },
-  { id: 'D3', name: '육안 검사 (작업자)', cell: 'D', x: 21.5, ct: 30, cv: 0.2, kind: 'manual', operators: 1 },
-  { id: 'E1', name: '팔레트 90° 회전', cell: 'E', x: 22.9, ct: 5, kind: 'auto' },
-  { id: 'E2', name: '바코드·외관 비전', cell: 'E', x: 23.6, ct: 8, kind: 'inspect' },
-  { id: 'E3', name: '리크 테스트 (로봇 이재·캐빈)', cell: 'E', x: 24.3, ct: 46, cv: 0.03, kind: 'robot', okRate: 0.97, mtbf: 6 * 3600, mttr: 600 },
-  { id: 'E4', name: '마킹', cell: 'E', x: 26.15, ct: 10, kind: 'auto' },
-  { id: 'E5', name: '가스켓·볼트 체결', cell: 'E', x: 27.1, ct: 18, cv: 0.05, kind: 'manual', operators: 1 },
-  { id: 'E6', name: 'OK/NG 분류', cell: 'E', x: 27.85, ct: 6, kind: 'auto', ng: 'NG_E' },
-  { id: 'E7', name: '포장', cell: 'E', x: 28.6, ct: 12, kind: 'manual', operators: 1 },
+  { id: 'A0', name: '코어 로더 (토트 → 투입 레인)', cell: 'A', ct: D.loader, ...CARD.A0! },
+  { id: 'A1', name: '로봇 A: 레인 → 지그 팔레트', cell: 'A', ct: D.robotA, pool: 'PAL', ...CARD.A1! },
+  ...MAP.stations.map((id): DemoStation => {
+    const st: DemoStation = { id, name: (MAP.names as Record<string, string>)[id]!, cell: cellOf(id), ct: (D.stations as Record<string, number>)[id]!, turnover: (D.turnover as Record<string, number>)[id], ...CARD[id]! };
+    if (id === 'A6' || id === 'E6') st.reject = D.ngTrip;
+    if (id === 'B6' || id === 'E3') st.emptyCt = D.emptyPass;
+    if (id === 'E7') { st.emptyCt = 1.9; st.setup = { every: D.carton.every, time: Math.max(0, D.carton.swap - st.ct) }; }
+    return st;
+  }),
 ];
 
 export interface DemoParams {
   pallets?: number;
-  /** per-station overrides (cycle time, OK rate, failure figures) */
+  /** per-station overrides (cycle time, variation, OK rate, failure figures) */
   stations?: Record<string, Partial<Pick<DemoStation, 'ct' | 'cv' | 'okRate' | 'mtbf' | 'mttr'>>>;
-  /** extra pallet places in front of a station (accumulation length), on top of the physical gap */
+  /** extra pallet places in front of a station (a longer accumulation section), on top of the physical ones */
   extraBuffer?: Record<string, number>;
-  /** run without random variation and failures (for checking against hand calculation) */
+  /** run without random variation, NG and failures (for checking against hand calculation) */
   deterministic?: boolean;
 }
 
-export interface LayoutNode { id: string; kind: NodeDef['kind']; x0: number; x1: number; cell?: string; name: string }
-export interface DemoLine { model: LineModel; layout: LayoutNode[]; stations: DemoStation[]; params: Required<Pick<DemoParams, 'pallets'>> & DemoParams }
+export interface LayoutNode { id: string; kind: NodeDef['kind']; cell?: string; name: string }
+export interface DemoLine { model: LineModel; layout: LayoutNode[]; stations: DemoStation[]; params: Required<Pick<DemoParams, 'pallets'>> & DemoParams; pool: PoolDef }
 
 export function buildDemoLine(params: DemoParams = {}): DemoLine {
-  const pallets = params.pallets ?? 8;
+  const pallets = params.pallets ?? 8, det = !!params.deterministic;
   const st = DEMO_STATIONS.map(s => ({ ...s, ...(params.stations?.[s.id] ?? {}) }));
   const nodes: NodeDef[] = [], routes: LineModel['routes'] = [], layout: LayoutNode[] = [];
-  const first = st[0]!, last = st[st.length - 1]!;
-  const loop = (last.x - first.x) + 2 * 1.2; // lower return run + two lifts
-  nodes.push({ kind: 'source', id: 'IN', name: '코어 공급 · 빈 팔레트', carriers: pallets, carrierReturn: loop / RETURN_SPEED });
-  layout.push({ id: 'IN', kind: 'source', x0: first.x - 0.6, x1: first.x - 0.6, name: '코어 공급' });
-  let prev = 'IN', prevX = first.x;
-  st.forEach((s, i) => {
-    if (i > 0) {
-      const dx = s.x - prevX, cap = Math.max(1, Math.floor((dx - 0.3) / PALLET_PITCH)) + (params.extraBuffer?.[s.id] ?? 0);
+  const pool: PoolDef = { id: 'PAL', count: pallets, returnTrip: D.returnTrip, liftUp: D.liftUp, liftCycle: D.liftCycle, liftIndex: D.liftIndex };
+  nodes.push({ kind: 'source', id: 'IN', name: '코어 토트', lot: D.tote.lot, gap: D.tote.gap });
+  layout.push({ id: 'IN', kind: 'source', cell: 'A', name: '코어 토트' });
+  let prev = 'IN';
+  const link = (id: string) => { routes.push({ from: prev, to: id }); prev = id; };
+  for (const s of st) {
+    if (s.id === 'A1') { nodes.push({ kind: 'buffer', id: 'LANE', name: '투입 레인 (2열)', cap: 2, transit: D.lane }); layout.push({ id: 'LANE', kind: 'buffer', cell: 'A', name: '투입 레인' }); link('LANE'); }
+    else if (s.id !== 'A0') {
+      const cv = (D.conveyors as Record<string, { transit: number; places: number; index: number }>)[s.id]!;
       const id = `CV_${s.id}`;
-      nodes.push({ kind: 'buffer', id, name: `컨베이어 → ${s.id}`, cap, transit: dx / BELT_SPEED });
-      routes.push({ from: prev, to: id }); prev = id;
-      layout.push({ id, kind: 'buffer', x0: prevX, x1: s.x, cell: s.cell, name: `컨베이어 → ${s.name}` });
+      nodes.push({ kind: 'buffer', id, name: `컨베이어 → ${s.id}`, cap: cv.places + (params.extraBuffer?.[s.id] ?? 0), transit: cv.transit });
+      layout.push({ id, kind: 'buffer', cell: s.cell, name: `컨베이어 → ${s.name}` }); link(id);
     }
-    const det = params.deterministic;
-    const ct: Dist = det || !s.cv ? s.ct : { kind: 'normal', mean: s.ct, sd: s.ct * s.cv, min: s.ct * 0.5 };
-    const def: NodeDef = { kind: 'station', id: s.id, name: s.name, ct };
+    const ct: Dist = det || !s.cv ? s.ct : { kind: 'normal', mean: s.ct, sd: s.ct * s.cv, min: s.ct * 0.7 };
+    const def: Extract<NodeDef, { kind: 'station' }> = { kind: 'station', id: s.id, name: s.name, ct };
     if (!det && s.okRate !== undefined) def.okRate = s.okRate;
-    if (s.ng) def.ng = s.ng;
     if (!det && s.mtbf && s.mttr) { def.mtbf = { kind: 'exp', mean: s.mtbf }; def.mttr = { kind: 'lognormal', mean: s.mttr, sd: s.mttr * 0.5 }; }
-    if (s.operators) def.operators = s.operators;
-    nodes.push(def); routes.push({ from: prev, to: s.id }); prev = s.id; prevX = s.x;
-    layout.push({ id: s.id, kind: 'station', x0: s.x, x1: s.x, cell: s.cell, name: s.name });
-  });
-  nodes.push({ kind: 'sink', id: 'OUT', name: '출하' });
-  routes.push({ from: prev, to: 'OUT' });
-  layout.push({ id: 'OUT', kind: 'sink', x0: last.x + 0.7, x1: last.x + 0.7, name: '출하' });
-  for (const [ng, x, cell] of [['NG_A', 5.5, 'A'], ['NG_B', 11.5, 'B'], ['NG_E', 27.85, 'E']] as const) {
-    nodes.push({ kind: 'sink', id: ng, name: `NG 보관 ${cell}` });
-    layout.push({ id: ng, kind: 'sink', x0: x, x1: x, cell, name: `NG 보관 ${cell}` });
+    for (const k of ['operators', 'emptyCt', 'reject', 'setup', 'turnover', 'pool'] as const) if (s[k] !== undefined) (def as Record<string, unknown>)[k] = s[k];
+    nodes.push(def); layout.push({ id: s.id, kind: 'station', cell: s.cell, name: s.name }); link(s.id);
   }
-  return { model: { nodes, routes }, layout, stations: st, params: { ...params, pallets } };
+  nodes.push({ kind: 'sink', id: 'OUT', name: '출하 (카톤)' }); layout.push({ id: 'OUT', kind: 'sink', cell: 'E', name: '출하' }); link('OUT');
+  return { model: { nodes, routes, pools: [pool] }, layout, stations: st, params: { ...params, pallets }, pool };
 }
 
-/** Takt limit from the slowest station alone (hand calculation, s per part). */
-export const slowestCt = (stations: DemoStation[]): number => Math.max(...stations.map(s => s.ct));
+/** Hand calculation: the slowest station's cycle (its time + the time until the next pallet stands at its stop), s per part. */
+export const slowestCycle = (stations: DemoStation[]): { id: string; cycle: number } =>
+  stations.filter(s => s.id !== 'A0' && s.id !== 'A1').map(s => ({ id: s.id, cycle: s.ct + (s.turnover ?? 0) })).sort((a, b) => b.cycle - a.cycle)[0]!;
+
+/** Hand calculation: one pallet's round trip when nothing waits (lift up, robot A, every conveyor and station, return trip). */
+export function palletLoop(line: DemoLine): number {
+  let t = line.pool.liftUp + line.pool.returnTrip;
+  for (const n of line.model.nodes) {
+    if (n.kind === 'station' && n.id !== 'A0') t += typeof n.ct === 'number' ? n.ct : 0;
+    if (n.kind === 'buffer' && n.id !== 'LANE') t += n.transit ?? 0;
+  }
+  return t;
+}

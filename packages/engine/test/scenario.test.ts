@@ -16,8 +16,9 @@ describe('scenarios', () => {
   });
   it('a faster bottleneck only helps when the line is not pallet-limited', () => {
     const run = { horizon: 9 * 3600, warmup: 3600, seeds: [1, 2, 3] };
-    const base = runScenario('a', { pallets: 24 }, run), fast = runScenario('b', { pallets: 24, stations: { E3: { ct: 36 } } }, run);
-    expect(fast.kpi.throughputPerHour.mean).toBeGreaterThan(base.kpi.throughputPerHour.mean + 3);
+    const base = runScenario('a', { pallets: 24 }, run), fast = runScenario('b', { pallets: 24, stations: { E3: { ct: 22 } } }, run);
+    expect(fast.kpi.throughputPerHour.mean).toBeGreaterThan(base.kpi.throughputPerHour.mean + 0.5);
+    expect(fast.bottleneck).toBe('B6');
     expect(base.bottleneck).toBe('E3');
   });
 });

@@ -8,6 +8,7 @@
     "exactOptionalPropertyTypes": false,
     "noEmit": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "baseUrl": ".",
