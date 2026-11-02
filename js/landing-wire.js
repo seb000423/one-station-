@@ -72,8 +72,9 @@
   function fit() { // viewBox around the finished word
     setCam(); let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const c of cubes) for (const [dx, dy] of [[0, 0], [1, 1]]) { const p = P(c.tx + dx, c.ty + dy, c.tz + 1); x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
-    const r = stage.getBoundingClientRect(), asp = r.width / Math.max(1, r.height), pad = wide ? 0.09 : 0.06;
-    let w = (x1 - x0) * (1 + pad * 2), h = w / asp; if ((y1 - y0) * 1.6 > h) { h = (y1 - y0) * 1.6; w = h * asp; }
+    // the finished word spans the content column (max 1208 px wide), not the whole screen; scattered blocks may use the full width
+    const r = stage.getBoundingClientRect(), asp = r.width / Math.max(1, r.height), col = Math.min(r.width - 32, 1208);
+    let w = (x1 - x0) * r.width / col, h = w / asp; if ((y1 - y0) * 1.7 > h) { h = (y1 - y0) * 1.7; w = h * asp; }
     svg.setAttribute('viewBox', `${(x0 + x1) / 2 - w / 2} ${(y0 + y1) / 2 - h * 0.5} ${w} ${h}`);
   }
   const pt = p => p[0].toFixed(2) + ' ' + p[1].toFixed(2);
