@@ -409,7 +409,7 @@ export class LineSim {
     for (const pl of this.pools.values()) pools[pl.def.id] = { top: pl.top ? { ...pl.top } : null, lower: pl.lower.map(l => ({ ...l })), returning: [...pl.returning.entries()].map(([id, since]) => ({ id, since })), liftFreeAt: pl.liftFreeAt };
     return {
       t: this.now, states, stations, buffers, pools,
-      parts: [...this.parts.values()].map(p => ({ id: p.id, seq: p.seq, at: p.at, prev: p.prev, ng: p.ng, empty: p.empty, enteredAt: p.enteredAt, readyAt: p.readyAt, carrier: p.carrier })),
+      parts: [...this.parts.values()].map(p => ({ id: p.id, seq: p.seq, at: p.at, prev: p.prev, src: p.src, ng: p.ng, empty: p.empty, enteredAt: p.enteredAt, readyAt: p.readyAt, carrier: p.carrier })),
     };
   }
   /** created = in the line + left (good, NG at a sink or taken off at a reject station) — checked by tests */
@@ -426,7 +426,7 @@ export interface Snapshot {
   stations: Record<string, { state: StationState; part: number | null; mode: WorkMode; progress: number; arriveAt: number; ct: number; good: number; since: number; willFail: boolean }>;
   buffers: Record<string, number[]>;
   pools: Record<string, { top: { id: number; at: number; part: number | null } | null; lower: { id: number; readyAt: number }[]; returning: { id: number; since: number }[]; liftFreeAt: number }>;
-  parts: { id: number; seq: number; at: string; prev: string | null; ng: boolean; empty: boolean; enteredAt: number; readyAt: number; carrier: number | null }[];
+  parts: { id: number; seq: number; at: string; prev: string | null; src: string; ng: boolean; empty: boolean; enteredAt: number; readyAt: number; carrier: number | null }[];
 }
 
 export interface LineResult {

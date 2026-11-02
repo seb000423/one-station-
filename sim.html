@@ -243,7 +243,7 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 (() => {
   const builder = new URLSearchParams(location.search).get('src') === 'builder';
   const list = builder
-    ? ['factory-assets', 'factory-elements', 'factory-kit', 'factory-frame', 'factory-unity', 'factory-unity-groups', 'factory-equip', 'factory-motion', 'factory-flow', 'sim-layout', 'sim-lab']
+    ? ['factory-assets', 'factory-elements', 'factory-kit', 'factory-frame', 'factory-unity', 'factory-unity-groups', 'factory-equip', 'factory-motion', 'factory-flow', 'sim-robot', 'sim-layout', 'sim-lab']
     : ['sim-run', 'sim-lab'];
   const next = i => { if (i >= list.length) return; const el = document.createElement('script'); el.src = 'js/' + list[i] + '.js'; el.onload = () => next(i + 1); el.onerror = () => console.error('load', list[i]); document.body.appendChild(el); };
   next(0);

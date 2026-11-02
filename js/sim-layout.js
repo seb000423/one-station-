@@ -28,7 +28,7 @@
   // a machine's ONE SIM settings (ONE BUILDER properties: 라인 시뮬레이션 / 시뮬 사이클 / 양품률 / 고장 간격 / 수리 시간)
   const simOf = o => { const p = o.params || {}, s = p.sim || {};
     return { on: p.simOn === 'on' || s.on === true ? true : p.simOn === 'off' || s.on === false ? false : null,
-      ct: +(p.simCt || s.ct || 0), ok: +(p.simOk ?? s.ok ?? 100), mtbf: +(p.simMtbf || s.mtbf || 0), mttr: +(p.simMttr || s.mttr || 0), cv: +(s.cv || 0) }; };
+      ct: +(p.simCt || s.ct || 0), ok: +(p.simOk ?? s.ok ?? 100), mtbf: +(p.simMtbf || s.mtbf || 0), mttr: +(p.simMttr || s.mttr || 0), cv: +(s.cv || 0), look: p.simLook || s.look || '' }; };
   const isStation = o => {
     const sim = simOf(o);
     if (sim.on === false) return false;
@@ -49,7 +49,7 @@
     const lx = c * dx - s * dz, lz = s * dx + c * dz; // into the object's frame (three.js yaw)
     return Math.hypot(Math.max(0, Math.abs(lx) - fp[0] / 2), Math.max(0, Math.abs(lz) - fp[1] / 2));
   }
-  const stationsIn = [], objOf = new Map(), warnIn = [], farOff = [];
+  const stationsIn = [], objOf = new Map(), warnIn = [], farOff = [], ROBOT = new Set(), LOOK_AFTER = new Map();
   for (const o of doc.objects) {
     if (!isStation(o)) continue;
     let best = null;
@@ -67,6 +67,8 @@
     for (let i = 0; i <= n; i++) { const sb = best.b.len * i / n, q = best.b.at(sb); if (rectDist(o, q[0], q[1]) <= best.d + 0.35) { const c = Math.hypot(q[0] - o.x, q[1] - o.z); if (c < cbest) { cbest = c; s0 = sb; } } }
     const sim = simOf(o);
     const st = { id: o.id, name: o.name || '설비', belt: best.b.id, s: +s0.toFixed(3), ct: ctOf(o), equip: o.id };
+    if (isRobot) ROBOT.add(o.id);
+    if (sim.look) LOOK_AFTER.set(o.id, sim.look === 'box' ? '' : sim.look); // the part looks different after this process
     if (sim.ok > 0 && sim.ok < 100) st.okRate = sim.ok / 100;
     if (sim.mtbf > 0 && sim.mttr > 0) { st.mtbf = sim.mtbf * 60; st.mttr = sim.mttr * 60; }
     st.cv = sim.cv > 0 ? sim.cv : o.type === 'bench' ? 0.12 : 0.04; // hand work varies more than a machine (off with 변동·고장·NG 없이)
@@ -78,7 +80,9 @@
   // a belt joining another from the side ends at its edge: the item crosses to the main belt's centre line (transfer)
   const BYID = new Map(B.map(b => [b.id, b]));
   const sideGap = b => { const nb = BYID.get(b.next.id), q = nb.at(b.next.s), e = b.at(b.len); return Math.hypot(q[0] - e[0], q[1] - e[1]); };
-  const pitch = Math.max(0.15, ...srcBelts.map(b => Math.max(0.1, Math.min(b.p.item, b.len, 2)) + GAP), 0.45);
+  // what each source puts on (js/factory-flow.js itemSpec: carton / tote / part model, length × width × height)
+  const SPEC = new Map(srcBelts.map(b => [b.id, FF.itemSpec(b.p, b)]));
+  const pitch = Math.max(0.15, ...[...SPEC.values()].map(x => x.size + GAP), 0.45);
   const INPUT = {
     pitch,
     belts: B.map(b => ({ id: b.id, name: b.name || '컨베이어', len: b.len, speed: b.speed, next: b.next ? { id: b.next.id, s: b.next.s, gap: b.next.s > 1e-6 ? sideGap(b) : 0 } : null, source: b.p.source ? { interval: b.p.interval } : null, sink: !!b.p.sink })),
@@ -124,10 +128,12 @@
   const cfg = { seed: 1, horizon: 8 * 3600, deterministic: false, stations: undefined };
   let L = null, sim = null, simT = 0, playing = false, speed = 5, lastResult = null, exitsT = [], views = new Map();
   const LABEL = {}; // station id → S1, S2 … in flow order
-  const itemMat = new THREE.MeshStandardMaterial({ color: 0xc8a06a, roughness: 0.8 }), itemNg = new THREE.MeshStandardMaterial({ color: 0xd2453f, roughness: 0.7 });
-  const srcItem = new Map(srcBelts.map(b => [b.id, { size: Math.max(0.1, Math.min(b.p.item, b.len, 2)), w: Math.max(0.1, Math.min(Math.max(0.1, Math.min(b.p.item, b.len, 2)), b.w - 0.08)) }]));
-  const ITEM = srcItem.values().next().value || { size: 0.4, w: 0.4 };
-  const itemGeo = new THREE.BoxGeometry(ITEM.size, Math.min(0.4, Math.max(0.12, ITEM.size * 0.6)), ITEM.w), itemH = Math.min(0.4, Math.max(0.12, ITEM.size * 0.6));
+  const ITEM0 = SPEC.values().next().value || { size: 0.4, w: 0.4, h: 0.24, look: '' };
+  const specOfPart = p => { const pt = L.points[p.src]; return Object.assign({}, (pt && SPEC.get(pt.belt)) || ITEM0); };
+  // a process that changes the look: same length; a box look keeps the size it had
+  const BW = Math.max(...B.map(b => b.w || 0.6));
+  const changeLook = (spec, look) => FF.itemSpec({ item: spec.size, itemLook: look, itemW: spec.w, itemH: spec.h, width: BW }, null);
+  const ROBOTS = new Map(); // station id → robot rig (js/sim-robot.js), or { why } when it cannot pick here
 
   const newSim = () => {
     L = E.buildLayoutLine(INPUT, { stations: cfg.stations, deterministic: cfg.deterministic });
@@ -182,7 +188,10 @@
     for (const p of s.parts) {
       let v = views.get(p.id);
       const tg = target(p, s, t, v); if (!tg) continue;
-      if (!v) { const mesh = new THREE.Mesh(itemGeo, itemMat); mesh.castShadow = true; scene.add(mesh); v = { mesh, key: tg.key, d: tg.d, p }; views.set(p.id, v); }
+      if (!v) { const spec = specOfPart(p), mesh = FF.itemMesh(spec); scene.add(mesh); v = { mesh, spec, key: tg.key, d: tg.d, p, lastAt: p.at }; views.set(p.id, v); }
+      // leaving a process that changes the part: from here on it looks like what the process made
+      if (v.lastAt !== p.at) { const nl = LOOK_AFTER.get(v.lastAt); if (nl !== undefined && nl !== v.spec.look) { v.spec = changeLook(v.spec, nl); scene.remove(v.mesh); v.mesh = FF.itemMesh(v.spec); scene.add(v.mesh); } v.lastAt = p.at; }
+      if (v.mesh.userData.pending && FF.lookReady(v.spec.look)) { scene.remove(v.mesh); v.mesh = FF.itemMesh(v.spec); scene.add(v.mesh); } // its model has loaded
       v.p = p; v.tg = tg; seen.add(p.id);
       const snap = dt > 30;
       if (snap) { v.key = tg.key; v.d = tg.d; continue; }
@@ -211,13 +220,34 @@
     }
     for (const v of views.values()) {
       const q = posOn(v.bp.belt, v.bp.s);
-      v.mesh.position.set(q[0], q[3] + itemH / 2 + 0.005, q[1]); v.mesh.rotation.y = q[2];
-      v.mesh.material = v.p.ng ? itemNg : itemMat;
+      v.mesh.position.set(q[0], q[3] + v.spec.h / 2 + 0.005, q[1]); v.mesh.rotation.y = q[2]; v.carried = false;
+      if (v.mesh.userData.ng) v.mesh.userData.ng.visible = !!v.p.ng;
       v.prevKey = v.key; v.prevD = v.d; v.prevS = v.bp.s;
+    }
+    // robots: pick the part off the stop, take it to the work position, hold it for the process, put it back
+    for (const st of L.stations) {
+      if (!ROBOT.has(st.id)) continue;
+      const g = built.get(st.id); if (!g) continue;
+      let R = ROBOTS.get(st.id);
+      if (R && R.g !== g) R = null; // the model was rebuilt (loaded)
+      if (!R) {
+        const pt = L.points[st.id], q = posOn(pt.belt, pt.s), spec = ITEM0, ya = q[2];
+        R = window.SimRobot ? window.SimRobot.rig(g, { pick: new THREE.Vector3(q[0], q[3] + spec.h / 2 + 0.005, q[1]), along: new THREE.Vector3(Math.cos(ya), 0, -Math.sin(ya)), width: spec.w, height: spec.h }) : { why: 'joints' };
+        R.g = g; ROBOTS.set(st.id, R);
+        if (R.why === 'reach') { warnIn.push(`${st.name}: 로봇 팔이 정지 위치까지 닿지 않아 집기 동작 없이 돌립니다 (컨베이어에 더 가깝게 놓거나 높이를 올리세요)`); showWarnings(); }
+        if (R.home) R.home();
+      }
+      if (!R.pose) continue;
+      const ss = s.stations[st.id];
+      if (ss && ss.part !== null && (ss.state === 'busy' || ss.state === 'down') && t >= ss.arriveAt - 1e-9 && ss.mode !== 'empty') {
+        const r = R.pose(ss.progress * ss.ct, ss.ct), v = views.get(ss.part);
+        if (r.carry && v) { const tp = R.tip(); v.mesh.position.copy(tp); v.carried = true; }
+      } else R.home();
     }
     // machines work only while their station has an item in work
     for (const st of L.stations) {
       const o = objOf.get(st.id), g = built.get(st.id); if (!o || !g) continue;
+      if (ROBOTS.get(st.id)?.pose) continue; // moved above
       const ss = s.stations[st.id]; const busy = ss && ss.state === 'busy' && ss.part !== null && t >= ss.arriveAt;
       const c = Math.max(1, FE.cycleSeconds(o) || st.ct);
       if (busy) { g.userData.simT = ss.progress * c; } else if (g.userData.simT === undefined) g.userData.simT = 0;
@@ -330,20 +360,20 @@
   // no-magic audit (same contract as the demo view): items closer than one item on a belt, and moves without the motion behind them
   function audit(t0, t1, dt = 0.1) {
     seekTo(t0); setPlaying(false);
-    const out = { overlaps: [], jumps: [], frames: 0 }, prev = new Map();
+    const out = { overlaps: [], jumps: [], frames: 0, carried: 0 }, prev = new Map();
     for (let t = t0 + dt; t <= t1 + 1e-9; t += dt) {
-      advance(t); frame(dt); out.frames++;
+      advance(t); frame(dt); out.frames++; if ([...views.values()].some(v => v.carried)) out.carried++;
       const list = [...views.entries()];
       for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
         const a = list[i][1].mesh.position, b = list[j][1].mesh.position;
         if (a.distanceTo(b) < pitch - GAP - 0.01) out.overlaps.push({ t: +t.toFixed(2), a: list[i][0], b: list[j][0], d: +a.distanceTo(b).toFixed(3) });
       }
-      for (const [id, v] of list) { const q = prev.get(id); const maxStep = Math.max(...B.map(b => b.speed)) * dt * 1.3 + 0.002;
+      for (const [id, v] of list) { const q = prev.get(id); const maxStep = (v.carried || v.wasCarried ? 2.5 : Math.max(...B.map(b => b.speed)) * 1.3) * dt + 0.006; v.wasCarried = v.carried; // in the gripper: the robot's speed
         if (q && q.distanceTo(v.mesh.position) > maxStep) out.jumps.push({ t: +t.toFixed(2), id, d: +q.distanceTo(v.mesh.position).toFixed(3) });
         prev.set(id, v.mesh.position.clone()); }
       for (const id of [...prev.keys()]) if (!views.has(id)) prev.delete(id);
     }
-    return { frames: out.frames, overlaps: out.overlaps.length, firstOverlaps: out.overlaps.slice(0, 8), jumps: out.jumps.length, firstJumps: out.jumps.slice(0, 8) };
+    return { frames: out.frames, carried: out.carried, overlaps: out.overlaps.length, firstOverlaps: out.overlaps.slice(0, 8), jumps: out.jumps.length, firstJumps: out.jumps.slice(0, 8) };
   }
 
   /* ---------------------------------------------------------------- the line for the compare / optimise pages */
@@ -367,5 +397,5 @@
     updateTags(); controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
-  window.ONE_SIM = { audit, load, get sim() { return sim; }, get views() { return views; }, get line() { return L; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance, input: INPUT };
+  window.ONE_SIM = { audit, load, get sim() { return sim; }, get views() { return views; }, get built() { return built; }, robots: ROBOTS, camera, controls, get line() { return L; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance, input: INPUT };
 })();

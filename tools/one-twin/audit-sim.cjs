@@ -39,7 +39,7 @@ const server = http.createServer((q, r) => {
   for (const [name, params, t0, t1] of CASES) {
     const r = await p.evaluate(([params, t0, t1]) => { const S = window.ONE_SIM; S.load(params, 'audit'); S.setPlaying(false); return S.audit(t0, t1, 0.1); }, [params, t0, t1]);
     const ok = r.overlaps === 0 && r.jumps === 0; if (!ok) failed++;
-    console.log(`${ok ? 'ok  ' : 'FAIL'} ${name.padEnd(20)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
+    console.log(`${ok ? 'ok  ' : 'FAIL'} ${name.padEnd(20)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}${r.carried != null ? "  robot carrying " + r.carried : ""}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
   }
   // lines drawn in ONE BUILDER
   for (const docName of Object.keys(LAYOUT)) {
@@ -49,11 +49,12 @@ const server = http.createServer((q, r) => {
     await q.addInitScript(d => localStorage.setItem('one-station-factory-v3', JSON.stringify(d)), LAYOUT[docName]);
     await q.goto(`http://localhost:${port}/sim.html?src=builder`, { waitUntil: 'domcontentloaded' });
     await q.waitForFunction(() => document.getElementById('loading').hidden && window.ONE_SIM, null, { timeout: 180000 });
+    await q.waitForFunction(() => ['e3_fr10'].every(id => ['ready', 'failed'].includes(window.FactoryAssets.state(id))), null, { timeout: 120000 }); // robots pick only once their model is in
     for (const [d, name, params, t0, t1] of LAYOUT_CASES) {
       if (d !== docName) continue;
       const r = await q.evaluate(([params, t0, t1]) => { const S = window.ONE_SIM; S.load(params, 'audit'); S.setPlaying(false); return S.audit(t0, t1, 0.1); }, [params, t0, t1]);
       const ok = r.overlaps === 0 && r.jumps === 0; if (!ok) failed++;
-      console.log(`${ok ? 'ok  ' : 'FAIL'} ${('builder ' + d + ': ' + name).padEnd(40)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
+      console.log(`${ok ? 'ok  ' : 'FAIL'} ${('builder ' + d + ': ' + name).padEnd(40)} frames ${r.frames}  overlaps ${r.overlaps}  jumps ${r.jumps}  robot carrying ${r.carried}${ok ? '' : '\n     ' + JSON.stringify([...r.firstOverlaps.slice(0, 2), ...r.firstJumps.slice(0, 2)])}`);
     }
     await q.close();
   }

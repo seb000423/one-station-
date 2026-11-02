@@ -58,8 +58,9 @@
   // ONE SIM (line simulation) settings of a machine: whether it is a process step, and its cycle / OK rate / failures
   const SIMF = [['simOn', '라인 시뮬레이션', 'select', [['', '자동 (컨베이어 옆이면 공정)'], ['on', '공정으로 넣기'], ['off', '공정에서 빼기']]],
     ['simCt', '시뮬 사이클 (s, 0 = 설비 값)', 0.5, 0, 3600, p => p.simOn !== 'off'], ['simOk', '양품률 (%)', 0.5, 50, 100, p => p.simOn !== 'off'],
-    ['simMtbf', '평균 고장 간격 (분, 0 = 없음)', 1, 0, 6000, p => p.simOn !== 'off'], ['simMttr', '평균 수리 시간 (분)', 0.5, 0, 600, p => p.simOn !== 'off' && p.simMtbf > 0]];
-  const SIMDEF = { simOn: '', simCt: 0, simOk: 100, simMtbf: 0, simMttr: 5 };
+    ['simMtbf', '평균 고장 간격 (분, 0 = 없음)', 1, 0, 6000, p => p.simOn !== 'off'], ['simMttr', '평균 수리 시간 (분)', 0.5, 0, 600, p => p.simOn !== 'off' && p.simMtbf > 0],
+    ['simLook', '공정 후 부품 모양', 'select', [['', '그대로'], ['box', '골판지 상자']].concat(window.FactoryFlow ? window.FactoryFlow.looks().slice(1) : []), null, p => p.simOn !== 'off']];
+  const SIMDEF = { simOn: '', simCt: 0, simOk: 100, simMtbf: 0, simMttr: 5, simLook: '' };
   const FIELDS = { // building element settings: key, label, step, min, max
     column: [['w', '가로 (m)', 0.1, 0.1, 3], ['d', '세로 (m)', 0.1, 0.1, 3], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30]],
     wall: [['length', '길이 (m)', 0.5, 0.2, 200], ['thickness', '두께 (m)', 0.05, 0.05, 1], ['h', '높이 (m, 0 = 천장)', 0.5, 0, 30], ['windows', '창문 띠 (4.4 m 높이)', 'check']],
@@ -78,7 +79,8 @@
     conveyor: [['shape', '모양', 'select', [['straight', '직선'], ['curve', '90° 곡선 (L자)'], ['uturn', '180° U턴']]], ['turn', '꺾는 방향', 'select', [['left', '왼쪽'], ['right', '오른쪽']], null, p => p.shape !== 'straight'],
       ['kind', '종류', 'select', [['roller', '롤러'], ['belt', '벨트']]], ['dir', '진행 방향', 'select', [['1', '정방향 ▶'], ['-1', '역방향 ◀']]],
       ['length', '길이 (m)', 0.5, 0.5, 60, p => p.shape === 'straight'], ['radius', '곡선 반경 (m)', 0.1, 0.4, 5, p => p.shape !== 'straight'], ['width', '폭 (m)', 0.05, 0.3, 2], ['height', '높이 (m)', 0.05, 0.3, 1.5], ['speed', '속도 (m/s)', 0.05, 0.05, 3],
-      ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source], ['sink', '배출 (출구에서 꺼냄)', 'check']],
+      ['source', '투입 (입구에서 물건 생성)', 'check'], ['interval', '투입 간격 (s)', 0.5, 0.5, 600, p => p.source], ['itemLook', '물건 종류', 'select', window.FactoryFlow ? window.FactoryFlow.looks() : [['', '골판지 상자']], null, p => p.source], ['item', '물건 길이 (m)', 0.05, 0.1, 2, p => p.source],
+      ['itemW', '물건 폭 (m, 0 = 길이와 같게)', 0.05, 0, 2, p => p.source && (!p.itemLook || p.itemLook === 'tote')], ['itemH', '물건 높이 (m, 0 = 자동)', 0.05, 0, 1.2, p => p.source && (!p.itemLook || p.itemLook === 'tote')], ['sink', '배출 (출구에서 꺼냄)', 'check']],
     robot: [['model', '모델', 'select', [['fanuc', 'FANUC CRX-10iA/L (3D 모델)'], ['simple', '단순 형상']]], ['reach', '도달 거리 (m)', 0.1, 0.6, 3], ['pick', '픽 각도 (°)', 15, -180, 180], ['place', '플레이스 각도 (°)', 15, -180, 180], ['cycle', '사이클 (s)', 0.5, 2, 120]],
     rack: [['bays', '베이 수', 1, 1, 30], ['levels', '단 수', 1, 1, 12], ['bayWidth', '베이 폭 (m)', 0.1, 0.6, 4], ['depth', '깊이 (m)', 0.1, 0.4, 2], ['levelHeight', '단 높이 (m)', 0.1, 0.4, 3], ['perSlot', '칸당 적재 수', 1, 1, 6], ['fill', '적재율 (%)', 5, 0, 100], ['load', '적재물', 'select', [['tote', '플라스틱 상자'], ['carton', '팔레트 · 박스'], ['none', '없음']]]],
     amr: [['model', '모델', 'select', [['e3_amr_deck_bot', 'AMR (롤러 상판)'], ['e3_omron_agv', 'AGV (Omron, 트롤리)'], ['agv', 'AGV 리프트'], ['uw_forklift', '지게차'], ['uw_palletrobot', '팔레트 운반 로봇'], ['simple', '단순 형상']]], ['from', '출발 지점', 'place', null, null, p => !hasJobs(p)], ['to', '도착 지점', 'place', null, null, p => !hasJobs(p)], ['dwell', '적재 · 하역 시간 (s)', 1, 0, 600], ['speed', '속도 (m/s)', 0.1, 0.2, 3], ['payload', '적재 하중 (kg)', 10, 10, 2000], ['battery', '배터리 (%)', 5, 0, 100], ['length', '길이 (m)', 0.05, 0.4, 2.5], ['width', '폭 (m)', 0.05, 0.3, 2]],
@@ -784,14 +786,11 @@
     const live = new Set();
     for (const x of F.items()) {
       let m = itemMeshes.get(x.id);
-      if (!m) {
-        m = new THREE.Group(); const b = new THREE.Mesh(new THREE.BoxGeometry(x.size, x.h, x.w), cartonMat); b.castShadow = b.receiveShadow = true; m.add(b);
-        const tp = new THREE.Mesh(new THREE.BoxGeometry(x.size + 0.004, 0.004, Math.min(0.06, x.w * 0.3)), cartonTape); tp.position.y = x.h / 2; m.add(tp);
-        m.traverse(q => { q.raycast = () => {}; }); itemMeshes.set(x.id, m); itemLayer.add(m);
-      }
+      if (m && m.userData.pending && FF().lookReady(x.look)) { itemLayer.remove(m); m = null; } // its model has loaded
+      if (!m) { m = FF().itemMesh({ size: x.size, w: x.w, h: x.h, look: x.look }); itemMeshes.set(x.id, m); itemLayer.add(m); }
       m.position.set(x.x, x.y, x.z); m.rotation.set(0, x.yaw, 0); live.add(x.id);
     }
-    for (const [id, m] of itemMeshes) if (!live.has(id)) { itemLayer.remove(m); m.children.forEach(c => c.geometry.dispose()); itemMeshes.delete(id); }
+    for (const [id, m] of itemMeshes) if (!live.has(id)) { itemLayer.remove(m); itemMeshes.delete(id); } // geometry is shared with the next items of the same look
   }
   // end markers: green = joined, orange = dead end (items queue), red = sink, blue = source
   function buildFlowLayer() {

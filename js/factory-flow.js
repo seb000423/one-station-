@@ -113,14 +113,14 @@
         } else if (b.p.sink) { it.shift(); b.done++; }
       }
       for (const b of B) if (b.p.source && t >= b.nextSpawn) {
-        const size = Math.max(0.1, Math.min(b.p.item, b.len, 2)), x = { size, s: size / 2 }, rear = b.items[b.items.length - 1];
+        const sp = itemSpec(b.p, b), size = sp.size, x = { size, s: size / 2 }, rear = b.items[b.items.length - 1];
         if (rear && rear.s - x.s < space(rear, x)) continue; // no room yet: try again next step
-        Object.assign(x, { id: ++seq, src: b.id, conv: b.id, w: Math.max(0.1, Math.min(size, b.w - 0.08)), h: Math.min(0.4, Math.max(0.12, size * 0.6)) });
+        Object.assign(x, { id: ++seq, src: b.id, conv: b.id, w: sp.w, h: sp.h, look: sp.look });
         b.items.push(x); b.made++;
         b.nextSpawn = (t - b.nextSpawn > dt ? t : b.nextSpawn) + Math.max(0.5, b.p.interval);
       }
     }
-    const pose = x => { const b = by.get(x.conv), [px, pz, yaw] = b.at(x.s); return { id: x.id, src: x.src, size: x.size, w: x.w, h: x.h, x: px, z: pz, y: b.top + x.h / 2, yaw }; };
+    const pose = x => { const b = by.get(x.conv), [px, pz, yaw] = b.at(x.s); return { id: x.id, src: x.src, size: x.size, w: x.w, h: x.h, look: x.look, x: px, z: pz, y: b.top + x.h / 2, yaw }; };
     const state = b => b.held ? `정체 · ${b.items.length}개 대기` : b.items.length ? `이송 중 · ${b.items.length}개` : '비어 있음';
     return {
       belts: B, by, t: () => t, step,
@@ -167,5 +167,42 @@
     return { pools: [...pools.values()].map(p => ({ src: p.src, size: p.size, w: p.w, h: p.h, slots: p.slots.map(s => s.pos) })), conveyors: conv };
   }
 
-  window.FactoryFlow = { belt, belts, network, snap, sim, record, DT, LINK };
+  // ---------------------------------------------------------------- what a source puts on
+  // look: '' carton, 'tote' plastic tote, or a catalogue part model (js/factory-unity.js, 부품 · 소품). A box look takes
+  // length × width × height (itemW / itemH, 0 = from the length); a part model is scaled to the length, keeping its shape.
+  const FU = () => window.FactoryUnity, FA = () => window.FactoryAssets;
+  const catEntry = key => { const U = FU(); return U && U.CATALOG ? U.CATALOG[(U.ALIAS || {})[key] || key] : null; };
+  function looks() {
+    const U = FU(), parts = U && U.CATALOG ? Object.entries(U.CATALOG).filter(([, c]) => c.cat === '부품 · 소품' && !/tablet/.test(c.parts[0][0])).map(([k, c]) => [k, c.label]) : [];
+    return [['', '골판지 상자'], ['tote', '플라스틱 상자']].concat(parts);
+  }
+  function itemSpec(p, b) {
+    const bw = (b && b.w) || p.width || 0.6, size = Math.max(0.1, Math.min(+p.item || 0.4, (b && b.len) || 2, 2)), look = p.itemLook || '';
+    const c = look && look !== 'tote' ? catEntry(look) : null;
+    if (c && c.size) { const k = size / c.size[0]; return { size, w: Math.max(0.03, Math.min(c.size[2] * k, bw - 0.04)), h: Math.max(0.01, c.size[1] * k), look }; }
+    return { size, w: Math.max(0.1, Math.min(p.itemW > 0 ? +p.itemW : size, bw - 0.08)), h: p.itemH > 0 ? Math.min(1.2, +p.itemH) : Math.min(0.4, Math.max(0.12, size * 0.6)), look: c ? '' : look };
+  }
+  const MAT = {}, GEO = new Map();
+  const geo = (w, h, d) => { const k = [w, h, d].map(v => v.toFixed(3)).join(); if (!GEO.has(k)) GEO.set(k, new THREE.BoxGeometry(w, h, d)); return GEO.get(k); }; // shared: items come and go
+  const mat = (k, color, rough, extra) => MAT[k] || (MAT[k] = new THREE.MeshStandardMaterial(Object.assign({ color, roughness: rough }, extra || {})));
+  const ready = key => { const c = catEntry(key); return !c || c.parts.every(q => !FA() || FA().state(q[0]) === 'ready' || FA().state(q[0]) === 'failed'); };
+  // a mesh for one item, centred on its envelope (length along +X); userData.pending while its model is still loading,
+  // userData.ng: a red tag shown for a rejected part
+  function itemMesh(spec) {
+    const g = new THREE.Group(), L = spec.size, W = spec.w, H = spec.h, box = (w, h, d, m, x, y, z) => { const q = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); q.position.set(x, y, z); q.castShadow = q.receiveShadow = true; g.add(q); return q; };
+    if (!spec.look) { box(L, H, W, mat('carton', 0xa8743e, 0.85), 0, 0, 0); box(L + 0.004, 0.004, Math.min(0.06, W * 0.3), mat('tape', 0x5e4122, 0.8), 0, H / 2, 0); }
+    else if (spec.look === 'tote') { const m = mat('tote', 0x3d6f9e, 0.6), t = 0.012; box(L, t, W, m, 0, -H / 2 + t / 2, 0); for (const sz of [-1, 1]) box(L, H, t, m, 0, 0, sz * (W / 2 - t / 2)); for (const sx of [-1, 1]) box(t, H, W, m, sx * (L / 2 - t / 2), 0, 0); }
+    else {
+      const c = catEntry(spec.look); let built = null;
+      if (ready(spec.look)) try { built = FE().build({ type: 'ufmodel', params: { model: spec.look, scale: 1 } }, null); } catch (e) { built = null; }
+      if (built) { const B = new THREE.Box3().setFromObject(built), sz = B.getSize(new THREE.Vector3()), k = L / Math.max(1e-3, sz.x);
+        built.scale.multiplyScalar(k); built.position.set(-(B.min.x + B.max.x) / 2 * k, -H / 2 - B.min.y * k, -(B.min.z + B.max.z) / 2 * k); g.add(built); built.traverse(q => { if (q.isMesh) q.castShadow = q.receiveShadow = true; }); }
+      else { box(L, H, W, mat('pending', 0x9aa2aa, 0.7), 0, 0, 0); g.userData.pending = true; if (c) for (const q of c.parts) if (FA()) FA().load(q[0]).catch(() => {}); }
+    }
+    const tag = box(Math.min(0.08, L * 0.4), 0.01, Math.min(0.08, W * 0.6), mat('ng', 0xd2453f, 0.6, { emissive: 0x5a1010 }), 0, H / 2 + 0.006, 0); tag.visible = false; g.userData.ng = tag;
+    g.traverse(q => { q.raycast = () => {}; });
+    return g;
+  }
+
+  window.FactoryFlow = { belt, belts, network, snap, sim, record, DT, LINK, looks, itemSpec, itemMesh, lookReady: ready };
 })();
