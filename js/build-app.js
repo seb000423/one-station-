@@ -877,7 +877,20 @@
       const a = (x1 - x0) * (y1 - y0); if (a > 90 * 90) continue; const pad = 12;
       if (mx >= x0 - pad && mx <= x1 + pad && my >= y0 - pad && my <= y1 + pad && a < bestA) { best = id; bestA = a; } }
     return best; }
-  function pick1(e) { setNdc(e); const ex = pickExact(), near = pickNear(e); if (!near || near === ex) return ex;
+  /* conveyor decks are mostly gaps (rollers, legs): a click anywhere on the deck area at belt height counts as that conveyor,
+     not only a click exactly on a roller. The nearest deck along the ray wins, unless a solid part is hit in front of it. */
+  const deckPlane = new T.Plane(new T.Vector3(0, 1, 0), 0), deckHit = new T.Vector3();
+  function pickDeck() { if (tab !== 'machine') return null; let best = null, bestD = Infinity;
+    for (const n of ED.machine.doc.nodes) { const d = nodeDef(n); if (n.parent || !d || !(d.conveyor || d.curve || d.corner) || !objs.has(n.id)) continue;
+      deckPlane.constant = -toS([0, 0, nodeTop(n)]).y; if (!ray.ray.intersectPlane(deckPlane, deckHit)) continue; const q = S.sceneToStored([deckHit.x, deckHit.y, deckHit.z]), p = Object.assign({}, d.params, n.params), m = 40;
+      let on; if (d.curve) { const g = L.curveGeom(n); on = false; for (let i = 0; i <= 24 && !on; i++) { const a = g.point(i / 24); on = Math.hypot(a[0] - q[0], a[1] - q[1]) <= +p.w / 2 + m; } }
+      else { const r = n.transform.rotation[2] * Math.PI / 180, dx = q[0] - n.transform.position[0], dy = q[1] - n.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r), half = d.corner ? +p.w / 2 : +p.length / 2;
+        on = Math.abs(a) <= half + m && Math.abs(l) <= +p.w / 2 + m; }
+      const dist = ray.ray.origin.distanceTo(deckHit); if (on && dist < bestD) { best = n.id; bestD = dist; } }
+    return best ? { id: best, dist: bestD } : null; }
+  function pick1(e) { setNdc(e); const dk = pickDeck(); if (dk) { const h = ray.intersectObjects(root.children, true).find(x => x.object.visible && !x.object.isPoints && x.object.userData.pick && !isSlab(x.object.userData.pick));
+      if (!h || h.distance >= dk.dist - 0.02 || h.object.userData.pick === dk.id) { const nr = pickNear(e); if (nr && nr !== dk.id) { const nn = ED.machine.doc.nodes.find(x => x.id === nr); if (nn && nn.parent) return nr; } return dk.id; } return h.object.userData.pick; }
+    const ex = pickExact(), near = pickNear(e); if (!near || near === ex) return ex;
     if (!ex) return near; tmpBox.setFromObject(objs.get(ex).obj); const s = tmpBox.getSize(pc); return s.x * s.z > 1 || s.y < 0.05 ? near : ex; }
   // everything under the cursor, front to back (the slab last)
   function pickAll(e) { setNdc(e); const out = [], first = pick1(e); if (first) out.push(first);
