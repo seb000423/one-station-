@@ -151,7 +151,7 @@ h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
 .bottom{border:1px solid var(--line);border-radius:6px;margin:0 6px 6px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 400px;height:230px;background:var(--panel);position:relative}
 .bottom.fold{height:36px}
 .bgrip{position:absolute;left:0;right:0;top:0;height:8px;cursor:ns-resize;z-index:6}.bgrip::after{content:'';position:absolute;left:50%;top:2px;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:var(--line2)}.bgrip:hover::after{background:var(--amber)}
-.bottom.fold .tbl,.bottom.fold .logb,.bottom.fold #seq{display:none}
+.bottom.fold .tbl,.bottom.fold .swrow,.bottom.fold .logb,.bottom.fold #seq{display:none}
 .bhead{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line)}
 .bhead h3{margin:0;font-size:12.5px;font-weight:600;white-space:nowrap}.bhead small{color:var(--dim)}
 .tbl{overflow-y:auto;height:calc(100% - 35px)}
@@ -168,7 +168,14 @@ tr.hl td{background:rgba(255,174,66,.07)}
 .logb .lg{font-family:var(--mono);font-size:11.5px;color:var(--mute);padding:8px 14px;overflow-y:auto;height:calc(100% - 35px);display:grid;align-content:start;gap:2px}
 .logb .lg b{color:var(--fg);font-weight:400}
 .fold-btn{margin-left:auto}
-.cellseg{margin-left:8px;display:inline-flex;gap:2px}.cellseg button{padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellseg button.on{border-color:var(--amber);color:var(--amber)}.cellwarn{white-space:nowrap;margin-left:8px;color:#ff5a4f;font-size:11.5px;border:1px solid #ff5a4f;border-radius:3px;padding:1px 6px}
+.ctl{display:flex;flex-direction:column;min-width:0;min-height:0}.ctl .tbl{flex:1;min-height:0;height:auto}
+.swrow{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line);max-height:96px;overflow-y:auto}.swrow small{color:var(--dim)}
+.sw{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:4px;padding:3px 4px 3px 8px;font-size:11.5px;background:#121317}.sw.hl{border-color:var(--amber)}
+.sw b{font-family:var(--mono);font-weight:500;color:var(--mute)}.sw .nm{color:var(--fg);white-space:nowrap}.swl{display:inline-flex;align-items:center;gap:4px;color:var(--mute);white-space:nowrap}
+.onoff{display:inline-flex;border:1px solid var(--line2);border-radius:3px;overflow:hidden}.onoff button{background:transparent;border:0;color:var(--dim);font:600 10.5px var(--mono);padding:3px 7px;cursor:pointer}
+.onoff button.on{background:var(--ok);color:#0b0b0d}.onoff button.off{background:#2a2b30;color:var(--fg)}
+tr.xtra td{color:var(--dim)}
+.cellseg{margin-left:8px;display:inline-flex;gap:2px}.cellseg button{padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellseg button.on{border-color:var(--amber);color:var(--amber)}.cellfit{margin-left:6px;padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellwarn{white-space:nowrap;margin-left:8px;color:#ff5a4f;font-size:11.5px;border:1px solid #ff5a4f;border-radius:3px;padding:1px 6px}
 .seqb{border-left:1px solid var(--line);min-width:0}.seqb .bhead .btn{padding:3px 9px;font-size:11.5px}
 .seqst{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:6px 14px;border-bottom:1px solid var(--line);font-size:12px}
 .seqst b{font-family:var(--mono);color:var(--dim);font-weight:500}.seqst small{display:block;color:var(--dim);font-family:var(--mono);font-size:10.5px;margin-top:2px;line-height:1.5}
@@ -206,7 +213,7 @@ tr.hl td{background:rgba(255,174,66,.07)}
     <span class="sep"></span>
     <span class="lab" id="sizeLab">공장 크기</span>
     <input class="n" id="sW" type="number"><span class="x">×</span><input class="n" id="sD" type="number"><span class="x" id="sHx">×</span><input class="n" id="sH" type="number">
-    <span class="lab" id="sizeUnit">m</span><span class="seg2 cellseg" id="cellSeg" hidden title="고정: 정한 크기의 작업 칸 안에서 설계합니다 · 블록 따라: 놓인 블록에 맞춰 늘어납니다"><button data-c="fixed">고정</button><button data-c="auto">블록 따라</button></span><span class="cellwarn" id="cellWarn" hidden>작업 칸 밖</span>
+    <span class="lab" id="sizeUnit">m</span><span class="seg2 cellseg" id="cellSeg" hidden title="고정: 정한 크기의 작업 칸 안에서 설계합니다 · 블록 따라: 놓인 블록에 맞춰 늘어납니다"><button data-c="fixed">고정</button><button data-c="auto">블록 따라</button></span><button class="btn cellfit" id="cellFit" hidden title="지금 놓인 블록이 모두 들어가도록 작업 칸 크기를 맞춥니다">블록에 맞추기</button><span class="cellwarn" id="cellWarn" hidden title="블록이 작업 칸(점선 상자) 밖으로 나가 있습니다 · 블록에 맞추기를 누르거나 크기를 고치세요">작업 칸 밖</span>
     <span class="sep"></span>
     <span class="sp"></span>
     <span class="units" id="units"></span>
@@ -230,8 +237,9 @@ tr.hl td{background:rgba(255,174,66,.07)}
   </main>
   <div class="bottom" id="bottom" hidden>
     <div class="bgrip" id="bGrip" title="끌어서 아래 패널 높이를 바꿉니다 · 두 번 누르면 접기/펼치기"></div>
-    <div>
-      <div class="bhead"><h3>조작 패널</h3><small id="ioN"></small><small style="margin-left:8px">명령을 누르면 켜고 끕니다 · 상태는 설비가 알려 주는 값</small><button class="btn fold-btn" id="bFold">▾ 접기</button></div>
+    <div class="ctl">
+      <div class="bhead"><h3>Control Panel</h3><small id="ioN"></small><small style="margin-left:8px">객체마다 ON / OFF · 상태는 설비가 알려 주는 값</small><button class="btn" id="ioAll" style="margin-left:auto;padding:3px 9px;font-size:11.5px"></button><button class="btn" id="bFold">▾ 접기</button></div>
+      <div class="swrow" id="ioSw"></div>
       <div class="tbl"><table><thead><tr><th>블록</th><th>신호 이름</th><th>뜻</th><th>종류</th><th>값</th></tr></thead><tbody id="io"></tbody></table></div>
     </div>
     <div class="seqb">

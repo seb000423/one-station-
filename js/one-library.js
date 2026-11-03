@@ -354,7 +354,7 @@
       const at = (r, t) => [r * Math.cos(t), -r * Math.sin(t)];
       for (const rr of [R - W / 2 - 0.01, R + W / 2 + 0.01]) for (let i = 0; i < 16; i++) { const t0 = th(i / 16), t1 = th((i + 1) / 16), a = at(rr, t0), b = at(rr, t1), m = bx(g, 'frame', Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.004, 0.1, 0.05, (a[0] + b[0]) / 2, H - 0.1, (a[1] + b[1]) / 2); m.rotation.y = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); }
       const rl = grp(g, 'rollers'); const n = Math.max(6, Math.round(R * Math.PI / 2 / 0.1));
-      for (let i = 0; i <= n; i++) { const t = th((i + 0.5) / (n + 1)), c = at(R, t), k = grp(rl, 'r', c[0], H - 0.03, c[1]); k.rotation.y = t; cy(k, 'light', 0.024, W - 0.04, 0, 0, 0, 'x', 10); }
+      for (let i = 0; i <= n; i++) { const t = th((i + 0.5) / (n + 1)), c = at(R, t), k = grp(rl, 'r', c[0], H - 0.03, c[1]); k.rotation.y = t; cy(k, 'steel', 0.025, W - 0.04, 0, 0, 0, 'x', 12); bx(k, 'dark', W - 0.07, 0.006, 0.014, 0, 0.023, 0); }
       for (const u of [0.04, 0.5, 0.96]) for (const rr of [R - W / 2 + 0.05, R + W / 2 - 0.05]) { const c = at(rr, th(u)); bx(g, 'frame', 0.05, H - 0.08, 0.05, c[0], 0, c[1]); }
       return g; } });
   // a square module where a line turns 90°: the work rides in, stops on the centre, and leaves on the conveyor at its side
@@ -367,6 +367,22 @@
     io: P => [out(`${P}_UP`, 'bool', { kind: 'joint', target: `${P}_Z` }), inn(`${P}_IS_UP`, 'bool', { kind: 'sensor', target: `${P}_Z:max` }), inn(`${P}_IS_DOWN`, 'bool', { kind: 'sensor', target: `${P}_Z:min` })],
     build: () => { const g = new T.Group(); bx(g, 'frame', 0.08, 0.02, 0.12, 0, -0.12); bx(g, 'body', 0.06, 0.1, 0.08, 0, -0.1); const r = grp(g, 'rod'); bx(r, 'accent', 0.03, 0.05, 0.06, 0, -0.035); return g; },
     pose: (g, p, v) => { const r = g.getObjectByName('rod'); if (r) r.position.y = mm(v.Z || 0); }, stops: true });
+  // a lift with its own driven rollers (리프트 컨베이어): it takes the work from a conveyor, carries it up or down to
+  // the other level and rolls it off there. h = roller height at the lower stop, stroke = how far it rises.
+  bdef('lift-conveyor', { name: '리프트 컨베이어 (승강 롤러)', cat: 'transport', code: 'LCV', conveyor: true, lift: true, heightKey: 'h',
+    params: { length: 600, w: 500, h: 450, stroke: 450, speed: 300 }, fields: [num('length', '길이'), num('w', '폭', 'mm', 10), num('h', '아래 반송 높이', 'mm', 10), num('stroke', '승강 거리', 'mm', 10), num('speed', '롤러 속도', 'mm/s', 10)],
+    top: p => mm(p.h), joints: (P, p) => [J(`${P}_Z`, 'lin', [0, 0, 1], 'onoff', 0, p.stroke, 250, 1000), J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, p.length, p.speed, 1000)],
+    io: P => [out(`${P}_UP`, 'bool', { kind: 'joint', target: `${P}_Z` }), inn(`${P}_IS_UP`, 'bool', { kind: 'sensor', target: `${P}_Z:max` }), inn(`${P}_IS_DOWN`, 'bool', { kind: 'sensor', target: `${P}_Z:min` }),
+      out(`${P}_RUN`, 'bool', { kind: 'joint', target: `${P}_BELT` }), out(`${P}_DIR`), inn(`${P}_PRESENT`, 'bool', { kind: 'sensor', target: 'work' })],
+    build: p => { const g = new T.Group(), Lm = mm(p.length), W = mm(p.w), H = mm(p.h), top = H + mm(p.stroke) + 0.12;
+      bx(g, 'frame', Lm + 0.1, 0.04, W + 0.16); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 'frame', 0.06, top, 0.06, sx * (Lm / 2 - 0.03), 0, sz * (W / 2 + 0.05));
+      for (const sz of [-1, 1]) bx(g, 'frame', Lm, 0.05, 0.06, 0, top - 0.05, sz * (W / 2 + 0.05));
+      const c = grp(g, 'carriage'); cy(c, 'steel', 0.04, Math.max(0.05, H - 0.14), 0, 0.04); bx(c, 'body', Lm - 0.04, 0.05, W - 0.02, 0, H - 0.14);
+      for (const sz of [-1, 1]) bx(c, 'accent', Lm - 0.02, 0.09, 0.04, 0, H - 0.1, sz * (W / 2 + 0.005));
+      const belt = grp(c, 'belt', 0, H - 0.03, 0), k = Math.max(2, Math.floor(Lm / 0.1)); const rg = new T.CylinderGeometry(0.025, 0.025, W - 0.04, 12); rg.rotateX(Math.PI / 2);
+      const im = new T.InstancedMesh(rg, mat('steel'), k), m4 = new T.Matrix4(); for (let i = 0; i < k; i++) { m4.makeTranslation(-Lm / 2 + 0.05 + i * 0.1, 0, 0); im.setMatrixAt(i, m4); } im.castShadow = im.receiveShadow = true; belt.add(im);
+      const mk = new T.InstancedMesh(new T.BoxGeometry(0.014, 0.006, W - 0.07), mat('dark'), k); mk.name = 'rmarks'; mk.userData = { k, L: Lm }; belt.add(mk); conveyorPose(g, 0); g.userData.top = H; return g; },
+    pose: (g, p, v) => { const c = g.getObjectByName('carriage'); if (c) c.position.y = mm(v.Z || 0); conveyorPose(g, v.BELT); } });
   bdef('lifter', { name: '리프터 (테이블)', cat: 'transport', code: 'LFT', params: { w: 600, d: 500, stroke: 200 }, fields: [num('w', '가로'), num('d', '세로'), num('stroke', '스트로크', 'mm', 5)],
     top: p => 0.45, joints: (P, p) => [J(`${P}_Z`, 'lin', [0, 0, 1], 'onoff', 0, p.stroke, 120, 1000)],
     io: P => [out(`${P}_UP`, 'bool', { kind: 'joint', target: `${P}_Z` }), inn(`${P}_IS_UP`, 'bool', { kind: 'sensor', target: `${P}_Z:max` }), inn(`${P}_IS_DOWN`, 'bool', { kind: 'sensor', target: `${P}_Z:min` })],
