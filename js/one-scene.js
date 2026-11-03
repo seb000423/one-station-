@@ -88,7 +88,7 @@
       const last = owner(P.outlet.key), seen = new Set();
       for (let k = 0; cur && k < 30; k++) { seen.add(cur); const e = onto(pts[pts.length - 1], cur); if (e.d > 1) pts.push(e.q);
         if (cur === last) break; pts.push(cur.o);
-        let nx = null; for (const a of A) { if (seen.has(a)) continue; const h = onto(cur.o, a); if (h.t > -0.05 && h.t < 1.0 && h.d < a.w / 2 + 300) { nx = a; break; } } cur = nx; }
+        let nx = null; for (const a of A) { if (seen.has(a)) continue; const h = onto(cur.o, a); if (h.t > -0.25 && h.t < 1.0 && h.d < a.w / 2 + 300) { nx = a; break; } } cur = nx; }
       pts.push(P.outlet.pos); return pts.filter((p, i) => !i || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1], p[2] - pts[i - 1][2]) > 1); }
     const localDoc = l => { const m = l && opt.lib()[l.id]; return m && (m.versions[l.v] || m.versions[Object.keys(m.versions).pop()]); };
     /** The machine route in factory mm (inlet → outlet), or null. */

@@ -344,6 +344,11 @@
     top: p => mm(p.h), conveyor: true, heightKey: 'h', pose: (g, p, v) => conveyorPose(g, v.BELT),
     joints: (P, p) => [J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, p.length, p.speed, 1000)], io: convIo,
     build: p => conveyorShape(v, mm(p.length), mm(p.w), mm(p.h)) });
+  // a square module where a line turns 90°: the work rides in, stops on the centre, and leaves on the conveyor at its side
+  bdef('transfer-corner', { name: '직각 전환 유닛 (턴테이블)', cat: 'transport', code: 'CT', corner: true, heightKey: 'h', params: { w: 500, h: 900 }, fields: [num('w', '크기', 'mm', 10), num('h', '반송 높이', 'mm', 10)],
+    top: p => mm(p.h), io: P => [out(`${P}_RUN`), inn(`${P}_FAULT`)],
+    build: p => { const g = new T.Group(), W = mm(p.w), H = mm(p.h); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 'frame', 0.05, H - 0.08, 0.05, sx * (W / 2 - 0.05), 0, sz * (W / 2 - 0.05));
+      bx(g, 'frame', W, 0.08, W, 0, H - 0.12); const t = grp(g, 'table', 0, H - 0.04); cy(t, 'steel', W * 0.46, 0.03, 0, 0, 0, 'y', 32); for (let i = -2; i <= 2; i++) bx(t, 'light', W * 0.8, 0.012, 0.03, 0, 0.03, i * W * 0.16); return g; } });
   bdef('stopper', { name: '스토퍼', cat: 'transport', code: 'STP', onTop: true, params: { stroke: 30 }, fields: [num('stroke', '스트로크', 'mm', 5)],
     joints: (P, p) => [J(`${P}_Z`, 'lin', [0, 0, 1], 'onoff', 0, p.stroke, 150, 2000)],
     io: P => [out(`${P}_UP`, 'bool', { kind: 'joint', target: `${P}_Z` }), inn(`${P}_IS_UP`, 'bool', { kind: 'sensor', target: `${P}_Z:max` }), inn(`${P}_IS_DOWN`, 'bool', { kind: 'sensor', target: `${P}_Z:min` })],

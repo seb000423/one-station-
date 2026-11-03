@@ -27,7 +27,7 @@
   /* ------------------------------------------------------------------ documents and editors */
   const newFactory = () => S.Factory.parse({ schema: S.FACTORY_SCHEMA, meta: { id: S.uuidv7(), name: '새 공장', levels: [{ id: 'L1', name: '1F', height: 7000 }] },
     building: { slabs: [{ id: S.uuidv7(), polygon: [[0, 0], [30000, 0], [30000, 20000], [0, 20000]] }] } });
-  const newMachine = () => S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id: S.uuidv7(), name: '새 설비', bbox: [4000, 1200, 1800], fidelity: 'L2' } });
+  const newMachine = () => S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id: S.uuidv7(), name: '새 설비', bbox: [4000, 2400, 2000], cellFixed: true, fidelity: 'L2' } });
   const load = (scope, make) => { const d = LS.get(KEY[scope], null); try { return d ? (scope === 'factory' ? S.Factory : S.Machine).parse(d) : make(); } catch { return make(); } };
   const ED = { factory: new C.Editor('factory', load('factory', newFactory)), machine: new C.Editor('machine', load('machine', newMachine)) };
   let tab = LS.get(KEY.tab, 'factory') === 'machine' ? 'machine' : 'factory';
@@ -116,13 +116,25 @@
   function contentBox() { envBox.makeEmpty(); for (const v of objs.values()) envBox.expandByObject(v.obj); return envBox; }
   function contentSize() { const b = contentBox(); if (b.isEmpty()) return null; const a = fromS(b.min), c = fromS(b.max);
     const up = v => Math.max(50, Math.ceil(Math.abs(v) / 50) * 50); return [up(c[0] - a[0]), up(a[1] - c[1]), up(c[2] - a[2])]; }
+  // the work cell (작업 칸): fixed = the size the user set, centred on the machine origin (floor centre); auto = around the blocks
+  const cellMat = new T.LineDashedMaterial({ color: 0xffae42, dashSize: 0.1, gapSize: 0.06, transparent: true, opacity: 0.9 }), cellBad = new T.LineDashedMaterial({ color: 0xff5a4f, dashSize: 0.1, gapSize: 0.06 });
+  const cellPlate = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.05, depthWrite: false })); cellPlate.position.y = 0.002; cellPlate.raycast = () => {}; ov.add(cellPlate);
+  const cellOf = () => { const m = ED.machine.doc.meta; return tab === 'machine' && m.cellFixed ? m.bbox : null; };
+  function outOfCell() { const c = cellOf(); if (!c) return false; const b = contentBox(); if (b.isEmpty()) return false; const [W, D, H] = c.map(v => v / 1000), e = 0.002;
+    return b.min.x < -W / 2 - e || b.max.x > W / 2 + e || b.min.z < -D / 2 - e || b.max.z > D / 2 + e || b.max.y > H + e; }
   function updateEnvelope() {
-    if (!envelope) return; const b = contentBox(); envelope.visible = !b.isEmpty(); if (b.isEmpty()) return;
+    const cell = cellOf(); cellPlate.visible = !!cell;
+    if (!envelope) return;
+    if (cell) { const [W, D, H] = cell.map(v => v / 1000), key = `cell${W},${D},${H}`; envelope.visible = true; cellPlate.scale.set(W, 1, D); cellPlate.position.x = cellPlate.position.z = 0;
+      if (envelope.userData.key !== key) { envelope.geometry.dispose(); envelope.geometry = new T.EdgesGeometry(new T.BoxGeometry(W, H, D)); envelope.computeLineDistances(); envelope.userData.key = key; }
+      envelope.position.set(0, H / 2, 0); const bad = outOfCell(); envelope.material = bad ? cellBad : cellMat; $('cellWarn').hidden = !bad; return; }
+    envelope.material = dashMat; $('cellWarn').hidden = true;
+    const b = contentBox(); envelope.visible = !b.isEmpty(); if (b.isEmpty()) return;
     b.min.y = 0; const sz = b.getSize(new T.Vector3()), c = b.getCenter(new T.Vector3()), pad = 0.02;
     const key = [sz.x, sz.y, sz.z].map(v => v.toFixed(3)).join();
     if (envelope.userData.key !== key) { envelope.geometry.dispose(); envelope.geometry = new T.EdgesGeometry(new T.BoxGeometry(sz.x + pad, Math.max(0.05, sz.y), sz.z + pad)); envelope.computeLineDistances(); envelope.userData.key = key; }
     envelope.position.copy(c);
-    const sz2 = contentSize(); if (sz2 && tab === 'machine') { [$('sW').value, $('sD').value, $('sH').value] = sz2; }
+    const sz2 = contentSize(); if (sz2 && tab === 'machine' && !cellOf()) { [$('sW').value, $('sD').value, $('sH').value] = sz2; }
   }
 
   /* selection marker: an amber footprint on the floor (blooms), no outlines */
@@ -162,7 +174,7 @@
     } else {
       $('palTitle').innerHTML = '블록 팔레트';
       for (const c of L.MACHINE_CATS) { sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
-        if (c.id === 'transport') sec('shapes', '컨베이어 형태 (ㄱ·ㄴ·U·2층)', Object.entries(SHAPES).map(([id, x]) => ({ key: 's:' + id, name: x.name, code: x.code, why: x.why }))); }
+        if (c.id === 'transport') sec('shapes', '컨베이어 레이아웃 (전환·회송·2단)', Object.entries(SHAPES).map(([id, x]) => ({ key: 's:' + id, name: x.name, code: x.code, why: x.why }))); }
     }
     box.innerHTML = html;
   }
@@ -247,17 +259,21 @@
      next (90° side transfers), plus a two-level line whose lifters carry the work between the levels.
      Piece positions are mm about the layout origin, yaw in degrees; X = 투입 → 배출. */
   const CV = 'roller-conveyor';
+  const CT = 'transfer-corner';
   const SHAPES = {
-    'l-right': { name: 'ㄱ자 (오른쪽으로 꺾임)', code: 'CV×2', why: '직선 3 m 끝에서 오른쪽으로 90° 꺾어 3 m', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: -1750, yaw: -90 }] },
-    'l-left': { name: 'ㄴ자 (왼쪽으로 꺾임)', code: 'CV×2', why: '직선 3 m 끝에서 왼쪽으로 90° 꺾어 3 m', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: 1750, yaw: 90 }] },
-    'u-turn': { name: 'U자 (되돌아옴)', code: 'CV×3', why: '나가서 두 번 꺾어 같은 쪽으로 되돌아오는 라인', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: 1750, yaw: 90 }, { t: CV, x: -500, y: 3000, yaw: 180 }] },
-    'two-level': { name: '2층 (위 투입 · 아래 회송)', code: 'CV×2 LFT×2', why: '위 단은 작업, 아래 단은 빈 팔레트 회송. 양 끝 리프터가 단 사이를 오르내립니다',
+    'l-right': { name: '직각 전환 라인 · 우측 90°', code: 'CV×2 CT', why: '직선 3 m → 직각 전환 유닛 → 오른쪽으로 3 m. 이음매가 맞닿아 겹치지 않습니다',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: -1750, yaw: -90 }] },
+    'l-left': { name: '직각 전환 라인 · 좌측 90°', code: 'CV×2 CT', why: '직선 3 m → 직각 전환 유닛 → 왼쪽으로 3 m',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: 1750, yaw: 90 }] },
+    'u-turn': { name: '리턴 라인 · 180° 회송', code: 'CV×3 CT×2', why: '나간 라인이 두 번의 직각 전환으로 같은 쪽으로 되돌아옵니다',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: 1750, yaw: 90 }, { t: CT, x: 1750, y: 3500, yaw: 90 }, { t: CV, x: 0, y: 3500, yaw: 180 }] },
+    'two-level': { name: '상하 2단 순환 라인', code: 'CV×2 LFT×2', why: '상단은 작업, 하단은 빈 팔레트 회송. 양 끝 리프터가 단 사이를 오르내립니다',
       pieces: [{ t: CV, x: 0, y: 0, yaw: 0, p: { h: 900 } }, { t: CV, x: 0, y: 0, yaw: 180, p: { h: 450, w: 300 } }, { t: 'lifter', x: 1800, y: 0, yaw: 0, p: { stroke: 450 } }, { t: 'lifter', x: -1800, y: 0, yaw: 0, p: { stroke: 450 } }] },
   };
   const rotXY = (x, y, deg) => { const r = deg * Math.PI / 180; return [x * Math.cos(r) - y * Math.sin(r), x * Math.sin(r) + y * Math.cos(r)]; };
   function addShape(id, at, yaw = 0) { const S0 = SHAPES[id], made = [];
     for (const pc of S0.pieces) { const [dx, dy] = rotXY(pc.x, pc.y, yaw), nid = addBlock(pc.t, [at[0] + dx, at[1] + dy], null, ((pc.yaw + yaw) % 360 + 360) % 360, pc.p); if (nid) made.push(nid); }
-    if (made.length) { selectMany(made); toast(`${S0.name}: 컨베이어가 이어진 채로 놓였습니다 · 한 덩어리로 옮기려면 그대로 끄세요`); } }
+    if (made.length) { selectMany(made); toast(`${S0.name}: 이어진 채로 놓였습니다 · 한 덩어리로 옮기려면 그대로 끄세요`); } }
   function previewOf(k, id) {
     let o = null;
     try { if (k === 's') { o = new T.Group(); for (const pc of SHAPES[id].pieces) { const b = L.buildBlock(pc.t, Object.assign({}, L.BLOCKS[pc.t].params, pc.p)); placeObj(b, [pc.x, pc.y, 0], pc.yaw); o.add(b); } }
@@ -283,6 +299,7 @@
     if (!ray.ray.intersectPlane(plane, hit)) return; const st = tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50);
     let p = fromS(hit); p = [S.snap(p[0], st), S.snap(p[1], st)];
     if (tab === 'factory') { const r = slabRect(ed().doc); p = [Math.min(r.x1, Math.max(r.x0, p[0])), Math.min(r.y1, Math.max(r.y0, p[1]))]; }
+    else { const c = cellOf(); if (c) p = [Math.min(c[0] / 2, Math.max(-c[0] / 2, p[0])), Math.min(c[1] / 2, Math.max(-c[1] / 2, p[1]))]; }
     placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
   function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
     if (!keep) endPlace();
@@ -363,7 +380,7 @@
         html += `</div>${teleop(false)}`;
       } else {
         const ct = doc.card;
-        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽 (자동)</span><span class="v">${(contentSize() || doc.meta.bbox).join(' × ')} mm</span>
+        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">${doc.meta.cellFixed ? '작업 칸' : '외곽 (블록 따라)'}</span><span class="v">${(doc.meta.cellFixed ? doc.meta.bbox : contentSize() || doc.meta.bbox).join(' × ')} mm</span>
           ${field(num('cycle_time', '사이클', 's', 0.5), ct.cycle_time ?? '', 'card.cycle_time')}${field(num('ok_rate', '양품률', '0~1', 0.01), ct.ok_rate ?? '', 'card.ok_rate')}${field(num('operators', '작업자', '명', 1), ct.operators, 'card.operators')}
           <span class="k">입구</span>${portSelect('inlet')}<span class="k">출구</span>${portSelect('outlet')}
           <span class="k">카드</span><span class="v">사이클 ${ct.cycle_time ?? '–'} s · 양품률 ${ct.ok_rate != null ? (ct.ok_rate * 100).toFixed(1) + '%' : '–'}</span></div></div>`;
@@ -438,14 +455,14 @@
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
       if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
   // conveyors that meet end to end or at a side transfer, at the same height: they rise and fall together
-  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && nodeDef(n)?.conveyor), P = n => Object.assign({}, nodeDef(n).params, n.params);
-    const ends = n => ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos), H = n => +P(n).h;
+  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner)), P = n => { const p = Object.assign({}, nodeDef(n).params, n.params); if (nodeDef(n).corner) p.length = p.w; return p; };
+    const ends = n => { if (!nodeDef(n).corner) return ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos); const q = n.transform.position, h = +P(n).w / 2; return [[q[0] + h, q[1]], [q[0] - h, q[1]], [q[0], q[1] + h], [q[0], q[1] - h]]; }, H = n => +P(n).h;
     const over = (p, b) => { const r = b.transform.rotation[2] * Math.PI / 180, dx = p[0] - b.transform.position[0], dy = p[1] - b.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r);
       return Math.abs(a) <= +P(b).length / 2 + 80 && Math.abs(l) <= +P(b).w / 2 + 80; };
     const meets = (a, b) => Math.abs(H(a) - H(b)) < 5 && (ends(a).some(p => over(p, b)) || ends(b).some(p => over(p, a)));
     const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
     return out; }
-  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => nodeDef(doc.nodes.find(n => n.id === id))?.conveyor))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
+  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => { const d = nodeDef(doc.nodes.find(n => n.id === id)); return d?.conveyor || d?.corner; }))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
     if (ids.length > picked.length) msg = `이어진 컨베이어 ${ids.length - picked.length}개도 같은 높이로 같이 움직였습니다`;
     ed().batch('height', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!n || (n.parent && set.has(n.parent))) continue;
       if (d.heightKey && !n.parent) { const cur = +(n.params[d.heightKey] ?? d.params[d.heightKey]); setParamKeepKids(id, d.heightKey, Math.max(100, cur + dz)); }
@@ -532,7 +549,7 @@
   function genSequence(doc) {
     const io = new Map(doc.io.map(t => [t.tag, t])), out = t => io.get(t)?.dir === 'out';
     const B = doc.nodes.map(n => ({ n, P: nodeCode(n), d: nodeDef(n) })).filter(x => x.d);
-    const convs = B.filter(x => x.d.conveyor && out(`${x.P}_RUN`)), stops = B.filter(x => x.d.stops && out(`${x.P}_UP`)), sens = B.filter(x => x.d.sensor && io.has(`${x.P}_ON`));
+    const convs = B.filter(x => (x.d.conveyor || x.d.corner) && out(`${x.P}_RUN`)), stops = B.filter(x => x.d.stops && out(`${x.P}_UP`)), sens = B.filter(x => x.d.sensor && io.has(`${x.P}_ON`));
     const procs = B.filter(x => !x.d.conveyor).map(x => ({ ...x, go: out(`${x.P}_START`) ? `${x.P}_START` : out(`${x.P}_TRIG`) ? `${x.P}_TRIG` : null, done: io.has(`${x.P}_DONE`) ? `${x.P}_DONE` : io.has(`${x.P}_OK`) ? `${x.P}_OK` : null })).filter(x => x.go && x.done);
     const near = (a, b) => Math.hypot(a.n.transform.position[0] - b.n.transform.position[0], a.n.transform.position[1] - b.n.transform.position[1]);
     const sensor = stops.length && sens.length ? sens.slice().sort((a, b) => near(a, stops[0]) - near(b, stops[0]))[0] : sens[0];
@@ -612,7 +629,15 @@
   $('bAuto').onclick = () => setAuto(!AUTO.on);
   $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 지우고 블록에서 다시 만들까요? (실행 취소로 되돌릴 수 있습니다)')) return; AUTO.open = -1; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
   $('bWorkBack').onclick = () => { const doc = ED.machine.doc; for (const n of doc.nodes) if (nodeDef(n)?.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]] }; log('워크를 처음 위치로 되돌렸습니다'); };
-  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
+  // the panel under the view: drag its top edge to make it taller or shorter; the 3D view takes the rest
+  (() => { const b = $('bottom'), g = $('bGrip'); let h0 = LS.get('one.build.bottomH', 260), drag = null;
+    const apply = h => { h0 = Math.max(120, Math.min(innerHeight * 0.7, h)); b.style.height = h0 + 'px'; stage.resize(); };
+    b.style.height = h0 + 'px';
+    g.addEventListener('pointerdown', e => { if (b.classList.contains('fold')) { $('bFold').click(); return; } drag = { y: e.clientY, h: b.getBoundingClientRect().height }; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointermove', e => { if (drag) apply(drag.h - (e.clientY - drag.y)); });
+    g.addEventListener('pointerup', () => { if (drag) { drag = null; LS.set('one.build.bottomH', h0); } });
+    g.addEventListener('dblclick', () => $('bFold').click()); })();
+  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); b.style.height = b.classList.contains('fold') ? '' : LS.get('one.build.bottomH', 260) + 'px'; $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
 
   function stepRun(dt) {
     const doc = ED.machine.doc, tags = RUN.tags, byNode = new Map(doc.nodes.map(n => [n.id, n]));
@@ -624,19 +649,24 @@
       const step = j.vmax * dt; v = Math.abs(target - v) <= step ? target : v + Math.sign(target - v) * step; RUN.v[j.id] = v; RUN.v[j.id + ':target'] = target;
     }
     // works ride on running conveyors and stop at raised stoppers
-    const convs = doc.nodes.filter(n => nodeDef(n)?.conveyor), stops = doc.nodes.filter(n => nodeDef(n)?.stops);
+    const convs = doc.nodes.filter(n => nodeDef(n)?.conveyor), stops = doc.nodes.filter(n => nodeDef(n)?.stops), corners = doc.nodes.filter(n => nodeDef(n)?.corner);
+    const cframe = c => { const q = c.transform.position, r = c.transform.rotation[2] * Math.PI / 180; return { q, a: [Math.cos(r), Math.sin(r)], nrm: [-Math.sin(r), Math.cos(r)], wh: (c.params.w || 500) / 2, top: q[2] + (c.params.h || 900) }; };
+    const inCorner = (p, top) => corners.find(c => { const f = cframe(c); if (Math.abs(f.top - top) > 60) return false; const dx = p[0] - f.q[0], dy = p[1] - f.q[1]; return Math.abs(dx * f.a[0] + dy * f.a[1]) <= f.wh + 1 && Math.abs(dx * f.nrm[0] + dy * f.nrm[1]) <= f.wh + 1; });
     // works ride conveyors along each conveyor's own direction; at an end they pass onto a conveyor that continues
     // (straight or at 90°), otherwise they stop at the end; a raised stopper on the way holds them
     const frame = c => { const q = c.transform.position, r = c.transform.rotation[2] * Math.PI / 180; return { q, a: [Math.cos(r), Math.sin(r)], nrm: [-Math.sin(r), Math.cos(r)], Lh: (c.params.length || 3000) / 2, wh: (c.params.w || 500) / 2, top: q[2] + (c.params.h || 900) }; };
     const loc = (f, p) => [(p[0] - f.q[0]) * f.a[0] + (p[1] - f.q[1]) * f.a[1], (p[0] - f.q[0]) * f.nrm[0] + (p[1] - f.q[1]) * f.nrm[1]];
     for (const n of doc.nodes) { const w = RUN.works[n.id]; if (!w) continue; const z = n.transform.position[2], hw = (n.params.w || 300) / 2; let best = null;
+      // on a turn module: ride to its centre first; from the centre the conveyor at its side takes the work
+      const cn = inCorner(w.p, z); if (!cn) delete w.centred; else if (w.centred !== cn.id) { const q = cn.transform.position, dx = q[0] - w.p[0], dy = q[1] - w.p[1], dd = Math.hypot(dx, dy);
+        if (dd > 2) { if (!tags[`${nodeCode(cn)}_RUN`]) continue; const st = Math.min(dd, (cn.params.speed || 300) * dt); w.p = [w.p[0] + dx / dd * st, w.p[1] + dy / dd * st]; continue; } w.centred = cn.id; }
       for (const c of convs) { const f = frame(c); if (Math.abs(z - f.top) > 60) continue; const [lx, ly] = loc(f, w.p); if (Math.abs(ly) > f.wh || lx < -f.Lh - f.wh - 1 || lx > f.Lh + 1) continue;
         const P = nodeCode(c); if (!tags[`${P}_RUN`]) continue; const dir = tags[`${P}_DIR`] ? -1 : 1, sp = (tags[`${P}_SPEED`] > 0 ? tags[`${P}_SPEED`] : c.params.speed || 300) * dir * dt;
         let nx = lx + sp;
         for (const s0 of stops) { if (!(RUN.v[`${nodeCode(s0)}_Z`] > 5)) continue; const [sx, sy] = loc(f, s0.transform.position); if (Math.abs(sy) > f.wh) continue;
           if (sp > 0 && lx + hw <= sx + 1 && nx + hw > sx) nx = sx - hw; if (sp < 0 && lx - hw >= sx - 1 && nx - hw < sx) nx = sx + hw; }
         const endP = [f.q[0] + f.a[0] * (Math.sign(sp) * f.Lh), f.q[1] + f.a[1] * (Math.sign(sp) * f.Lh)];
-        const handover = convs.some(o => { if (o === c) return false; const g = frame(o); if (Math.abs(g.top - f.top) > 5) return false; const [ex, ey] = loc(g, endP); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
+        const handover = !!inCorner(endP, f.top) || convs.some(o => { if (o === c) return false; const g = frame(o); if (Math.abs(g.top - f.top) > 5) return false; const [ex, ey] = loc(g, endP); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
         if (!handover) nx = Math.max(-f.Lh + hw, Math.min(f.Lh - hw, nx));
         const adv = Math.abs(nx - lx); if (!best || adv > best.adv) best = { adv, p: [w.p[0] + f.a[0] * (nx - lx), w.p[1] + f.a[1] * (nx - lx)] }; }
       if (best) w.p = best.p; }
@@ -768,7 +798,7 @@
   function fitAll() {
     const doc = ed().doc;
     if (tab === 'factory') { const r = slabRect(doc), a = toS([r.x0, r.y0, 0]), b = toS([r.x1, r.y1, 4000]); stage.fit(new T.Box3().setFromPoints([a, b]), 1.05); }
-    else { const [W, D, H] = doc.meta.bbox.map(v => v / 1000), box = new T.Box3(new T.Vector3(-W / 2, 0, -D / 2), new T.Vector3(W / 2, H, D / 2)); for (const v of objs.values()) box.expandByObject(v.obj); stage.fit(box, 1.25); }
+    else { const [W, D, H] = doc.meta.bbox.map(v => v / 1000), box = new T.Box3(new T.Vector3(-W / 2, 0, -D / 2), new T.Vector3(W / 2, H, D / 2)); if (!doc.meta.cellFixed) for (const v of objs.values()) box.expandByObject(v.obj); stage.fit(box, 1.2); }
   }
   $('views').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; if (b.dataset.v === 'fit') fitAll(); else if (b.dataset.v === 'xray') setXray(!xray); else focusSel(); });
   let xray = false;
@@ -795,16 +825,20 @@
   });
   $('bUndo').onclick = () => mode === 'edit' && ed().undo();
   $('bRedo').onclick = () => mode === 'edit' && ed().redo();
+  $('cellSeg').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b || tab !== 'machine') return; const fx = b.dataset.c === 'fixed', doc = ED.machine.doc; if (fx === !!doc.meta.cellFixed) return;
+    if (fx) { const c = contentSize(), up = v => Math.ceil(v / 100) * 100; exec('set_meta', { cellFixed: true, bbox: c ? [up(c[0] + 200), up(c[1] + 200), up(c[2] + 100)] : doc.meta.bbox }); toast('작업 칸을 고정했습니다 · 크기를 바꾸면 그 안에 놓입니다'); }
+    else exec('set_meta', { cellFixed: false }); fitAll(); });
   for (const id of ['sW', 'sD', 'sH']) $(id).addEventListener('change', () => {
     const doc = ed().doc, w = +$('sW').value, d = +$('sD').value, h = +$('sH').value;
     if (tab === 'factory') { const r = slabRect(doc); if (w > 0 && d > 0) exec('set_slab', { polygon: [[r.x0, r.y0], [r.x0 + w * 1000, r.y0], [r.x0 + w * 1000, r.y0 + d * 1000], [r.x0, r.y0 + d * 1000]] }); }
+    else if (doc.meta.cellFixed && w > 0 && d > 0 && h > 0) { exec('set_meta', { bbox: [w, d, h].map(v => Math.round(v / 50) * 50) }); if (outOfCell()) toast('블록이 작업 칸 밖으로 나갑니다 · 빨간 선을 확인하세요', true); }
 
   });
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.t !== tab) switchTab(b.dataset.t); });
   function save() {
     if (tab === 'machine') {
       const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
-      const sz = contentSize(); if (sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
+      const sz = contentSize(); if (!doc.meta.cellFixed && sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
       const snap = JSON.parse(JSON.stringify(cur)); snap.meta.version = v; snap.card.footprint = [cur.meta.bbox[0], cur.meta.bbox[1]];
       m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all);
       dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · Factory Builder의 '내 설비'에 나옵니다`); log(`저장 v${v}`);
@@ -849,8 +883,8 @@
   }
   function drawBar() {
     const doc = ed().doc;
-    if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
-    else { $('sizeLab').textContent = '설비 크기 (자동)'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = true; [$('sW').value, $('sD').value, $('sH').value] = contentSize() || doc.meta.bbox; $('sH').hidden = $('sHx').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
+    if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('cellSeg').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
+    else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = fx ? '작업 칸' : '작업 칸 (블록 따라)'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
@@ -925,7 +959,7 @@
   // 동작 시험: what each moving block is doing right now, always labelled so nothing hides behind a cabinet
   function runState(n) { const d = nodeDef(n); if (!d) return null; const P = nodeCode(n), t = RUN.tags, has = k => k in t;
     if (d.work) return { txt: '워크', on: true };
-    if (d.conveyor) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
+    if (d.conveyor || d.corner) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
     if (d.stops) { const up = has(`${P}_IS_UP`) ? t[`${P}_IS_UP`] : t[`${P}_UP`]; return { txt: up ? '올림 · 워크 멈춤' : '내림', on: !!up }; }
     if (d.sensor) return { txt: t[`${P}_ON`] ? '워크 감지' : '감지 없음', on: !!t[`${P}_ON`] };
     const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) return { txt: pr?.busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: !!pr?.busy };

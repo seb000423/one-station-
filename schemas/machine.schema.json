@@ -36,6 +36,11 @@
           "maxItems": 3,
           "description": "W × D × H mm"
         },
+        "cellFixed": {
+          "default": false,
+          "description": "true: bbox is a fixed work cell centred on the origin (blocks stay inside); false: bbox follows the blocks",
+          "type": "boolean"
+        },
         "fidelity": {
           "default": "L1",
           "type": "string",

@@ -142,6 +142,12 @@ describe('machine edit API', () => {
     e.exec('set_parent', { id: rb, parent: null });
     expect(e.doc.nodes.find(n => n.id === rb)!.parent).toBeNull();
   });
+  it('set_meta fixes the work cell', () => {
+    const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 't', bbox: [1000, 1000, 1000] } } as never, { newId: ids() });
+    expect(e.doc.meta.cellFixed).toBe(false);
+    e.exec('set_meta', { bbox: [4000, 1200, 1800], cellFixed: true });
+    expect(e.doc.meta).toMatchObject({ bbox: [4000, 1200, 1800], cellFixed: true });
+  });
   it('set_sequence stores the steps and checks tags, outputs and next ids', () => {
     const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 't', bbox: [1000, 1000, 1000] } } as never, { newId: ids() });
     e.exec('bind_tag', { tag: 'CV1_RUN', dir: 'out', type: 'bool' });

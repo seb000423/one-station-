@@ -44,7 +44,7 @@
 | `move` | 노드 이동·회전 (position mm, 5 mm 스냅 / rotation deg) | `id`, `position?`, `rotation?` |
 | `set_parent` | 노드를 다른 노드 위에 붙이거나 (parent id) 떼어 바닥으로 (null). 자기 자신·자손 아래로는 붙일 수 없음 | `id`, `parent` |
 | `rename` | 노드 이름 변경 | `id`, `name` |
-| `set_meta` | 설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경 | `name?`, `bbox?`, `fidelity?` |
+| `set_meta` | 설비 이름 · 외곽 크기(W × D × H mm) · 작업 칸 고정 여부 · fidelity 변경 | `name?`, `bbox?`, `cellFixed?`, `fidelity?` |
 | `set_card` | 설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓) | `cycle_time?`, `ok_rate?`, `operators?`, `inlet?`, `outlet?` |
 | `set_sequence` | 동작 순서 전체 바꾸기: 단계마다 조건을 기다린 뒤 출력을 켜고/끄고, 지연 후 다음 단계 (마지막 단계 다음은 next, 없으면 첫 단계) | `steps` |
 | `set_param` | 블록 파라미터 변경 | `id`, `key`, `value` |

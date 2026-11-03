@@ -65,6 +65,7 @@ export const Machine = z.object({
     id: Id,
     name: z.string(),
     bbox: Vec3.describe('W × D × H mm'),
+    cellFixed: z.boolean().default(false).describe('true: bbox is a fixed work cell centred on the origin (blocks stay inside); false: bbox follows the blocks'),
     fidelity: Fidelity.default('L1'),
     thumbnail: z.string().optional(),
     version: z.number().int().positive().default(1),

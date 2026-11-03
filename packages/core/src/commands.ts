@@ -333,12 +333,13 @@ export const machineCommands = {
     run: (m: Machine, a) => { needNode(m, a.id).name = a.name; },
   }),
   set_meta: def({
-    scope: 'machine', description: '설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경',
-    args: z.object({ name: z.string().min(1).optional(), bbox: Vec3.optional(), fidelity: z.enum(['L1', 'L2', 'L3']).optional() }),
+    scope: 'machine', description: '설비 이름 · 외곽 크기(W × D × H mm) · 작업 칸 고정 여부 · fidelity 변경',
+    args: z.object({ name: z.string().min(1).optional(), bbox: Vec3.optional(), cellFixed: z.boolean().optional(), fidelity: z.enum(['L1', 'L2', 'L3']).optional() }),
     run: (m: Machine, a) => {
       if (a.bbox && a.bbox.some(v => v <= 0)) throw new CommandError('bbox values must be > 0');
       if (a.name !== undefined) m.meta.name = a.name;
       if (a.bbox) m.meta.bbox = a.bbox;
+      if (a.cellFixed !== undefined) m.meta.cellFixed = a.cellFixed;
       if (a.fidelity) m.meta.fidelity = a.fidelity;
     },
   }),
