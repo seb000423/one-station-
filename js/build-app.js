@@ -1054,16 +1054,16 @@
   }
   // the default factory is the partner plant line (js/plant-machines.js), shown once to every browser; a factory made
   // before it is kept under one.build.factory.before-plant
-  if (window.OnePlant && !LS.get(KEY.factory + '.plant2', false)) {
-    // .plant2: the example with its cells split into objects; a factory that is still the earlier example is simply replaced
-    const ex = ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(ED.factory.doc.meta.name); LS.set(KEY.factory + '.plant2', true);
+  if (window.OnePlant && !LS.get(KEY.factory + '.plant4', false)) {
+    // .plant4: the example with its cells split into objects, in process order, equipment only; a factory that is still the earlier example is simply replaced
+    const ex = ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(ED.factory.doc.meta.name); LS.set(KEY.factory + '.plant4', true);
     if (ex) LS.set(KEY.factory + '.plant', false);
   }
   if (window.OnePlant && !LS.get(KEY.factory + '.plant', false)) {
     if (ED.factory.doc.building.walls.length || ED.factory.doc.machines.length) LS.set(KEY.factory + '.before-plant', ED.factory.doc);
     LS.set(KEY.factory + '.plant', true); LS.set(KEY.factory + '.seeded', true); openDoc('factory', window.OnePlant.defaultFactory());
   }
-  L.onModel(() => { updateSelMark(); });
+  L.onModel(g => { updateSelMark(); if (xray) stage.addTwin(g); });
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
