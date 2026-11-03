@@ -217,11 +217,21 @@
     for (const s of [-1, 1]) bx(g, 'frame', L, 0.1, 0.05, 0, H - 0.1, s * (W / 2 + 0.01));
     const top = grp(g, 'belt', 0, H - 0.03, 0);
     if (variant === 'roller') { const k = Math.floor(L / 0.1); const rg = new T.CylinderGeometry(0.025, 0.025, W - 0.04, 12); rg.rotateX(Math.PI / 2);
-      const im = new T.InstancedMesh(rg, mat('steel'), k); const m4 = new T.Matrix4(); for (let i = 0; i < k; i++) { m4.makeTranslation(-L / 2 + 0.05 + i * 0.1, 0, 0); im.setMatrixAt(i, m4); } im.castShadow = im.receiveShadow = true; top.add(im); }
+      const im = new T.InstancedMesh(rg, mat('steel'), k); const m4 = new T.Matrix4(); for (let i = 0; i < k; i++) { m4.makeTranslation(-L / 2 + 0.05 + i * 0.1, 0, 0); im.setMatrixAt(i, m4); } im.castShadow = im.receiveShadow = true; top.add(im);
+      // one dark mark per roller, so you can see the rollers turn when the conveyor runs
+      const mk = new T.InstancedMesh(new T.BoxGeometry(0.014, 0.006, W - 0.07), mat('dark'), k); mk.name = 'rmarks'; mk.userData = { k, L }; top.add(mk); conveyorPose(g, 0); }
     else if (variant === 'chain') { for (const s of [-1, 1]) bx(top, 'dark', L, 0.04, 0.06, 0, -0.02, s * W * 0.3); }
-    else { bx(top, variant === 'timing' ? 'dark' : 'rubber', L, 0.03, W - 0.04, 0, -0.015); cy(g, 'steel', 0.04, W, -L / 2, H - 0.05, 0, 'z'); cy(g, 'steel', 0.04, W, L / 2, H - 0.05, 0, 'z'); }
+    else { bx(top, variant === 'timing' ? 'dark' : 'rubber', L, 0.03, W - 0.04, 0, -0.015);
+      // cross stripes on the belt that travel with it
+      const st = grp(top, 'stripes'); st.userData.L = L; for (let i = 0; i < Math.floor(L / 0.25); i++) bx(st, 'steel', 0.02, 0.002, W - 0.08, 0, 0.015); conveyorPose(g, 0); cy(g, 'steel', 0.04, W, -L / 2, H - 0.05, 0, 'z'); cy(g, 'steel', 0.04, W, L / 2, H - 0.05, 0, 'z'); }
     g.userData.top = H; return g;
   }
+  // conveyor motion: s = belt travel in mm (the BELT joint value)
+  const m4a = new T.Matrix4(), m4b = new T.Matrix4(), m4c = new T.Matrix4();
+  function conveyorPose(g, s) { const m = (s || 0) / 1000;
+    const mk = g.getObjectByName('rmarks'); if (mk) { const { k, L } = mk.userData, a = -m / 0.025;
+      for (let i = 0; i < k; i++) { m4a.makeTranslation(-L / 2 + 0.05 + i * 0.1, 0, 0); m4b.makeRotationZ(a); m4c.makeTranslation(0, 0.026, 0); mk.setMatrixAt(i, m4a.multiply(m4b).multiply(m4c)); } mk.instanceMatrix.needsUpdate = true; }
+    const st = g.getObjectByName('stripes'); if (st) { const L = st.userData.L, n = st.children.length, gap = L / n; st.children.forEach((c, i) => { c.position.x = -L / 2 + 0.01 + (((i * gap + m) % L) + L) % L * ((L - 0.02) / L); }); } }
   function workbench(w, d) { const g = new T.Group(); legs(g, w, d, 0.85, 0.05, 0.04); bx(g, 'light', w, 0.04, d, 0, 0.85); bx(g, 'frame', w, 0.03, d - 0.1, 0, 0.18); for (const s of [-1, 1]) bx(g, 'frame', 0.04, 1.1, 0.04, s * (w / 2 - 0.05), 0.89, -d / 2 + 0.05); bx(g, 'body', w - 0.1, 0.03, 0.3, 0, 1.4, -d / 2 + 0.2); return g; }
   function room(w, d, h, office) { const g = new T.Group(); flatRect(g, 'body', w, d, 0.002);
     const wall = (L, x, z, ry, glass) => { const s = new T.Group(); s.position.set(x, 0, z); s.rotation.y = ry; g.add(s); bx(s, 'light', L, glass ? 1.0 : h, 0.1); if (glass) { bx(s, 'glass', L, h - 1.0, 0.03, 0, 1.0); bx(s, 'frame', L, 0.06, 0.1, 0, h - 0.06); } };
@@ -331,7 +341,7 @@
   const convIo = (P, p) => [out(`${P}_RUN`, 'bool', { kind: 'joint', target: `${P}_BELT` }), out(`${P}_DIR`), out(`${P}_SPEED`, 'real'), inn(`${P}_FAULT`)];
   for (const [id, name, v] of [['belt-conveyor', '벨트 컨베이어', 'belt'], ['roller-conveyor', '롤러 컨베이어', 'roller']]) bdef(id, { name, cat: 'transport', code: 'CV',
     params: { length: 3000, w: 500, h: 900, speed: 300 }, fields: [num('length', '길이'), num('w', '폭', 'mm', 10), num('h', '반송 높이', 'mm', 10), num('speed', '속도', 'mm/s', 10)],
-    top: p => mm(p.h), conveyor: true, heightKey: 'h',
+    top: p => mm(p.h), conveyor: true, heightKey: 'h', pose: (g, p, v) => conveyorPose(g, v.BELT),
     joints: (P, p) => [J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, p.length, p.speed, 1000)], io: convIo,
     build: p => conveyorShape(v, mm(p.length), mm(p.w), mm(p.h)) });
   bdef('stopper', { name: '스토퍼', cat: 'transport', code: 'STP', onTop: true, params: { stroke: 30 }, fields: [num('stroke', '스트로크', 'mm', 5)],

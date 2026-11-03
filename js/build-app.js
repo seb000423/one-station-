@@ -281,7 +281,7 @@
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
   const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 오른쪽에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li><li><b>▶ 시뮬레이션</b>을 누르면 저장하고 이 공장을 SIMULATION에서 엽니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
     const many = selIds();
@@ -313,7 +313,7 @@
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
-        html += `</div>${attachPanel(n)}${teleop(false)}`;
+        html += `</div>${teleop(false)}`;
       } else {
         const ct = doc.card;
         html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽 (자동)</span><span class="v">${(contentSize() || doc.meta.bbox).join(' × ')} mm</span>
@@ -341,12 +341,31 @@
     const st = S.sceneToStored([v.x, 0, v.z]); return Math.abs(st[0]) >= Math.abs(st[1]) ? [Math.sign(st[0]), 0] : [0, Math.sign(st[1])]; }
   function nudge(dir, big) { if (!sel || mode === 'run' || xray) return; const st = TELE[tab].step * (big ? 5 : 1), [ax, ay] = screenAxis(dir);
     moveSelBy([ax * st, ay * st, 0]); }
+  /* conveyors snap to conveyors while you move them: end to end when they point the same way, onto the side of
+     the end when they meet at 90°. Within 400 mm of such a spot the moved one jumps there and takes the other's height. */
+  function conveyorSnap(n, c, skip) { const doc = ED.machine.doc, d = nodeDef(n); if (!d || !d.conveyor || n.parent) return null;
+    const pa = Object.assign({}, d.params, n.params), rA = n.transform.rotation[2] * Math.PI / 180, dA = [Math.cos(rA), Math.sin(rA)], LA = +pa.length;
+    let best = null;
+    for (const b of doc.nodes) { const bd = nodeDef(b); if (b.id === n.id || !bd || !bd.conveyor || b.parent || skip.has(b.id)) continue;
+      const pb = Object.assign({}, bd.params, b.params), rB = b.transform.rotation[2] * Math.PI / 180, dB = [Math.cos(rB), Math.sin(rB)], q = b.transform.position, LB = +pb.length, wB = +pb.w;
+      const out = [q[0] + dB[0] * LB / 2, q[1] + dB[1] * LB / 2], inn = [q[0] - dB[0] * LB / 2, q[1] - dB[1] * LB / 2], diff = ((n.transform.rotation[2] - b.transform.rotation[2]) % 360 + 360) % 360, cands = [];
+      if (diff < 1 || diff > 359) cands.push([out[0] + dA[0] * LA / 2, out[1] + dA[1] * LA / 2, out], [inn[0] - dA[0] * LA / 2, inn[1] - dA[1] * LA / 2, inn]);
+      else if (Math.abs(diff - 90) < 1 || Math.abs(diff - 270) < 1) { const ai = [out[0] - dB[0] * wB / 2 + dA[0] * wB / 2, out[1] - dB[1] * wB / 2 + dA[1] * wB / 2], ao = [inn[0] + dB[0] * wB / 2 - dA[0] * wB / 2, inn[1] + dB[1] * wB / 2 - dA[1] * wB / 2];
+        cands.push([ai[0] + dA[0] * LA / 2, ai[1] + dA[1] * LA / 2, ai], [ao[0] - dA[0] * LA / 2, ao[1] - dA[1] * LA / 2, ao]); }
+      for (const [x, y, pt] of cands) { const dist = Math.hypot(x - c[0], y - c[1]); if (dist < 400 && (!best || dist < best.dist)) best = { dist, pos: [Math.round(x), Math.round(y)], h: +pb.h, other: b, pt }; } }
+    return best; }
+  const snapMark = new T.Mesh(new T.RingGeometry(0.1, 0.16, 32).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.9, depthWrite: false })); snapMark.visible = false; ov.add(snapMark);
+  function showSnap(sn) { snapMark.visible = !!sn; if (sn) { const p = toS([sn.pt[0], sn.pt[1], sn.h]); snapMark.position.set(p.x, p.y + 0.01, p.z); } }
   // move every selected object by the same amount, as one undo step (children ride along with their parent)
   function moveSelBy(by) { const ids = selIds().filter(x => !isSlab(x)); if (!ids.length) return;
     ed().batch(ids.length > 1 ? `move ${ids.length}` : 'move', () => {
       if (tab === 'factory') for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true);
       else { const doc = ED.machine.doc, set = new Set(ids), up = n => { for (let p = n.parent; p; p = doc.nodes.find(x => x.id === p)?.parent) if (set.has(p)) return true; return false; };
-        for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); } settle(ids); } }); }
+        for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); }
+        if (ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]), p = n.transform.position, sn = conveyorSnap(n, p, new Set());
+          if (sn) { moveNode(n.id, [sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); const hk = nodeDef(n).heightKey; if (+(n.params[hk] ?? nodeDef(n).params[hk]) !== sn.h) setParamKeepKids(n.id, hk, sn.h);
+            setTimeout(() => toast(`${nodeCode(n)}을(를) ${nodeCode(sn.other)}에 붙였습니다 · 높이 ${sn.h} mm`), 0); } }
+        settle(ids); } }); showSnap(null); }
   function moveNode(id, by) { by = by.slice(); const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return; const p = n.transform.position;
     if (p[2] + by[2] < 0) by[2] = -p[2]; if (!by[0] && !by[1] && !by[2]) return;
     const kids = []; const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { kids.push(k); walk(k.id); } }; walk(id);
@@ -386,33 +405,6 @@
       return; }
     if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === sel); if (!it) return; const yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw || 0); exec('move', { id: sel, yaw: norm(yaw + deg) }); }
     else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, norm(n.transform.rotation[2] + deg)] }); } }
-  /* 붙이기: what fits on / next to the selected block, placed and attached in one click */
-  const MOUNTS = ['robot-6axis', 'scara', 'cylinder', 'gripper', 'vacuum-pad', 'press-unit', 'screw-unit', 'dispenser', 'tower-lamp', 'pallet', 'tote'];
-  function attachOptions(n) { const d = nodeDef(n); if (!d) return []; const o = [];
-    if (d.conveyor) { o.push(['chain:fwd', '뒤에 컨베이어 잇기', '배출 끝에 같은 높이로 이어 붙입니다'], ['chain:back', '앞에 컨베이어 잇기', '투입 쪽에 이어 붙입니다'], ['chain:left', '끝에서 왼쪽으로 꺾기', '배출 끝에서 90° 왼쪽으로 잇습니다'], ['chain:right', '끝에서 오른쪽으로 꺾기', '배출 끝에서 90° 오른쪽으로 잇습니다'],
-      ['len:500', '길이 +500', '투입 끝은 그대로, 배출 쪽으로 늘립니다'], ['len:-500', '길이 −500', '배출 쪽을 줄입니다']);
-      for (const b of ['stopper', 'photo-sensor', 'proximity-sensor', 'pallet', 'tote', 'lifter']) o.push(['add:' + b, L.BLOCKS[b].name, b === 'lifter' ? '배출 끝 아래에 리프터를 놓습니다' : '이 컨베이어에 붙입니다']); }
-    else if (d.top(Object.assign({}, d.params, n.params)) > 0.05) for (const b of MOUNTS) if (L.BLOCKS[b]) o.push(['add:' + b, L.BLOCKS[b].name, '윗면 가운데에 붙입니다']);
-    return o; }
-  const attachPanel = n => { const o = attachOptions(n); if (!o.length) return '';
-    return `<div class="sec"><h2>붙이기 <small>누르면 알맞은 자리에 붙습니다</small></h2><div class="attach">${o.map(([k, t, why]) => `<button data-attach="${k}" title="${esc(why)}">${esc(t)}</button>`).join('')}</div></div>`; };
-  function doAttach(key) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === sel); if (!n) return; const d = nodeDef(n), p = Object.assign({}, d.params, n.params), [k, v] = key.split(':'), rot = n.transform.rotation[2];
-    if (k === 'len') { const dl = +v, L0 = +p.length, L1 = Math.max(500, L0 + dl), real = L1 - L0; if (!real) return;
-      ed().batch('stretch', () => { const kids = descendants(doc, n.id), r = rot * Math.PI / 180, ax = [Math.cos(r), Math.sin(r)];
-        exec('set_param', { id: n.id, key: 'length', value: L1 }, true); const c = n.transform.position; exec('move', { id: n.id, position: [c[0] + ax[0] * real / 2, c[1] + ax[1] * real / 2, c[2]] }, true);
-        for (const kd of kids) { const q = kd.transform.position, lx = (q[0] - c[0]) * ax[0] + (q[1] - c[1]) * ax[1]; if (lx > 0) exec('move', { id: kd.id, position: [q[0] + ax[0] * real, q[1] + ax[1] * real, q[2]] }, true); } });
-      return; }
-    if (k === 'chain') { const L2 = 3000, w = +p.w || 500, Lh = +p.length / 2;
-      const [lx, ly, dr] = v === 'fwd' ? [Lh + L2 / 2, 0, 0] : v === 'back' ? [-Lh - L2 / 2, 0, 0] : v === 'left' ? [Lh - w / 2, w / 2 + L2 / 2, 90] : [Lh - w / 2, -(w / 2 + L2 / 2), -90];
-      const at = localToStored(n, lx, ly, 0); ed().batch('chain', () => addBlockAt(n.blockType, at, ((rot + dr) % 360 + 360) % 360, { h: p.h, w: p.w, speed: p.speed, length: L2 })); return; }
-    if (k === 'add') { const bd = L.BLOCKS[v];
-      if (v === 'lifter') { const at = localToStored(n, +p.length / 2 + 350, 0, 0); ed().batch('add', () => addBlockAt(v, at, rot)); return; }
-      ed().batch('add', () => { const keep = sel; sel = n.id; addBlock(v); if (!sel || sel === n.id) sel = keep; }); } }
-  // a floor block at a stored point, facing yaw, with some params set
-  function addBlockAt(id, at, yaw, over = {}) { const d = L.BLOCKS[id], doc = ED.machine.doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
-    for (const [k, v] of Object.entries(over)) if (v !== undefined && k in params) params[k] = v;
-    const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent: null, position: [at[0], at[1], 0], params, joints: d.joints(P, params), io: d.io(P, params) }, true);
-    if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true); if (nid) { select(nid); toast(`${P} ${d.name} 연결`); } return nid; }
   const num = (key, label, unit, step) => ({ key, label, type: 'num', unit, step });
   $('props').addEventListener('change', e => {
     if ('tstep' in e.target.dataset || 'tang' in e.target.dataset) { const v = Math.abs(+e.target.value); if (v > 0) TELE[tab]['tstep' in e.target.dataset ? 'step' : 'ang'] = Math.min('tang' in e.target.dataset ? 180 : 100000, v); drawProps(); return; }
@@ -428,7 +420,6 @@
     if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
-    if (D.attach) { doAttach(D.attach); return; }
     if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
@@ -447,7 +438,7 @@
     const doc = ED.machine.doc; RUN.t = 0; RUN.v = {}; RUN.tags = {}; RUN.procs = {}; RUN.works = {};
     for (const j of doc.joints) RUN.v[j.id] = j.home ?? j.min;
     for (const t of doc.io) RUN.tags[t.tag] = t.type === 'bool' ? false : 0;
-    for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { dx: 0 }; }
+    for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]] }; }
   }
   const fmtVal = (t, v) => t.type === 'bool' ? (v ? '켜짐' : '꺼짐') : (+v).toFixed(t.type === 'int' ? 0 : 1);
   // plain meaning of a signal from its suffix (PLC view: 명령 = PLC → 설비, 상태 = 설비 → PLC)
@@ -484,21 +475,27 @@
     }
     // works ride on running conveyors and stop at raised stoppers
     const convs = doc.nodes.filter(n => nodeDef(n)?.conveyor), stops = doc.nodes.filter(n => nodeDef(n)?.stops);
-    for (const n of doc.nodes) { const w = RUN.works[n.id]; if (!w) continue; const p = n.transform.position, x = p[0] + w.dx, hw = (n.params.w || 300) / 2;
-      const c = convs.find(c => { const q = c.transform.position, Lh = (c.params.length || 3000) / 2; return Math.abs(p[2] - (q[2] + (c.params.h || 900))) < 60 && x >= q[0] - Lh - 1 && x <= q[0] + Lh + 1 && Math.abs(p[1] - q[1]) < (c.params.w || 500) / 2; });
-      if (!c) continue; const P = nodeCode(c); if (!tags[`${P}_RUN`]) continue;
-      const sp = (tags[`${P}_SPEED`] > 0 ? tags[`${P}_SPEED`] : c.params.speed || 300) * (tags[`${P}_DIR`] ? -1 : 1) * dt; let nx = x + sp;
-      const q = c.transform.position, Lh = (c.params.length || 3000) / 2;
-      for (const s of stops) { const sp0 = s.transform.position; if (Math.abs(sp0[1] - q[1]) > (c.params.w || 500) / 2 || !(RUN.v[`${nodeCode(s)}_Z`] > 5)) continue;
-        if (sp > 0 && x + hw <= sp0[0] + 1 && nx + hw > sp0[0]) nx = sp0[0] - hw; if (sp < 0 && x - hw >= sp0[0] - 1 && nx - hw < sp0[0]) nx = sp0[0] + hw; }
-      const next = convs.some(o => o !== c && Math.abs(o.transform.position[2] - q[2]) < 5 && Math.abs(o.transform.position[1] - q[1]) < 100 && Math.abs((o.transform.position[0] - (o.params.length || 3000) / 2) - (q[0] + Lh)) < 60);
-      if (!next) nx = Math.max(q[0] - Lh + hw, Math.min(q[0] + Lh - hw, nx));
-      w.dx = nx - p[0]; }
+    // works ride conveyors along each conveyor's own direction; at an end they pass onto a conveyor that continues
+    // (straight or at 90°), otherwise they stop at the end; a raised stopper on the way holds them
+    const frame = c => { const q = c.transform.position, r = c.transform.rotation[2] * Math.PI / 180; return { q, a: [Math.cos(r), Math.sin(r)], nrm: [-Math.sin(r), Math.cos(r)], Lh: (c.params.length || 3000) / 2, wh: (c.params.w || 500) / 2, top: q[2] + (c.params.h || 900) }; };
+    const loc = (f, p) => [(p[0] - f.q[0]) * f.a[0] + (p[1] - f.q[1]) * f.a[1], (p[0] - f.q[0]) * f.nrm[0] + (p[1] - f.q[1]) * f.nrm[1]];
+    for (const n of doc.nodes) { const w = RUN.works[n.id]; if (!w) continue; const z = n.transform.position[2], hw = (n.params.w || 300) / 2; let best = null;
+      for (const c of convs) { const f = frame(c); if (Math.abs(z - f.top) > 60) continue; const [lx, ly] = loc(f, w.p); if (Math.abs(ly) > f.wh || lx < -f.Lh - f.wh - 1 || lx > f.Lh + 1) continue;
+        const P = nodeCode(c); if (!tags[`${P}_RUN`]) continue; const dir = tags[`${P}_DIR`] ? -1 : 1, sp = (tags[`${P}_SPEED`] > 0 ? tags[`${P}_SPEED`] : c.params.speed || 300) * dir * dt;
+        let nx = lx + sp;
+        for (const s0 of stops) { if (!(RUN.v[`${nodeCode(s0)}_Z`] > 5)) continue; const [sx, sy] = loc(f, s0.transform.position); if (Math.abs(sy) > f.wh) continue;
+          if (sp > 0 && lx + hw <= sx + 1 && nx + hw > sx) nx = sx - hw; if (sp < 0 && lx - hw >= sx - 1 && nx - hw < sx) nx = sx + hw; }
+        const endP = [f.q[0] + f.a[0] * (Math.sign(sp) * f.Lh), f.q[1] + f.a[1] * (Math.sign(sp) * f.Lh)];
+        const handover = convs.some(o => { if (o === c) return false; const g = frame(o); if (Math.abs(g.top - f.top) > 5) return false; const [ex, ey] = loc(g, endP); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
+        if (!handover) nx = Math.max(-f.Lh + hw, Math.min(f.Lh - hw, nx));
+        const adv = Math.abs(nx - lx); if (!best || adv > best.adv) best = { adv, p: [w.p[0] + f.a[0] * (nx - lx), w.p[1] + f.a[1] * (nx - lx)] }; }
+      if (best) w.p = best.p; }
     // sensors, processes, robots
     for (const t of doc.io) {
       if (t.dir !== 'in' || !t.binding) continue; const b = t.binding;
       if (b.kind === 'sensor' && b.target === 'work') { const sn = doc.nodes.find(n => t.tag.startsWith(nodeCode(n) + '_')); if (!sn) continue; const sp = sn.transform.position, range = sn.params.range || 500;
-        tags[t.tag] = doc.nodes.some(n => { const w = RUN.works[n.id]; if (!w) return false; const p = n.transform.position, hw = (n.params.w || 300) / 2; return Math.abs(p[0] + w.dx - sp[0]) < hw && Math.abs(p[1] - sp[1]) < range + (n.params.d || 200) / 2; }); }
+        tags[t.tag] = doc.nodes.some(n => { const w = RUN.works[n.id]; if (!w) return false; const p = n.transform.position, hw = (n.params.w || 300) / 2; const pc = convs.find(c => c.id === sn.parent), f = pc ? frame(pc) : { q: [0, 0], a: [1, 0], nrm: [0, 1] }, [sx, sy] = loc(f, sp), [wx, wy] = loc(f, w.p);
+          return Math.abs(wx - sx) < hw && Math.abs(wy - sy) < range + (n.params.d || 200) / 2; }); }
       else if (b.kind === 'sensor') { const [jid, end] = b.target.split(':'), j = doc.joints.find(x => x.id === jid); if (!j) continue; const v = RUN.v[jid];
         tags[t.tag] = end === 'max' ? Math.abs(v - j.max) < 0.5 : end === 'min' ? Math.abs(v - j.min) < 0.5 : Math.abs(v - (RUN.v[jid + ':target'] ?? v)) < 0.5; }
     }
@@ -514,7 +511,7 @@
       for (const j of doc.joints) if (j.node === n.id) vals[j.id.slice(P.length + 1)] = RUN.v[j.id];
       vals.RUN = RUN.procs[P]?.run || 0;
       if (d.pose) d.pose(o, Object.assign({}, d.params, n.params), vals, tg => !!tags[tg], P);
-      if (RUN.works[n.id]) placeObj(o, [n.transform.position[0] + RUN.works[n.id].dx, n.transform.position[1], n.transform.position[2]], n.transform.rotation[2]); }
+      if (RUN.works[n.id]) placeObj(o, [RUN.works[n.id].p[0], RUN.works[n.id].p[1], n.transform.position[2]], n.transform.rotation[2]); }
   }
   function setMode(m) {
     if (tab !== 'machine') m = 'edit'; mode = m; document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
@@ -556,10 +553,12 @@
     if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
+    if (tab === 'machine' && drag.ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === drag.ids[0]), by = S.sceneToStored([d.x, 0, d.z]), p = n.transform.position, sn = n && conveyorSnap(n, [p[0] + by[0], p[1] + by[1]], new Set());
+      showSnap(sn); if (sn) { const s2 = toS([sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); d.x = s2.x; d.z = s2.z; } }
     drag.os.forEach((o, i) => o.position.set(drag.starts[i].x + d.x, drag.starts[i].y, drag.starts[i].z + d.z)); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
   });
   const endDrag = () => {
-    if (!drag) return; const { d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
+    if (!drag) return; showSnap(null); const { d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
     const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
   // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
@@ -671,7 +670,7 @@
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
   }
-  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : ''; }
+  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '동작 시험 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : ''; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
