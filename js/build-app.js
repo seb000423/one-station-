@@ -358,8 +358,8 @@
   const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 Control Panel이 열립니다. 객체마다 ON / OFF를 누르면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li>아래 <b>동작 순서</b>의 <b>블록으로 만들기</b>는 놓인 컨베이어·스토퍼·센서·공정·리프트를 보고 순서를 새로 만듭니다(지금 순서는 지워지고 실행 취소로 되돌림). <b>워크 다시 투입</b>은 워크를 처음 놓은 자리로 다시 올려 같은 시험을 반복합니다.</li><li>바닥의 <b>원 + 화살표</b>는 설비 원점과 X 방향(투입 → 배출)을 나타내는 기준 표시입니다. 객체가 아니라 지워지지 않습니다.</li><li>위 막대의 <b>객체 선택</b> 목록으로 이름을 골라 선택하고, <b>전체 지우기</b>로 지금 탭의 객체를 한 번에 지웁니다(Ctrl+Z로 복구).</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
-    const many = selIds();
-    if (many.length > 1) {
+    const many = selIds(), cp = cellParts(sel), wholeCell = cp.length && many.every(id => id === sel || cp.includes(id)); // a split cell picked as a whole shows the cell
+    if (many.length > 1 && !wholeCell) {
       const names = many.map(id => { if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === id); return it ? (itemCode(it) ? itemCode(it) + ' ' : '') + itemName(it) : ''; } const n = doc.nodes.find(x => x.id === id); return n ? nodeCode(n) + ' ' + n.name : ''; });
       box.innerHTML = `<div class="sec"><h2>${many.length}개 선택 <small>Shift+클릭으로 더하거나 빼기</small></h2><p class="why">끌거나 아래 조작 패드로 한꺼번에 옮기고 돌립니다. 회전은 묶음 가운데를 중심으로 돕니다.</p><div class="taglist">${names.map(n => `<span>${esc(n)}</span>`).join('')}</div></div>${teleop(tab === 'factory')}`;
       return; }
@@ -381,9 +381,12 @@
         else if (it.path !== 'building.columns') for (const f of typeof d.fields === 'function' ? d.fields(Object.assign({}, d.params, x.params)) : d.fields || []) { const pv = x.params[f.key] ?? d.params[f.key]; html += field(f, pv, 'p.' + f.key); }
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
-        const ldoc = it.local && SCN.localDoc(it.local), split = !!x.params?.exploded, cell = it.path === 'blocks' && x.params?.cell && doc.machines.find(m => m.id === x.params.cell);
+        const ldoc = it.local && SCN.localDoc(it.local), split = !!x.params?.exploded;
+        if (split) { const A = SCN.cellArea(ldoc, x.params); html += `<span class="k" style="grid-column:1/-1;margin-top:6px;color:var(--amber)">셀 영역 · 입구는 −X 변, 출구는 +X 변</span>`;
+          for (const [k, lb, v] of [['area_w', '영역 가로', A.w], ['area_d', '영역 세로', A.d], ['area_x', '중심 이동 X', A.x], ['area_y', '중심 이동 Y', A.y]]) html += field(num(k, lb, 'mm', 100), v, 'p.' + k); }
+        const cell = it.path === 'blocks' && x.params?.cell && doc.machines.find(m => m.id === x.params.cell);
         if (cell) html += `<span class="k">셀</span><span class="v" style="font-family:var(--sans)">${esc(cell.tagPrefix.split('.').pop())} ${esc(cell.name)}</span><span class="k">동작</span><span class="v" style="font-family:var(--sans)">${x.params.kind === 'robot' ? '로봇 팔 (셀 공정 중 한 사이클 움직임)' : x.params.kind === 'rotary' ? '인덱스 회전 (사이클마다 90°)' : '고정 객체'}</span>`;
-        html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다.</p>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
+        html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다.</p>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'machines' || it.path === 'storage' ? flowSec(x.id) : ''}${it.path === 'building.slabs' ? '' : teleop(true)}`;
       } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
         ${window.OnePlant ? `<p class="why" style="margin-top:10px">예시 공정: 감마 라인 (1 조립 → 2 페이스트 도포 → 3 브레이징 → 4 검사)</p><div class="acts"><button class="btn" data-act="example">예시 공정 불러오기</button></div>` : ''}</div>`;
     } else {
@@ -598,11 +601,19 @@
     const autoLabel = auto && auto.key ? (c.find(x => x.key === auto.key)?.label || '') : '외곽 ' + (which === 'inlet' ? '−X 면' : '+X 면');
     return `<select data-k="card.${which}"><option value=""${cur ? '' : ' selected'}>자동 · ${esc(autoLabel)}</option>${c.map(x => `<option value="${esc(x.key)}"${x.key === cur ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`; };
   const num = (key, label, unit, step) => ({ key, label, type: 'num', unit, step });
+  // 공정 흐름 of a placed machine: what comes in, what goes out, delete one, link to the next machine
+  const VIA_KO = { auto: '자동', conveyor: '컨베이어', amr: 'AMR', forklift: '지게차', worker: '작업자' };
+  function flowSec(id) { const doc = ED.factory.doc, items = factoryItems(doc), nm = end => { const x = items.find(y => y.id === end.split('.')[0]); return x ? (itemCode(x) || itemName(x)) : '?'; };
+    const mine = doc.flows.filter(f => f.from.split('.')[0] === id || f.to.split('.')[0] === id), others = items.filter(x => (x.path === 'machines' || x.path === 'storage') && x.id !== id && !doc.flows.some(f => f.from.split('.')[0] === id && f.to.split('.')[0] === x.id));
+    return `<div class="sec"><h2>공정 흐름 <small>${mine.length}</small></h2>${mine.map(f => `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px"><span style="flex:1">${f.to.startsWith(id + '.') ? '들어옴' : '나감'} · <b style="font-family:var(--mono)">${esc(nm(f.from))} → ${esc(nm(f.to))}</b> <span style="color:var(--mute)">${VIA_KO[f.via] || f.via}</span></span><button class="btn" data-pickflow="${f.id}" title="흐름을 골라 운반 수단·비율을 바꿉니다">편집</button><button class="btn" data-delflow="${f.id}">삭제</button></div>`).join('') || '<p class="why">아직 이어진 흐름이 없습니다.</p>'}
+      ${others.length ? `<div class="props" style="margin-top:8px"><span class="k">다음 설비로 잇기</span><select data-k="flow.new"><option value="">— 고르기 —</option>${others.map(x => `<option value="${x.id}">${esc((itemCode(x) ? itemCode(x) + ' ' : '') + itemName(x))}</option>`).join('')}</select></div>` : ''}
+      <p class="why" style="margin-top:6px">화면에서는 주황 출구 화살표를 끌어 다음 설비에 놓아도 이어집니다. 흐름 선이나 라벨을 눌러도 편집·삭제할 수 있습니다.</p></div>`; }
   $('props').addEventListener('change', e => {
     if ('tstep' in e.target.dataset || 'tang' in e.target.dataset) { const v = Math.abs(+e.target.value); if (v > 0) TELE[tab]['tstep' in e.target.dataset ? 'step' : 'ang'] = Math.min('tang' in e.target.dataset ? 180 : 100000, v); drawProps(); return; }
     const k = e.target.dataset.k; if (!k || !sel && !k.startsWith('meta.') && !k.startsWith('card.')) return;
     const raw = e.target.value, v = e.target.type === 'number' ? (raw === '' ? null : +raw) : raw, doc = ed().doc;
     if (k === 'meta.name') { exec('set_meta', { name: raw || (tab === 'factory' ? '공장' : '설비') }); return; }
+    if (k === 'flow.new') { if (!raw) return; const nid = exec('connect_flow', { from: `${sel}.outlet`, to: `${raw}.inlet` }); if (nid) toast('흐름을 이었습니다 · 운반 수단은 흐름 편집에서 고릅니다'); return; }
     if (k === 'flow.via') { exec('set_flow', { id: sel, via: raw }); return; } if (k === 'flow.ratio') { exec('set_flow', { id: sel, ratio: Math.max(0, Math.min(1, +raw)) }); return; }
     if (k.startsWith('card.')) { const ck = k.slice(5); exec('set_card', { [ck]: ck === 'inlet' || ck === 'outlet' ? (raw || null) : v }); return; }
     if (k === 'slab.w' || k === 'slab.d') { const r = slabRect(doc), w = k === 'slab.w' ? v * 1000 : r.x1 - r.x0, d = k === 'slab.d' ? v * 1000 : r.y1 - r.y0; if (w > 0 && d > 0) exec('set_slab', { polygon: [[r.x0, r.y0], [r.x0 + w, r.y0], [r.x0 + w, r.y0 + d], [r.x0, r.y0 + d]] }); return; }
@@ -615,7 +626,8 @@
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
     if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal(); else if (D.act === 'example') loadExample(); else if (D.act === 'split') splitCell();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.flip) { if (mode !== 'run' && !xray) reverseLine(flowIds()); } else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
-    else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
+    else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); }
+    else if (D.delflow) { exec('delete', { id: D.delflow }); toast('흐름을 지웠습니다 · 실행 취소로 되돌립니다'); } else if (D.pickflow) select(D.pickflow); });
 
   function rotateSel() { turnSel(90); }
   function deleteSel() { if (!sel || mode === 'run' || xray) return; if (isSlab(sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; }

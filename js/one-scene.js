@@ -35,17 +35,28 @@
     if (it.path === 'building.roofs') { const r = slabRect(doc), w = (x.params.w || r.x1 - r.x0) / 1000, d = (x.params.d || r.y1 - r.y0) / 1000; const o = L.special.roof(x.params, w, d, (x.params.eave || lvH * 1000) / 1000); placeObj(o, x.transform.position, x.transform.rotation[2]); o.userData.roof = true; return o; }
     if (it.path === 'building.columns') { const o = L.special.column({ size: x.size[0], h: x.height ? x.height / 1000 : lvH }); placeObj(o, x.transform.position); return o; }
     if (it.path === 'markings') { const o = L.special.marking(x.kind, x.params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
-    if (it.local) { const o = x.params?.exploded ? cellOutline(it.local) : buildLocalMachine(it.local); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
+    if (it.local) { const o = x.params?.exploded ? cellOutline(it.local, x.params) : buildLocalMachine(it.local); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
     const params = Object.assign({}, x.params, it.path === 'storage' || it.path === 'movers' ? {} : {});
     const o = L.buildFactory(it.def, params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o;
   }
   // a cell split into its objects (params.exploded): the objects are factory blocks of their own; the cell keeps its card,
   // ports and flows and shows only its footprint on the floor
-  function cellOutline({ id, v }) {
-    const m = opt.lib()[id], doc = m && (m.versions[v] || m.versions[Object.keys(m.versions).pop()]), g = new T.Group(), [W, D] = doc ? doc.meta.bbox : [2000, 2000];
-    const w = W / 1000 + 0.4, d = D / 1000 + 0.4, pl = new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.05, depthWrite: false }));
-    pl.position.y = 0.004; g.add(pl);
-    const e = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), new T.LineBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.6 })); e.position.y = 0.005; g.add(e);
+  /* Cell area (params.area_w / area_d / area_x / area_y, mm, machine frame; default = the machine box + 200 mm a side). The
+     ports of a split cell sit on the −X / +X edges of its area, so the flow arrows and the SIM follow an edited area. */
+  function cellArea(doc, p = {}) { const [W, D] = doc ? doc.meta.bbox : [2000, 2000];
+    return { w: +p.area_w || W + 400, d: +p.area_d || D + 400, x: +p.area_x || 0, y: +p.area_y || 0 }; }
+  // a cell split into its objects (params.exploded): the objects are factory blocks of their own; the cell keeps its card,
+  // ports and flows and shows its area on the floor, with chevrons along the way parts go through it
+  function cellOutline({ id, v }, p = {}) {
+    const m = opt.lib()[id], doc = m && (m.versions[v] || m.versions[Object.keys(m.versions).pop()]), g = new T.Group(), A = cellArea(doc, p);
+    const w = A.w / 1000, d = A.d / 1000, pl = new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.05, depthWrite: false }));
+    pl.position.set(A.x / 1000, 0.004, -A.y / 1000); g.add(pl);
+    const e = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), new T.LineBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.6 })); e.position.set(A.x / 1000, 0.005, -A.y / 1000); g.add(e);
+    // flow chevrons (›) inlet → outlet every 1.5 m
+    if (doc) { const path = machinePath(doc, p), chev = new T.Shape(); chev.moveTo(-0.2, -0.3); chev.lineTo(0.1, 0); chev.lineTo(-0.2, 0.3); chev.lineTo(-0.06, 0.3); chev.lineTo(0.24, 0); chev.lineTo(-0.06, -0.3);
+      const cg = new T.ShapeGeometry(chev).rotateX(-Math.PI / 2), cm = new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.85, depthWrite: false });
+      for (let i = 1; i < path.length; i++) { const a = path[i - 1], b = path[i], L2 = Math.hypot(b[0] - a[0], b[1] - a[1]), yaw = Math.atan2(b[1] - a[1], b[0] - a[0]), n = Math.max(1, Math.floor(L2 / 1200));
+        for (let k = 0; k < n; k++) { const t = (k + 0.5) / n, c = new T.Mesh(cg, cm); c.position.set((a[0] + (b[0] - a[0]) * t) / 1000, 0.006, -(a[1] + (b[1] - a[1]) * t) / 1000); c.rotation.y = yaw; c.raycast = () => {}; c.userData.noTwin = true; g.add(c); } } }
     g.userData.cell = true; return g;
   }
   function buildLocalMachine({ id, v }) {
@@ -75,20 +86,21 @@
         const first = ends.find(e => !ends.some(f => f !== e && near(f.o.pos, e.i.pos))) || ends[0], last = ends.slice().reverse().find(e => !ends.some(f => f !== e && near(e.o.pos, f.i.pos))) || ends[ends.length - 1];
         return { inlet: first.i, outlet: last.o }; }
       const [W, , H] = doc.meta.bbox; return { inlet: { key: null, pos: [-W / 2, 0, Math.min(900, H)], dir: [1, 0] }, outlet: { key: null, pos: [W / 2, 0, Math.min(900, H)], dir: [1, 0] } }; }
-    function portsOf(doc) { const a = autoPorts(doc); return { inlet: portAt(doc, doc.card?.inlet) || a.inlet, outlet: portAt(doc, doc.card?.outlet) || a.outlet, auto: { inlet: !portAt(doc, doc.card?.inlet), outlet: !portAt(doc, doc.card?.outlet) } }; }
+    function portsOf(doc, ip) { const a = autoPorts(doc);
+      if (ip && ip.exploded) { const A = cellArea(doc, ip), z = a.inlet.pos[2]; a.inlet = { key: null, pos: [A.x - A.w / 2, A.y, z], dir: [1, 0] }; a.outlet = { key: null, pos: [A.x + A.w / 2, A.y, z], dir: [1, 0] }; } return { inlet: portAt(doc, doc.card?.inlet) || a.inlet, outlet: portAt(doc, doc.card?.outlet) || a.outlet, auto: { inlet: !portAt(doc, doc.card?.inlet), outlet: !portAt(doc, doc.card?.outlet) } }; }
     // a library (black box) machine of size [W, D, H]: in on the −X side, out on the +X side, at working height
     const boxPorts = size => ({ inlet: { pos: [-size[0] / 2, 0, 900], dir: [1, 0] }, outlet: { pos: [size[0] / 2, 0, 900], dir: [1, 0] } });
     // instance placement: machine-frame mm → factory mm
     const toFactory = (pos, inst) => { const t = inst.transform, r = t.rotation[2] * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [t.position[0] + pos[0] * c - pos[1] * s, t.position[1] + pos[0] * s + pos[1] * c, (t.position[2] || 0) + pos[2]]; };
     /** Ports of a placed machine in factory mm (null if unknown). */
     function instancePorts(it) { let P = null;
-      if (it.local) { const m = opt.lib()[it.local.id], doc = m && (m.versions[it.local.v] || m.versions[Object.keys(m.versions).pop()]); if (doc) P = portsOf(doc); }
+      if (it.local) { const m = opt.lib()[it.local.id], doc = m && (m.versions[it.local.v] || m.versions[Object.keys(m.versions).pop()]); if (doc) P = portsOf(doc, it.item.params); }
       else if (it.def && L.FACTORY[it.def]?.size) P = boxPorts(L.FACTORY[it.def].size);
       else if (it.path === 'storage') P = boxPorts([2400, 1200, 0]);
       if (!P) return null; const r = (it.item.transform.rotation[2] || 0) * Math.PI / 180; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item), dir: [Math.cos(r), Math.sin(r)] }; }
     /** The route a part takes through a machine, inlet → outlet (machine frame mm): along its conveyor chain when it has one
        (each conveyor's outfeed end, then the point where the part lands on the next conveyor), else straight across. */
-    function machinePath(doc) { const P = portsOf(doc), convs = doc.nodes.filter(n => (L.BLOCKS[n.blockType]?.conveyor || L.BLOCKS[n.blockType]?.curve) && !n.parent);
+    function machinePath(doc, ip) { const P = portsOf(doc, ip), convs = doc.nodes.filter(n => (L.BLOCKS[n.blockType]?.conveyor || L.BLOCKS[n.blockType]?.curve) && !n.parent);
       const pts = [P.inlet.pos]; if (!convs.length) { pts.push(P.outlet.pos); return pts; }
       const axis = c => { const i = portAt(doc, `${c.id}/in`).pos, o = portAt(doc, `${c.id}/out`).pos; return { c, i, o, w: (+blockP(c).w || 500) }; }, A = convs.map(axis);
       const onto = (p, a) => { const dx = a.o[0] - a.i[0], dy = a.o[1] - a.i[1], L2 = dx * dx + dy * dy || 1, t = ((p[0] - a.i[0]) * dx + (p[1] - a.i[1]) * dy) / L2, q = [a.i[0] + dx * t, a.i[1] + dy * t, a.i[2]];
@@ -103,9 +115,9 @@
       pts.push(P.outlet.pos); return pts.filter((p, i) => !i || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1], p[2] - pts[i - 1][2]) > 1); }
     const localDoc = l => { const m = l && opt.lib()[l.id]; return m && (m.versions[l.v] || m.versions[Object.keys(m.versions).pop()]); };
     /** The machine route in factory mm (inlet → outlet), or null. */
-    function instancePath(it) { const doc = it.local && localDoc(it.local); if (doc) return machinePath(doc).map(p => toFactory(p, it.item));
+    function instancePath(it) { const doc = it.local && localDoc(it.local); if (doc) return machinePath(doc, it.item.params).map(p => toFactory(p, it.item));
       const P = instancePorts(it); return P ? [P.inlet, P.outlet] : null; }
-    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts, machinePath, instancePath, localDoc };
+    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts, machinePath, instancePath, localDoc, cellArea };
   }
   window.OneScene = { create };
 })();
