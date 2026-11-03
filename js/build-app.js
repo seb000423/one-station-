@@ -485,11 +485,17 @@
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
       if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
   // conveyors that meet end to end or at a side transfer, at the same height: they rise and fall together
-  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner || nodeDef(n)?.curve)), P = n => { const p = Object.assign({}, nodeDef(n).params, n.params); if (nodeDef(n).corner) p.length = p.w; return p; };
-    const ends = n => { if (nodeDef(n).curve) { const g = L.curveGeom(n); return [g.point(0), g.point(1)]; } if (!nodeDef(n).corner) return ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos); const q = n.transform.position, h = +P(n).w / 2; return [[q[0] + h, q[1]], [q[0] - h, q[1]], [q[0], q[1] + h], [q[0], q[1] - h]]; }, H = n => +P(n).h;
-    const over = (p, b) => { if (nodeDef(b).curve) return ends(b).some(e => Math.hypot(e[0] - p[0], e[1] - p[1]) <= +P(b).w / 2 + 80); const r = b.transform.rotation[2] * Math.PI / 180, dx = p[0] - b.transform.position[0], dy = p[1] - b.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r);
-      return Math.abs(a) <= +P(b).length / 2 + 80 && Math.abs(l) <= +P(b).w / 2 + 80; };
-    const meets = (a, b) => Math.abs(H(a) - H(b)) < 5 && (ends(a).some(p => over(p, b)) || ends(b).some(p => over(p, a)));
+  /* conveyors that are really joined: an open end meets an open end face to face (gap ≤ 10 mm), or an end sits on the side
+     of another (90° transfer), with the same width and the same top (a lift also at its upper stop). Pieces that only lie
+     near each other, or that the snap refused (different width), are not a line and move on their own. */
+  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner || nodeDef(n)?.curve)), P = n => Object.assign({}, nodeDef(n).params, n.params);
+    const E = new Map(cv.map(n => [n.id, pieceEnds(n, n.transform.position)])), tops = n => { const t = nodeTop(n); return nodeDef(n).lift ? [t, t + +P(n).stroke] : [t]; };
+    const level = (a, b) => tops(a).some(x => tops(b).some(y => Math.abs(x - y) < 5));
+    const side = (e, b) => { const d = nodeDef(b); if (!d.conveyor || d.curve) return false; const r = b.transform.rotation[2] * Math.PI / 180, ax = [Math.cos(r), Math.sin(r)];
+      if (Math.abs(e.hd[0] * ax[0] + e.hd[1] * ax[1]) > 0.02) return false; const dx = e.pt[0] - b.transform.position[0], dy = e.pt[1] - b.transform.position[1], a = dx * ax[0] + dy * ax[1], l = -dx * ax[1] + dy * ax[0];
+      return Math.abs(a) <= +P(b).length / 2 + 1 && Math.abs(Math.abs(l) - +P(b).w / 2) <= 10 && Math.abs(e.w - +P(b).w) <= 1; };
+    const meets = (a, b) => level(a, b) && (E.get(a.id).some(m => E.get(b.id).some(o => m.hd[0] * o.hd[0] + m.hd[1] * o.hd[1] < -0.98 && Math.hypot(o.pt[0] - m.pt[0], o.pt[1] - m.pt[1]) <= 10 && Math.abs(m.w - o.w) <= 1))
+      || E.get(a.id).some(m => side(m, b)) || E.get(b.id).some(o => side(o, a)));
     const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
     return out; }
   /* 설계 검사 (design check): what a real line would not run with. Joints = two open ends facing each other within 60 mm.
@@ -1224,5 +1230,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
 })();
