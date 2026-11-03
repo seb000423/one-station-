@@ -102,7 +102,7 @@
     };
     const rt = new T.WebGLRenderTarget(2, 2, { type: T.HalfFloatType, samples: 4 });
     const composer = new T.EffectComposer(renderer, rt);
-    const bloom = new T.UnrealBloomPass(new T.Vector2(2, 2), 0.38, 0.45, 1.7);
+    const bloom = new T.UnrealBloomPass(new T.Vector2(2, 2), 0.38, 0.45, 2.4);
     const output = new T.ShaderPass(OutputShader);
     composer.addPass(mirrorPass); composer.addPass(bloom); composer.addPass(output);
 

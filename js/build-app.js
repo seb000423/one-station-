@@ -391,10 +391,10 @@
     if (!id) { if (!e.shiftKey) select(null); return; }
     select(id); if (mode === 'run') return;
     const o = objs.get(id).obj; plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
-    drag = { id, o, start: o.position.clone(), grab: hit.clone(), moved: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
+    drag = { id, o, start: o.position.clone(), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', e => {
-    if (!drag) return; setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
+    if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
     drag.o.position.set(drag.start.x + d.x, drag.start.y, drag.start.z + d.z); drag.d = d; updateSelMark();
@@ -477,7 +477,10 @@
     else { $('sizeLab').textContent = '설비 크기'; [$('sW').value, $('sD').value, $('sH').value] = doc.meta.bbox; $('sH').hidden = $('sHx').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥 왼쪽 아래 · X 입고 → 출하'; }
-    else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥면 중심 · X 투입 → 배출'; }
+    else { const [W, D] = doc.meta.bbox, out = doc.nodes.filter(n => { const o = objs.get(n.id)?.obj; if (!o) return false; tmpBox.setFromObject(o); if (tmpBox.isEmpty()) return false; const a = fromS(tmpBox.min), b = fromS(tmpBox.max);
+      return Math.min(a[0], b[0]) < -W / 2 - 1 || Math.max(a[0], b[0]) > W / 2 + 1 || Math.min(a[1], b[1]) < -D / 2 - 1 || Math.max(a[1], b[1]) > D / 2 + 1; });
+      $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>` + (out.length ? ` · <b style="color:var(--amber)">외곽 밖 ${out.length}</b>` : '');
+      $('chipOrigin').innerHTML = '점선 = 설비 외곽 · 원점 = 바닥면 중심 · X 투입 → 배출'; }
   }
   function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 신호 표에서 OUT 태그 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') drawIo(); }
