@@ -1,16 +1,25 @@
 /**
- * Scenarios (R1 §8.4): a scenario = demo-line parameters + run settings (horizon, warm-up, seeds).
+ * Scenarios (R1 §8.4): a scenario = line parameters + run settings (horizon, warm-up, seeds).
  * Results are averaged over replications with a 95 % confidence half-width; two scenarios run on the
  * same seeds (common random numbers) so the difference between them is the change, not the dice.
  */
-import { buildDemoLine, type DemoParams } from './demo-line';
+/** Parameters a line builder takes (a BUILDER line: js / packages layout-line). */
+export interface LineParams {
+  pallets?: number;
+  /** per-station overrides (cycle time, variation, OK rate, failure figures) */
+  stations?: Record<string, { ct?: number; cv?: number; okRate?: number; mtbf?: number; mttr?: number }>;
+  /** extra places in front of a station, on top of the physical ones */
+  extraBuffer?: Record<string, number>;
+  /** run without random variation, NG and failures (for checking against hand calculation) */
+  deterministic?: boolean;
+}
 import { simulateLine, type LineResult, type LineModel } from './line';
 
 export interface RunSettings { horizon: number; warmup: number; seeds: number[] }
 export const DEFAULT_RUN: RunSettings = { horizon: 8 * 3600 + 3600, warmup: 3600, seeds: [1, 2, 3, 4, 5] };
 export interface Stat { mean: number; half: number; min: number; max: number }
 export interface ScenarioResult {
-  name: string; params: DemoParams; runs: LineResult[];
+  name: string; params: LineParams; runs: LineResult[];
   kpi: { throughputPerHour: Stat; leadTime: Stat; wip: Stat; scrapped: Stat; ngRate: Stat; perShift: Stat };
   utilisation: Record<string, { busy: number; blocked: number; idle: number; down: number }>;
   bottleneck: string | null;
@@ -26,8 +35,8 @@ export function stat(xs: number[]): Stat {
 /** NG share of everything that left the line, % */
 const ngRate = (r: LineResult) => (r.produced + r.scrapped ? (r.scrapped / (r.produced + r.scrapped)) * 100 : 0);
 
-/** `build` turns the scenario's parameters into a line (default: the demo line; a BUILDER line passes its own) */
-export function runScenario(name: string, params: DemoParams, run: RunSettings = DEFAULT_RUN, build: (p: DemoParams) => LineModel = p => buildDemoLine(p).model): ScenarioResult {
+/** `build` turns the scenario's parameters into a line */
+export function runScenario(name: string, params: LineParams, run: RunSettings = DEFAULT_RUN, build: (p: LineParams) => LineModel): ScenarioResult {
   const model = build(params);
   const runs = run.seeds.map(seed => simulateLine(model, run.horizon, { seed, warmup: run.warmup }));
   const util: ScenarioResult['utilisation'] = {};
