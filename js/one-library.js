@@ -483,7 +483,7 @@
     const fit = new T.Group(); fit.name = 'fit'; fit.scale.set(+p.w / (+p.w0 || +p.w), +p.h / (+p.h0 || +p.h), +p.d / (+p.d0 || +p.d)); fit.add(c);
     c.traverse(m => { m.userData.pick = g.userData.pick; if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
     const ph = g.getObjectByName('placeholder'); if (ph) g.remove(ph);
-    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null;
+    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
     for (const f of modelListeners) f(g);
   }
   bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,
@@ -497,6 +497,11 @@
       if (GLB_READY[p.src]) attachModel(g, p, GLB_READY[p.src]); else plantGlb(p.src).then(sc => attachModel(g, p, sc)).catch(() => {});
       return g; },
     pose: (g, p, v) => poseRig(g.userData.rig, p.kind, v.RUN || 0) });
+  // the same part placed on its own in Factory Builder (a factory block): a cell split into its objects
+  fdef('model-part', { name: '모델 객체', group: 'model', kind: { cmd: 'add_block', type: 'model-part' }, params: B['model-part'].params, fields: B['model-part'].fields, build: p => B['model-part'].build(p),
+    why: '셀을 이루는 객체 하나 · 크기와 위치를 따로 바꿉니다' });
+  /** Motion of a placed model part at k = 0…1 of its cycle (robots swing their arm, index tables turn). */
+  const poseModel = (g, k) => poseRig(g.userData.rig, g.userData.kind, k);
 
   /** 90° curve in stored mm, about its node: point(u) and heading(u) for u = 0 (entry) … 1 (exit). */
   function curveGeom(n) { const p = Object.assign({}, B['curve-conveyor'].params, n.params), sg = p.turn === 'right' ? -1 : 1, q = n.transform.position, yaw = n.transform.rotation[2] * Math.PI / 180;
@@ -508,5 +513,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { plantGlb, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, poseModel, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

@@ -80,6 +80,10 @@
       ct: mc?.ct || DEF_CT, assumed: !mc?.ct && it.path !== 'storage', ok: mc ? mc.ok : 1, ins: [], outs: [], inQ: null, inRes: false, cur: null, t: 0, outQ: null, feeding: false,
       busy: 0, blocked: 0, idle: 0, made: 0, ng: 0, buf: [], belts: [] };
     // conveyors inside a Machine Builder machine run while it works
+    // robots and index tables of the cell (its own objects when it is split, else its 모델 객체 blocks) move while it works
+    s.rigs = []; s.mt = 0;
+    if (it.local && it.item.params?.exploded) { for (const [, v] of objs) if (v.it.path === 'blocks' && v.it.item.params?.cell === id) s.rigs.push(v.o); }
+    else if (it.local) o.traverse(x => { if (x.name === 'model-part') s.rigs.push(x); });
     if (it.local) { const doc = SC.localDoc(it.local); if (doc) doc.nodes.forEach((n, i) => { const bd = L.BLOCKS[n.blockType]; if (bd?.conveyor && o.children[i]) s.belts.push({ g: o.children[i], bd, p: n.params, v: 0 }); }); }
     st.set(id, s); return s; }
 
@@ -162,6 +166,7 @@
           else if (!s.outQ) { s.outQ = pt; pt.link = route(s); s.cur = null; s.made++; }
           else state = 'blocked'; } }
       s[state] += dt; s.state = state;
+      if (state === 'busy') { s.mt += dt; for (const g of s.rigs) if (g.userData.rig) { const c = g.userData.cycle || 6; L.poseModel(g, (s.mt % c) / c); } }
       for (const b of s.belts) { if (state === 'busy') b.v += b.p.speed * dt || 300 * dt; b.bd.pose(b.g, b.p, { BELT: b.v }); }
     }
     for (const k of links) {

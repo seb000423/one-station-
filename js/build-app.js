@@ -321,7 +321,7 @@
     const doc = ed().doc, box = $('tree'); let html = '', n = 0;
     if (tab === 'factory') {
       const items = factoryItems(doc), groups = {};
-      for (const it of items) { const g = it.path === 'machines' ? '설비' : (L.FACTORY[it.def] ? L.FACTORY_GROUPS.find(x => x.id === L.FACTORY[it.def].group)?.name : '기타') || '기타'; (groups[g] || (groups[g] = [])).push(it); }
+      for (const it of items) { const g = it.path === 'machines' ? '설비' : it.def === 'model-part' ? '셀 객체' : (L.FACTORY[it.def] ? L.FACTORY_GROUPS.find(x => x.id === L.FACTORY[it.def].group)?.name : '기타') || '기타'; (groups[g] || (groups[g] = [])).push(it); }
       html += `<div data-id="${esc(doc.building.slabs[0]?.id || '')}" class="${sel === doc.building.slabs[0]?.id ? 'on' : ''}"><code>바닥</code><span>${esc(doc.meta.name)} · ${((slabRect(doc).x1 - slabRect(doc).x0) / 1000).toFixed(1)} × ${((slabRect(doc).y1 - slabRect(doc).y0) / 1000).toFixed(1)} m</span></div>`;
       if (doc.flows.length) { groups['공정 흐름'] = null; }
       for (const [g, list] of Object.entries(groups)) { if (!list) { html += `<div class="grp">공정 흐름 · ${doc.flows.length}</div>`; const nm = end => { const x = items.find(y => y.id === end.split('.')[0]); return x ? itemCode(x) || itemName(x) : '?'; };
@@ -366,10 +366,12 @@
         html += `<span class="k">위치 X · Y</span><span class="v">${(pos[0] / 1000).toFixed(2)} · ${(pos[1] / 1000).toFixed(2)} m</span>`;
         if (x.transform) html += `<span class="k">방향</span><span class="v">${x.transform.rotation[2]}°</span>`;
         if (it.path === 'building.walls') html += field(num('length', '길이', 'm', 0.5), (Math.hypot(x.to[0] - x.from[0], x.to[1] - x.from[1]) / 1000).toFixed(2), 'wall.length');
-        else if (it.path !== 'building.columns') for (const f of d.fields || []) { const pv = x.params[f.key] ?? d.params[f.key]; html += field(f, pv, 'p.' + f.key); }
+        else if (it.path !== 'building.columns') for (const f of typeof d.fields === 'function' ? d.fields(Object.assign({}, d.params, x.params)) : d.fields || []) { const pv = x.params[f.key] ?? d.params[f.key]; html += field(f, pv, 'p.' + f.key); }
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
-        html += `</div>${it.local ? `<p class="why" style="margin-top:10px">객체 하나하나의 크기·위치·속도는 Machine Builder에서 바꿉니다. 저장하면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts"><button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
+        const ldoc = it.local && SCN.localDoc(it.local), split = !!x.params?.exploded, cell = it.path === 'blocks' && x.params?.cell && doc.machines.find(m => m.id === x.params.cell);
+        if (cell) html += `<span class="k">셀</span><span class="v" style="font-family:var(--sans)">${esc(cell.tagPrefix.split('.').pop())} ${esc(cell.name)}</span><span class="k">동작</span><span class="v" style="font-family:var(--sans)">${x.params.kind === 'robot' ? '로봇 팔 (셀 공정 중 한 사이클 움직임)' : x.params.kind === 'rotary' ? '인덱스 회전 (사이클마다 90°)' : '고정 객체'}</span>`;
+        html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다.</p>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
       } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
         ${window.OnePlant ? `<p class="why" style="margin-top:10px">예시 공정: 감마 라인 (1 조립 → 2 페이스트 도포 → 3 브레이징 → 4 검사)</p><div class="acts"><button class="btn" data-act="example">예시 공정 불러오기</button></div>` : ''}</div>`;
     } else {
@@ -506,7 +508,7 @@
     if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
-    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal(); else if (D.act === 'example') loadExample();
+    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal(); else if (D.act === 'example') loadExample(); else if (D.act === 'split') splitCell();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
 
@@ -514,8 +516,10 @@
   function deleteSel() { if (!sel || mode === 'run' || xray) return; if (isSlab(sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; }
     const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) || ed().doc.flows.some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
     if (ids.length > 1) toast(`${ids.length}개 삭제 · Ctrl+Z로 되돌립니다`); select(null); }
-  function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [];
-    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } } }); selectMany(out); }
+  function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [], map = {};
+    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); map[id] = nid; if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } }
+      // a copied cell takes its copied objects along
+      for (const nid of out) { const b = ed().doc.blocks.find(x => x.id === nid); if (b && map[b.params.cell]) exec('set_param', { id: nid, key: 'cell', value: map[b.params.cell] }, true); } }); selectMany(out); }
   function selectAll() { const doc = ed().doc; selectMany(tab === 'factory' ? factoryItems(doc).map(x => x.id) : doc.nodes.filter(n => !n.parent).map(n => n.id)); }
 
   /* ------------------------------------------------------------------ signals table and run mode (machine) */
@@ -805,7 +809,9 @@
     else if (multi.has(id)) multi.delete(id); else multi.add(id);
     drawTree(); drawProps(); updateSelMark(); }
   function selectMany(ids) { ids = ids.filter(x => !isSlab(x)); multi = new Set(ids.slice(1)); sel = ids[0] || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
-  function select(id, focus) { multi = new Set(); sel = id || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
+  // a cell split into its objects: picking the cell picks its objects with it, so they move, turn, copy and delete together
+  const cellParts = id => tab === 'factory' && id && ED.factory.doc.machines.some(m => m.id === id && m.params?.exploded) ? ED.factory.doc.blocks.filter(b => b.params?.cell === id).map(b => b.id) : [];
+  function select(id, focus) { const kids = cellParts(id); if (kids.length) { selectMany([id, ...kids]); if (focus) focusSel(); return; } multi = new Set(); sel = id || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
   function fitAll() {
     const doc = ed().doc;
@@ -854,6 +860,8 @@
     openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(doc)))); dirty.machine = false; switchTab('machine', true);
     toast(`${m.name} v${v} · 객체를 골라 오른쪽에서 크기·위치·동작 시간을 바꾸고 '설비 카드 저장'을 누릅니다`); }
   // the example process (감마 라인) back in Factory Builder; the factory on screen is kept under one.build.factory.before-plant
+  function splitCell() { const id = sel; if (!id || !window.OnePlant) return; let ids = [];
+    ED.factory.batch('split cell', () => { ids = window.OnePlant.explode(ED.factory, id, lib()); }); select(id); toast(`객체 ${ids.length}개로 나눴습니다 · 객체를 눌러 하나씩 고칩니다`); }
   function loadExample() { const doc = ED.factory.doc;
     if ((doc.machines.length || doc.building.walls.length) && !confirm('지금 공장 대신 예시 공정을 엽니다. 지금 공장은 이 브라우저에 따로 보관됩니다. 계속할까요?')) return;
     if (doc.machines.length || doc.building.walls.length) LS.set(KEY.factory + '.before-plant', doc);
@@ -1024,10 +1032,15 @@
 
   /* ------------------------------------------------------------------ loop */
   let last = performance.now();
+  // Factory Builder: a selected robot / index table shows its motion; the rest stand still (no motion without a reason)
+  let moving = new Set();
+  function animateSelected(now) { if (tab !== 'factory') { moving = new Set(); return; } const next = new Set();
+    for (const id of selIds()) { const o = objs.get(id)?.obj; if (o && o.userData.rig) { next.add(o); const c = o.userData.cycle || 6; L.poseModel(o, (now / 1000 % c) / c); } }
+    for (const o of moving) if (!next.has(o)) L.poseModel(o, 0); moving = next; }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
-    stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
+    animateSelected(now); stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 
   // first visit: a small example in each document so the screens are not empty
@@ -1041,6 +1054,11 @@
   }
   // the default factory is the partner plant line (js/plant-machines.js), shown once to every browser; a factory made
   // before it is kept under one.build.factory.before-plant
+  if (window.OnePlant && !LS.get(KEY.factory + '.plant2', false)) {
+    // .plant2: the example with its cells split into objects; a factory that is still the earlier example is simply replaced
+    const ex = ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(ED.factory.doc.meta.name); LS.set(KEY.factory + '.plant2', true);
+    if (ex) LS.set(KEY.factory + '.plant', false);
+  }
   if (window.OnePlant && !LS.get(KEY.factory + '.plant', false)) {
     if (ED.factory.doc.building.walls.length || ED.factory.doc.machines.length) LS.set(KEY.factory + '.before-plant', ED.factory.doc);
     LS.set(KEY.factory + '.plant', true); LS.set(KEY.factory + '.seeded', true); openDoc('factory', window.OnePlant.defaultFactory());

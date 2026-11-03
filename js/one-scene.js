@@ -35,9 +35,18 @@
     if (it.path === 'building.roofs') { const r = slabRect(doc), w = (x.params.w || r.x1 - r.x0) / 1000, d = (x.params.d || r.y1 - r.y0) / 1000; const o = L.special.roof(x.params, w, d, (x.params.eave || lvH * 1000) / 1000); placeObj(o, x.transform.position, x.transform.rotation[2]); o.userData.roof = true; return o; }
     if (it.path === 'building.columns') { const o = L.special.column({ size: x.size[0], h: x.height ? x.height / 1000 : lvH }); placeObj(o, x.transform.position); return o; }
     if (it.path === 'markings') { const o = L.special.marking(x.kind, x.params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
-    if (it.local) { const o = buildLocalMachine(it.local); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
+    if (it.local) { const o = x.params?.exploded ? cellOutline(it.local) : buildLocalMachine(it.local); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
     const params = Object.assign({}, x.params, it.path === 'storage' || it.path === 'movers' ? {} : {});
     const o = L.buildFactory(it.def, params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o;
+  }
+  // a cell split into its objects (params.exploded): the objects are factory blocks of their own; the cell keeps its card,
+  // ports and flows and shows only its footprint on the floor
+  function cellOutline({ id, v }) {
+    const m = opt.lib()[id], doc = m && (m.versions[v] || m.versions[Object.keys(m.versions).pop()]), g = new T.Group(), [W, D] = doc ? doc.meta.bbox : [2000, 2000];
+    const w = W / 1000 + 0.4, d = D / 1000 + 0.4, pl = new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.05, depthWrite: false }));
+    pl.position.y = 0.004; g.add(pl);
+    const e = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), new T.LineBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.6 })); e.position.y = 0.005; g.add(e);
+    g.userData.cell = true; return g;
   }
   function buildLocalMachine({ id, v }) {
     const m = opt.lib()[id], doc = m && (m.versions[v] || m.versions[Object.keys(m.versions).pop()]), g = new T.Group();

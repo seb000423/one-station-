@@ -49,10 +49,24 @@
     e.exec('add_marking', { kind: 'aisle', polyline: [[1000, 14000], [63000, 14000]], params: { variant: 'aisle', length: 62000, width: 3000 } });
     const at = { 'plant-inspection': [11000, 20500], 'plant-assembly': [31000, 20500], 'plant-paste': [52000, 20500], 'plant-brazing': [44000, 6500] };
     const order = STATIONS.map(st => e.exec('place_machine', { ref: `local:${st.id}@1`, name: st.name, position: at[st.id] }));
+    for (const id of order) explode(e, id);
     for (let i = 0; i + 1 < order.length; i++) e.exec('connect_flow', { from: `${order[i]}.outlet`, to: `${order[i + 1]}.inlet` });
     e.exec('add_mover', { kind: 'forklift', position: [10000, 6000] }); e.exec('add_mover', { kind: 'worker', position: [24000, 14000] });
     e.exec('add_storage', { kind: 'rack', position: [6000, 6000], params: { variant: 'pallet', bays: 2, levels: 3 } });
     return e.doc;
   }
-  window.OnePlant = { STATIONS, withPlant, builtins, defaultFactory, size: src => D[src].size };
+  /** A placed cell → its objects as factory blocks of their own (모델 객체, params.cell = the cell), the cell keeps its card,
+      ports and flows (params.exploded). Works on any placed machine made of 모델 객체 blocks; returns the new block ids. */
+  function explode(e, machineId, lib = withPlant(JSON.parse(localStorage.getItem('one.build.machines') || '{}'))) {
+    const m = e.doc.machines.find(x => x.id === machineId), r = m && /^local:([^@]+)@(\d+)/.exec(m.ref); if (!r) return [];
+    const ent = lib[r[1]], doc = ent && (ent.versions[r[2]] || ent.versions[Object.keys(ent.versions).pop()]); if (!doc) return [];
+    const t = m.transform, yaw = t.rotation[2] || 0, a = yaw * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), out = [];
+    for (const n of doc.nodes) { if (n.blockType !== 'model-part') continue; const q = n.transform.position;
+      const params = Object.assign({}, n.params, { cell: machineId }); delete params.tag;
+      out.push(e.exec('add_block', { type: 'model-part', name: n.name, position: [t.position[0] + q[0] * c - q[1] * sn, t.position[1] + q[0] * sn + q[1] * c, (t.position[2] || 0) + q[2]], yaw: yaw + (n.transform.rotation[2] || 0), params })); }
+    e.exec('set_param', { id: machineId, key: 'exploded', value: true });
+    return out;
+  }
+  const splittable = doc => !!doc && doc.nodes.length > 0 && doc.nodes.every(n => n.blockType === 'model-part');
+  window.OnePlant = { STATIONS, withPlant, builtins, defaultFactory, explode, splittable, size: src => D[src].size };
 })();
