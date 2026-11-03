@@ -51,7 +51,9 @@
   for (const s of ['factory', 'machine']) ED[s].subscribe(() => { dirty[s] = true; LS.set(KEY[s], ED[s].doc); if (s === tab) refresh(); });
 
   let toastT = 0;
-  function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, err ? 4200 : 2200); }
+  function toast(msg, err, act) { const t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.hidden = false; clearTimeout(toastT);
+    if (act) { const b = document.createElement('button'); b.textContent = act.label; b.onclick = () => { t.hidden = true; act.run(); }; t.appendChild(b); }
+    toastT = setTimeout(() => { t.hidden = true; }, act ? 6000 : err ? 4200 : 2200); }
 
   /* ------------------------------------------------------------------ factory: what each placed object is */
   const SCN = window.OneScene.create({ lib: () => lib() }), { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine } = SCN;
@@ -427,14 +429,18 @@
   function endSnap(n, c, skip) { const mine = pieceEnds(n, c); if (!mine.length) return null; let best = null;
     for (const b of ED.machine.doc.nodes) { if (b.id === n.id || skip.has(b.id)) continue; const bd = nodeDef(b); if (!bd || !(bd.conveyor || bd.curve || bd.corner)) continue;
       for (const o of pieceEnds(b, b.transform.position)) for (const m of mine) { if (m.hd[0] * o.hd[0] + m.hd[1] * o.hd[1] > -0.98) continue;
-        const dx = o.pt[0] - m.pt[0], dy = o.pt[1] - m.pt[1], dist = Math.hypot(dx, dy); if (dist < 400 && (!best || dist < best.dist)) best = { dist, pos: [Math.round(c[0] + dx), Math.round(c[1] + dy)], h: bd.lift ? +(n.params.h ?? nodeDef(n).params.h) : +(Object.assign({}, bd.params, b.params).h), other: b, pt: o.pt }; } }
+        const dx = o.pt[0] - m.pt[0], dy = o.pt[1] - m.pt[1], dist = Math.hypot(dx, dy);
+        // a different width is never joined end to end (the work would catch on a rail or drop in the step): say why instead
+        if (Math.abs(m.w - o.w) > 1) { if (dist < 400 && (!snapRefused || dist < snapRefused.dist)) snapRefused = { dist, other: b, w: m.w, ow: o.w }; continue; }
+        if (dist < 400 && (!best || dist < best.dist)) best = { dist, pos: [Math.round(c[0] + dx), Math.round(c[1] + dy)], h: bd.lift ? +(n.params.h ?? nodeDef(n).params.h) : +(Object.assign({}, bd.params, b.params).h), other: b, pt: o.pt }; } }
     return best; }
-  function conveyorSnap(n, c, skip) { const e = endSnap(n, c, skip), s0 = straightSnap(n, c, skip); return !e ? s0 : !s0 ? e : e.dist <= s0.dist ? e : s0; }
+  let snapRefused = null;
+  function conveyorSnap(n, c, skip) { snapRefused = null; const e = endSnap(n, c, skip), s0 = straightSnap(n, c, skip); return !e ? s0 : !s0 ? e : e.dist <= s0.dist ? e : s0; }
   function straightSnap(n, c, skip) { const doc = ED.machine.doc, d = nodeDef(n); if (!d || !d.conveyor || n.parent) return null;
     const pa = Object.assign({}, d.params, n.params), rA = n.transform.rotation[2] * Math.PI / 180, dA = [Math.cos(rA), Math.sin(rA)], LA = +pa.length;
     let best = null;
     for (const b of doc.nodes) { const bd = nodeDef(b); if (b.id === n.id || !bd || !bd.conveyor || b.parent || skip.has(b.id)) continue;
-      const pb = Object.assign({}, bd.params, b.params), rB = b.transform.rotation[2] * Math.PI / 180, dB = [Math.cos(rB), Math.sin(rB)], q = b.transform.position, LB = +pb.length, wB = +pb.w;
+      const pb = Object.assign({}, bd.params, b.params), rB = b.transform.rotation[2] * Math.PI / 180, dB = [Math.cos(rB), Math.sin(rB)], q = b.transform.position, LB = +pb.length, wB = +pb.w; if (Math.abs(wB - +pa.w) > 1) continue;
       const out = [q[0] + dB[0] * LB / 2, q[1] + dB[1] * LB / 2], inn = [q[0] - dB[0] * LB / 2, q[1] - dB[1] * LB / 2], diff = ((n.transform.rotation[2] - b.transform.rotation[2]) % 360 + 360) % 360, cands = [];
       if (diff < 1 || diff > 359) cands.push([out[0] + dA[0] * LA / 2, out[1] + dA[1] * LA / 2, out], [inn[0] - dA[0] * LA / 2, inn[1] - dA[1] * LA / 2, inn]);
       else if (Math.abs(diff - 90) < 1 || Math.abs(diff - 270) < 1) { const ai = [out[0] - dB[0] * wB / 2 + dA[0] * wB / 2, out[1] - dB[1] * wB / 2 + dA[1] * wB / 2], ao = [inn[0] + dB[0] * wB / 2 - dA[0] * wB / 2, inn[1] + dB[1] * wB / 2 - dA[1] * wB / 2];
@@ -451,7 +457,9 @@
         for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); }
         if (ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]), p = n.transform.position, sn = conveyorSnap(n, p, new Set());
           if (sn) { moveNode(n.id, [sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); const hk = nodeDef(n).heightKey; if (+(n.params[hk] ?? nodeDef(n).params[hk]) !== sn.h) setParamKeepKids(n.id, hk, sn.h);
-            setTimeout(() => toast(`${nodeCode(n)}을(를) ${nodeCode(sn.other)}에 붙였습니다 · 높이 ${sn.h} mm`), 0); } }
+            setTimeout(() => toast(`${nodeCode(n)}을(를) ${nodeCode(sn.other)}에 붙였습니다 · 높이 ${sn.h} mm`), 0); }
+          else if (snapRefused) { const r = snapRefused, id = n.id; setTimeout(() => toast(`폭이 달라 ${nodeCode(r.other)}에 붙이지 않았습니다 (${r.w} / ${r.ow} mm)`, true,
+            { label: `폭 맞추기 (→ ${r.ow})`, run: () => { setParamKeepKids(id, 'w', r.ow); select(id); moveSelBy([0, 0, 0]); refresh(); } }), 0); } }
         settle(ids); } }); showSnap(null); }
   function moveNode(id, by) { by = by.slice(); const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return; const p = n.transform.position;
     if (p[2] + by[2] < 0) by[2] = -p[2]; if (!by[0] && !by[1] && !by[2]) return;
@@ -484,6 +492,50 @@
     const meets = (a, b) => Math.abs(H(a) - H(b)) < 5 && (ends(a).some(p => over(p, b)) || ends(b).some(p => over(p, a)));
     const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
     return out; }
+  /* 설계 검사 (design check): what a real line would not run with. Joints = two open ends facing each other within 60 mm.
+     Width or height that differ at a joint, a gap, a work wider than the conveyor or too short for the rollers, a work that
+     cannot pass a curve, works lying on each other. Each issue names its objects, a point to mark and, where it is clear, a fix. */
+  const ROLLER_PITCH = 100, RAIL = 20;
+  function designIssues(doc) { const out = [], cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.curve || nodeDef(n)?.corner)), P = n => Object.assign({}, nodeDef(n).params, n.params);
+    const ends = cv.map(n => pieceEnds(n, n.transform.position).map(e => Object.assign(e, { n })));
+    for (let i = 0; i < cv.length; i++) for (let j = i + 1; j < cv.length; j++) for (const a of ends[i]) for (const b of ends[j]) {
+      if (a.hd[0] * b.hd[0] + a.hd[1] * b.hd[1] > -0.98) continue; const gx = b.pt[0] - a.pt[0], gy = b.pt[1] - a.pt[1], gap = Math.hypot(gx, gy); if (gap >= 60) continue;
+      const A = a.n, B = b.n, at = [(a.pt[0] + b.pt[0]) / 2, (a.pt[1] + b.pt[1]) / 2, Math.max(a.top, b.top)], ca = nodeCode(A), cb = nodeCode(B);
+      if (Math.abs(a.w - b.w) > 1) out.push({ lv: 'err', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 폭이 다릅니다 (${a.w} / ${b.w} mm) · 워크가 레일에 걸립니다`,
+        fix: { label: `폭 맞추기 (${cb} → ${a.w})`, run: () => setParamKeepKids(B.id, 'w', a.w) } });
+      const lift = nodeDef(A).lift ? A : nodeDef(B).lift ? B : null, dt = b.top - a.top;
+      if (Math.abs(dt) > 5 && !(lift && Math.abs(Math.abs(dt) - +P(lift).stroke) <= 5)) { const hk = nodeDef(B).heightKey;
+        out.push({ lv: 'err', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 반송 높이가 ${Math.abs(Math.round(dt))} mm 다릅니다 · 이음에 턱이 생깁니다`,
+          fix: hk && !lift ? { label: `높이 맞추기 (${cb} → ${Math.round(+P(B)[hk] - dt)})`, run: () => setParamKeepKids(B.id, hk, Math.round(+P(B)[hk] - dt)) } : null }); }
+      if (gap > 10) out.push({ lv: 'warn', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 이음 틈 ${Math.round(gap)} mm · 작은 워크가 빠질 수 있습니다`,
+        fix: { label: '틈 붙이기', run: () => moveNode(B.id, [-Math.round(gx), -Math.round(gy), 0]) } }); }
+    // works: across = the side facing the rails, along = the length the rollers carry
+    const works = doc.nodes.filter(n => nodeDef(n)?.work), dims = w => { const p = P(w), base = doc.nodes.find(x => x.id === w.parent), th = ((w.transform.rotation[2] - (base ? base.transform.rotation[2] : 0)) * Math.PI) / 180, c = Math.abs(Math.cos(th)), s = Math.abs(Math.sin(th));
+      return { along: +p.w * c + +p.d * s, across: +p.w * s + +p.d * c, base }; };
+    for (const w of works) { const { along, across, base } = dims(w), bd = base && nodeDef(base), c = nodeCode(w) || w.name, at = [...w.transform.position];
+      if (!bd || !(bd.conveyor || bd.curve || bd.corner)) continue; const W = +P(base).w;
+      if (across > W - RAIL) out.push({ lv: 'err', ids: [w.id, base.id], at, txt: `${c} 폭 ${Math.round(across)} mm가 ${nodeCode(base)} 레일 사이 ${W - RAIL} mm에 안 들어갑니다 (컨베이어 폭 ${W} − 레일 ${RAIL})`, fix: null });
+      const roller = (base.blockType || "").includes('roller') || bd.lift;
+      if (roller && along < ROLLER_PITCH * 3) out.push({ lv: 'warn', ids: [w.id], at, txt: `${c} 길이 ${Math.round(along)} mm · 롤러 ${Math.max(1, Math.floor(along / ROLLER_PITCH))}개에만 얹혀 흔들립니다 (3개 이상 = ${ROLLER_PITCH * 3} mm)`, fix: null }); }
+    // curves: the work's outer corner swings out, sqrt((R+a/2)^2 + (L/2)^2) - (R - a/2) must fit between the rails
+    for (const n of cv.filter(n => nodeDef(n).curve)) { const p = P(n), R = +p.r, W = +p.w;
+      for (const w of works) { const { along, across } = dims(w), need = Math.hypot(R + across / 2, along / 2) - (R - across / 2);
+        if (need > W - RAIL) { const k = W - RAIL - across / 2, rMin = 2 * k > across ? Math.ceil((across * across / 4 + along * along / 4 - k * k) / (2 * k - across) / 50) * 50 : 0, g = L.curveGeom(n), m = g.point(0.5); out.push({ lv: 'warn', ids: [n.id, w.id], at: [m[0], m[1], n.transform.position[2] + +p.h], txt: `${nodeCode(w) || w.name}이(가) ${nodeCode(n)} 커브(R ${R})를 돌 때 모서리가 ${Math.round(need)} mm를 쓰는데 레일 사이는 ${W - RAIL} mm입니다 · ` + (rMin ? `반경을 R ${rMin} 이상으로 키우거나 워크를 줄이세요` : '이 폭의 라인으로는 돌 수 없습니다 · 워크를 줄이세요'), fix: null }); break; } } }
+    // works lying on each other (same base, footprints overlap)
+    for (let i = 0; i < works.length; i++) for (let j = i + 1; j < works.length; j++) { const a = works[i], b = works[j]; if ((a.parent || null) !== (b.parent || null)) continue;
+      const fp = w => { const p = P(w), r = w.transform.rotation[2] * Math.PI / 180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r)); return [(+p.w * c + +p.d * s) / 2, (+p.w * s + +p.d * c) / 2]; }, ea = fp(a), eb = fp(b), pa = a.transform.position, pb = b.transform.position;
+      if (Math.abs(pa[0] - pb[0]) < ea[0] + eb[0] - 1 && Math.abs(pa[1] - pb[1]) < ea[1] + eb[1] - 1 && Math.abs(pa[2] - pb[2]) < 1) out.push({ lv: 'err', ids: [a.id, b.id], at: [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, pa[2]], txt: `${nodeCode(a) || a.name} · ${nodeCode(b) || b.name} 워크가 서로 겹쳐 있습니다`, fix: null }); }
+    return out; }
+  const chkG = new T.Group(); ov.add(chkG); let issues = [];
+  const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
+  function updateCheck() { const on = tab === 'machine' && mode !== 'run'; issues = on ? designIssues(ED.machine.doc) : []; chkG.clear();
+    for (const it of issues) { const m = new T.Mesh(chkGeo, chkMat[it.lv]), p = toS(it.at); m.position.set(p.x, p.y + 0.015, p.z); m.renderOrder = 10; chkG.add(m); }
+    const b = $('chkChip'), ne = issues.filter(i => i.lv === 'err').length; b.hidden = !on; b.textContent = issues.length ? `설계 검사 ⚠ ${issues.length}` : '설계 검사 ✓'; b.classList.toggle('bad', ne > 0); b.classList.toggle('warn', !ne && issues.length > 0);
+    if (!$('chkList').hidden) drawCheck(); }
+  function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침을 봤습니다</p>'; }
+  $('chkChip').onclick = () => { const on = $('chkList').hidden; $('chkList').hidden = !on; if (on) { $('objList').hidden = true; drawCheck(); } };
+  $('chkRows').onclick = e => { const f = e.target.closest('[data-cf]'); if (f) { const it = issues[+f.dataset.cf]; if (it?.fix) { ed().batch('design fix', () => it.fix.run()); refresh(); toast(`고쳤습니다 · ${it.fix.label}`); } return; }
+    const r = e.target.closest('[data-ci]'); if (!r) return; const it = issues[+r.dataset.ci]; if (!it) return; select(it.ids[0], true); if (it.ids.length > 1) { multi = new Set(it.ids); drawTree(); updateSelMark(); } };
   function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => { const d = nodeDef(doc.nodes.find(n => n.id === id)); return d?.conveyor || d?.corner || d?.curve; }))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
     if (ids.length > picked.length) msg = `이어진 컨베이어 ${ids.length - picked.length}개도 같은 높이로 같이 움직였습니다`;
     ed().batch('height', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!n || (n.parent && set.has(n.parent))) continue;
@@ -800,7 +852,7 @@
       for (const n of ED.machine.doc.nodes) { const d = nodeDef(n), o = objs.get(n.id)?.obj; if (!d || !o || runState(n) || d.cat !== 'structure') continue;
         o.traverse(x => { if (x.isMesh) { x.material = x.material.clone(); x.material.transparent = true; x.material.opacity = 0.18; x.material.depthWrite = false; } }); } }
     else { for (const v of objs.values()) root.remove(v.obj); objs = new Map(); syncScene(); }
-    portGrp.visible = m !== 'run'; $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); drawSeq(); updateHint();
+    portGrp.visible = m !== 'run'; $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); drawSeq(); updateHint(); updateCheck(); if (m === 'run') $('chkList').hidden = true;
   }
   $('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 
@@ -847,7 +899,7 @@
       html += `<button data-oid="${r.id}" class="${sels.has(r.id) ? 'on' : ''}" style="padding-left:${10 + r.d * 14}px"><b>${esc(r.code)}</b>${esc(r.name)}</button>`; }
     $('olList').innerHTML = html || '<p>찾는 객체가 없습니다</p>'; }
   function toggleObjList(on = $('objList').hidden) { $('objList').hidden = !on; if (on) { $('olQ').value = ''; drawObjList(); setTimeout(() => $('olQ').focus(), 0); } }
-  $('olBtn').onclick = () => toggleObjList();
+  $('olBtn').onclick = () => { $('chkList').hidden = true; toggleObjList(); };
   // 설비 원점 (machine origin, floor centre, X = 투입 → 배출): the point the machine is placed by in the factory; hidden unless asked for
   const originChip = () => { $('originChip').classList.toggle('on', showOrigin); $('originChip').hidden = tab !== 'machine'; };
   $('originChip').onclick = () => { showOrigin = !showOrigin; LS.set('one.build.origin', showOrigin); if (originMark) originMark.visible = showOrigin; originChip(); };
@@ -1084,7 +1136,7 @@
     if (tab !== 'machine' || !originMark || !showOrigin || xray || mode === 'run') originLbl.style.display = 'none';
     else { const v = originMark.position.clone().project(camera); originLbl.style.display = ''; originLbl.style.left = ((v.x + 1) / 2 * r.width + 10) + 'px'; originLbl.style.top = ((1 - v.y) / 2 * r.height + 12) + 'px'; } for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
-  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
+  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); updateCheck(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
     tab = t; LS.set(KEY.tab, t); originChip(); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
