@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ONE BUILD · 공장 · 설비</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* ONE BUILD: the factory builder and the machine builder on one page. Dark stage, ivory text, one amber accent. */
+:root{
+  --bg:#0f1012; --panel:#15161a; --panel2:#1c1d22; --line:#2a2c31; --line2:#3a3c42; --fg:#e9e3d5; --mute:#9a968c; --dim:#67645e;
+  --amber:#ffae42; --amber-ink:#241500; --ok:#3ddc84; --bad:#ff4d4f;
+  --sans:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden;word-break:keep-all}
+button,select,input{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-rows:52px 46px minmax(0,1fr) auto}
+header{display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line)}
+.home{color:var(--mute);text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:12px}
+.home:hover{color:var(--fg);border-color:var(--line2)}
+.logo{font-family:var(--mono);font-weight:600;letter-spacing:.32em;font-size:14px}
+.logo em{font-style:normal;color:var(--amber)}
+.tabs{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px}
+.tabs button{background:none;border:0;border-radius:4px;padding:5px 16px;cursor:pointer;color:var(--mute);font-weight:500}
+.tabs button.on{background:var(--fg);color:#111}
+.crumb{color:var(--mute);display:flex;gap:8px;align-items:center;min-width:0;white-space:nowrap;overflow:hidden}
+.crumb b{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.crumb .pill{font-family:var(--mono);font-size:11px;border:1px solid var(--line2);border-radius:3px;padding:1px 6px;color:var(--fg)}
+.crumb .ver{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+.sp{flex:1}
+.seg{display:flex;border:1px solid var(--line2);border-radius:5px;overflow:hidden}
+.seg button{background:none;border:0;padding:6px 14px;cursor:pointer;color:var(--mute)}
+.seg button.on{background:var(--fg);color:#111;font-weight:600}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:5px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--mute)}
+.btn.pri{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);font-weight:600}
+.btn:disabled{opacity:.4;cursor:default}
+.bar{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);min-width:0;overflow:hidden}
+.bar .lab{color:var(--mute);white-space:nowrap}
+.bar input.n{width:70px;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:12px;text-align:right}
+.bar .x{color:var(--dim)}
+.bar .hint{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bar .units{font-family:var(--mono);font-size:11.5px;color:var(--dim);white-space:nowrap}
+.sep{width:1px;height:22px;background:var(--line)}
+main{display:grid;grid-template-columns:290px minmax(0,1fr) 310px;min-height:0}
+aside{background:var(--panel);min-height:0;overflow-y:auto}
+aside.l{border-right:1px solid var(--line)}
+aside.r{border-left:1px solid var(--line)}
+.sec{padding:12px 14px;border-bottom:1px solid var(--line)}
+h2{margin:0 0 8px;font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
+h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
+.search{width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:6px 8px;margin-bottom:8px}
+.cat{border-top:1px solid var(--line)}
+.cat:first-of-type{border-top:0}
+.cat>button{width:100%;display:flex;justify-content:space-between;align-items:center;background:none;border:0;padding:7px 2px;cursor:pointer;text-align:left}
+.cat>button span{font-weight:500}
+.cat>button small{font-family:var(--mono);color:var(--dim)}
+.cat>button::after{content:"▸";color:var(--dim);margin-left:6px;font-size:10px}
+.cat.open>button::after{content:"▾"}
+.items{display:none;grid-template-columns:1fr 1fr;gap:6px;padding:2px 0 10px}
+.cat.open .items{display:grid}
+.item{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 8px 8px;cursor:pointer;text-align:left;display:grid;gap:2px;min-height:58px;align-content:start}
+.item:hover{border-color:var(--amber)}
+.item .code{font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.06em;display:flex;justify-content:space-between}
+.item .code i{font-style:normal;color:var(--amber)}
+.item b{font-weight:500;font-size:12px;line-height:1.3}
+.tree{display:grid;gap:1px;font-size:12.5px}
+.tree div{display:flex;gap:6px;align-items:center;padding:4px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;overflow:hidden}
+.tree div:hover{background:var(--panel2)}
+.tree div.on{background:rgba(255,174,66,.14);color:var(--amber)}
+.tree div code{font-family:var(--mono);font-size:11px;color:var(--mute);min-width:34px}
+.tree div span{overflow:hidden;text-overflow:ellipsis}
+.tree .grp{color:var(--dim);font-size:11px;cursor:default;padding-top:8px}
+.tree .grp:hover{background:none}
+.view{position:relative;min-width:0;min-height:0;overflow:hidden}
+#c{display:block;width:100%;height:100%;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lbl{position:absolute;transform:translate(-50%,-100%);font-size:11.5px;padding:3px 7px;border:1px solid var(--line2);border-radius:3px;background:rgba(15,16,18,.86);white-space:nowrap}
+.lbl b{font-family:var(--mono);font-weight:600;margin-right:5px}
+.lbl.on{border-color:var(--amber);color:var(--amber)}
+.chips{position:absolute;top:12px;right:12px;display:grid;gap:6px;justify-items:end;pointer-events:none}
+.chips div{font-size:12px;border:1px solid var(--line2);background:rgba(15,16,18,.86);border-radius:3px;padding:4px 9px;color:var(--mute)}
+.chips div b{color:var(--fg);font-weight:500}
+.views{position:absolute;top:12px;left:12px;display:flex;gap:4px}
+.chip{background:rgba(15,16,18,.86);border:1px solid var(--line2);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer}
+.chip:hover{border-color:var(--mute)}
+.chip.on{background:var(--fg);color:#111}
+.toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:rgba(15,16,18,.92);border:1px solid var(--line2);border-radius:5px;padding:7px 12px;font-size:12.5px;transition:opacity .3s}
+.toast.err{border-color:var(--bad);color:#ffb3b3}
+.props{display:grid;grid-template-columns:96px 1fr;gap:7px 10px;align-items:center;font-size:12.5px}
+.props .k{color:var(--mute)}
+.props .v{font-family:var(--mono);font-size:12px}
+.props input,.props select{width:100%;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:5px 7px}
+.props input[type=number]{font-family:var(--mono);font-size:12px;text-align:right}
+.unit{display:flex;gap:6px;align-items:center}.unit small{color:var(--dim);font-family:var(--mono);font-size:11px;min-width:30px}
+.howto{color:var(--mute);line-height:1.65;font-size:12.5px;margin:0;padding-left:16px}
+.howto b{color:var(--fg);font-weight:600}
+.why{color:var(--mute);font-size:12px;line-height:1.5;margin:-2px 0 10px}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.taglist{font-family:var(--mono);font-size:11.5px;color:var(--mute);display:grid;gap:2px}
+.bottom{border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) 380px;height:240px;background:var(--panel);position:relative}
+.bottom.fold{height:34px}
+.bottom.fold .tbl,.bottom.fold .logb{display:none}
+.bhead{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.bhead h3{margin:0;font-size:12.5px;font-weight:600}.bhead small{color:var(--dim)}
+.tbl{overflow-y:auto;height:calc(100% - 35px)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{position:sticky;top:0;background:var(--panel);text-align:left;font-weight:500;color:var(--mute);padding:6px 14px;border-bottom:1px solid var(--line)}
+td{padding:5px 14px;border-bottom:1px solid #1d1e22;font-family:var(--mono);white-space:nowrap}
+td.val{cursor:default}
+td.val.click{cursor:pointer;color:var(--amber)}
+td.val.on{color:var(--ok)}
+tr.hl td{background:rgba(255,174,66,.07)}
+.logb{border-left:1px solid var(--line);min-width:0}
+.logb .lg{font-family:var(--mono);font-size:11.5px;color:var(--mute);padding:8px 14px;overflow-y:auto;height:calc(100% - 35px);display:grid;align-content:start;gap:2px}
+.logb .lg b{color:var(--fg);font-weight:400}
+.fold-btn{margin-left:auto}
+@media (max-width:1100px){main{grid-template-columns:240px minmax(0,1fr) 260px}.bottom{grid-template-columns:1fr}.logb{display:none}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <a class="home" href="/">← ONE</a>
+    <span class="logo">ONE <em>BUILD</em></span>
+    <div class="tabs" id="tabs"><button data-t="factory" class="on">공장</button><button data-t="machine">설비</button></div>
+    <div class="crumb" id="crumb"></div>
+    <span class="sp"></span>
+    <div class="seg" id="mode" hidden><button data-m="edit" class="on">편집</button><button data-m="run">실행</button></div>
+    <button class="btn" id="bOpen" title="JSON 파일 불러오기">불러오기</button>
+    <button class="btn" id="bExport" title="JSON 파일로 내보내기">내보내기</button>
+    <button class="btn pri" id="bSave">저장</button>
+  </header>
+  <div class="bar" id="bar">
+    <button class="btn" id="bUndo" title="되돌리기 (Ctrl+Z)">↶ 실행 취소</button>
+    <button class="btn" id="bRedo" title="다시 실행 (Ctrl+Y)">↷ 다시 실행</button>
+    <span class="sep"></span>
+    <span class="lab" id="sizeLab">공장 크기</span>
+    <input class="n" id="sW" type="number"><span class="x">×</span><input class="n" id="sD" type="number"><span class="x" id="sHx">×</span><input class="n" id="sH" type="number">
+    <span class="lab" id="sizeUnit">m</span>
+    <span class="sep"></span>
+    <span class="hint" id="hint"></span>
+    <span class="sp"></span>
+    <span class="units" id="units"></span>
+  </div>
+  <main>
+    <aside class="l">
+      <div class="sec"><h2 id="palTitle">블록 팔레트 <small>누르면 놓임</small></h2><input class="search" id="search" placeholder="이름으로 찾기"><div id="pal"></div></div>
+      <div class="sec"><h2>놓인 것 <small id="treeN">0</small></h2><div class="tree" id="tree"></div></div>
+    </aside>
+    <div class="view">
+      <canvas id="c"></canvas>
+      <div id="labels"></div>
+      <div class="views" id="views"><button class="chip" data-v="fit">전체 보기</button><button class="chip" data-v="sel">선택 보기</button></div>
+      <div class="chips"><div id="chipCount"></div><div id="chipOrigin"></div></div>
+      <div class="toast" id="toast" hidden></div>
+    </div>
+    <aside class="r"><div id="props"></div></aside>
+  </main>
+  <div class="bottom" id="bottom" hidden>
+    <div>
+      <div class="bhead"><h3>신호 표</h3><small id="ioN"></small><button class="btn fold-btn" id="bFold">▾ 접기</button></div>
+      <div class="tbl"><table><thead><tr><th>태그</th><th>방향</th><th>형식</th><th>연결</th><th>값</th></tr></thead><tbody id="io"></tbody></table></div>
+    </div>
+    <div class="logb"><div class="bhead"><h3>수동 조작 · 명령 기록</h3></div><div class="lg" id="log"></div></div>
+  </div>
+</div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/Pass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="js/one-twin.js"></script>
+<script src="js/one-stage.js"></script>
+<script src="js/one-library.js"></script>
+<script src="js/build-app.js"></script>
+</body>
+</html>

@@ -21,6 +21,9 @@
 | `add_storage` | 랙 · 바닥 보관 · 버퍼 | `kind`, `position`, `yaw?`, `capacity?`, `params?`, `name?` |
 | `add_drop` | 유틸리티 드롭 (전원 · 에어 · 가스 · 물) | `kind`, `position`, `params?`, `name?` |
 | `connect_flow` | 자재 흐름: 설비 출구 → 설비 입구 ("인스턴스id.소켓id"), 분기 비율 | `from`, `to`, `ratio?` |
+| `set_meta` | 공장 이름 · 사이트 변경 | `name?`, `site?` |
+| `set_slab` | 바닥 슬래브 외곽(다각형, mm) 설정. id가 없으면 첫 슬래브, 슬래브가 없으면 새로 만듦. 반환: 슬래브 id | `id?`, `polygon`, `thickness?`, `finish?` |
+| `add_roof` | 지붕 배치 (position = 지붕 중심, params: w·d mm, eave 처마 높이, type flat|gable). 반환: 새 id | `position`, `yaw?`, `params?`, `name?` |
 | `set_reference` | 평면도 레퍼런스(DXF·이미지) 설정, null이면 제거 | `reference` |
 | `move` | 객체 이동·회전 (position mm, yaw deg). 벽은 두 끝점이 함께 이동 | `id`, `position?`, `by?`, `yaw?` |
 | `snap` | 객체 위치를 그리드에 맞춤 (기본 500 mm, 표준 v2.1) | `id`, `grid?` |
@@ -36,7 +39,11 @@
 
 | 명령 | 설명 | 인자 (?는 생략 가능) |
 |---|---|---|
-| `add_block` | 블록 배치 (blockType = 라이브러리 블록 id, mm 좌표). 반환: 새 노드 id | `blockType`, `name?`, `parent?`, `position`, `rotation?`, `params?`, `sockets?` |
+| `add_block` | 블록 배치 (blockType = 라이브러리 블록 id, mm 좌표). 반환: 새 노드 id | `blockType`, `name?`, `parent?`, `position`, `rotation?`, `params?`, `sockets?`, `joints?`, `io?` |
+| `move` | 노드 이동·회전 (position mm, 5 mm 스냅 / rotation deg) | `id`, `position?`, `rotation?` |
+| `rename` | 노드 이름 변경 | `id`, `name` |
+| `set_meta` | 설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경 | `name?`, `bbox?`, `fidelity?` |
+| `set_card` | 설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓) | `cycle_time?`, `ok_rate?`, `operators?`, `inlet?`, `outlet?` |
 | `set_param` | 블록 파라미터 변경 | `id`, `key`, `value` |
 | `add_joint` | 노드에 동작 축 추가 (vmax·amax 필수) | `id`, `node`, `type`, `axis`, `mode`, `min`, `max`, `home?`, `vmax`, `amax`, `jmax?`, `effort?`, `cushion_time?`, `verified?` |
 | `bind_tag` | 신호 태그 추가 또는 변경 (같은 tag면 덮어씀) | `tag`, `dir`, `type`, `binding?`, `default?` |
@@ -48,4 +55,4 @@
 |---|---|
 | `run_scenario` | 5단계 (시뮬 엔진) |
 | `add_socket`, `set_joint`, `add_sequence_step` | 3단계 (머신빌더) |
-| `draw_slab`, `add_level` | 4단계 (팩토리빌더) |
+| `add_level` | 4단계 (팩토리빌더) |

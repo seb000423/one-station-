@@ -134,6 +134,29 @@ export const factoryCommands = {
       const id = ctx.newId(); d.flows.push({ id, from: a.from, to: a.to, ratio: a.ratio }); return id;
     },
   }),
+  set_meta: def({
+    scope: 'factory', description: '공장 이름 · 사이트 변경',
+    args: z.object({ name: z.string().min(1).optional(), site: z.string().optional() }),
+    run: (d: Factory, a) => { if (a.name !== undefined) d.meta.name = a.name; if (a.site !== undefined) d.meta.site = a.site; },
+  }),
+  set_slab: def({
+    scope: 'factory', description: '바닥 슬래브 외곽(다각형, mm) 설정. id가 없으면 첫 슬래브, 슬래브가 없으면 새로 만듦. 반환: 슬래브 id',
+    args: z.object({ id: z.string().optional(), polygon: z.array(Vec2).min(3), thickness: z.number().nonnegative().optional(), finish: z.string().optional() }),
+    run: (d: Factory, a, ctx) => {
+      let s = a.id ? d.building.slabs.find(x => x.id === a.id) : d.building.slabs[0];
+      if (a.id && !s) throw new CommandError(`no slab ${a.id}`);
+      if (!s) { s = { id: ctx.newId(), name: '', polygon: a.polygon, thickness: 200, finish: 'epoxy' }; d.building.slabs.push(s); }
+      s.polygon = a.polygon.map(p => [roundMm(p[0]), roundMm(p[1])] as [number, number]);
+      if (a.thickness !== undefined) s.thickness = a.thickness;
+      if (a.finish !== undefined) s.finish = a.finish;
+      return s.id;
+    },
+  }),
+  add_roof: def({
+    scope: 'factory', description: '지붕 배치 (position = 지붕 중심, params: w·d mm, eave 처마 높이, type flat|gable). 반환: 새 id',
+    args: z.object({ position: z.union([Vec2, Vec3]), yaw: Yaw.optional(), params: Params.optional(), name: z.string().optional() }),
+    run: (d: Factory, a, ctx) => { const id = ctx.newId(); d.building.roofs.push({ id, name: a.name ?? '', transform: tf(a.position, a.yaw), params: a.params ?? {} }); return id; },
+  }),
   set_reference: def({
     scope: 'factory', description: '평면도 레퍼런스(DXF·이미지) 설정, null이면 제거',
     args: z.object({ reference: z.object({ kind: z.enum(['dxf', 'image']), src: z.string(), scale: z.number().positive(), origin: Vec2, rotation: z.number().default(0) }).nullable() }),
@@ -253,14 +276,54 @@ const needNode = (m: Machine, id: string) => { const n = m.nodes.find(x => x.id 
 export const machineCommands = {
   add_block: def({
     scope: 'machine', description: '블록 배치 (blockType = 라이브러리 블록 id, mm 좌표). 반환: 새 노드 id',
-    args: z.object({ blockType: z.string(), name: z.string().optional(), parent: z.string().nullable().default(null), position: Vec3, rotation: Vec3.optional(), params: Params.optional(), sockets: z.array(Socket).optional() }),
+    args: z.object({
+      blockType: z.string(), name: z.string().optional(), parent: z.string().nullable().default(null), position: Vec3, rotation: Vec3.optional(), params: Params.optional(), sockets: z.array(Socket).optional(),
+      joints: z.array(Joint.omit({ node: true })).optional().describe('axes of this block (node = the new block)'),
+      io: z.array(Io).optional().describe('signal tags of this block'),
+    }),
     run: (m: Machine, a, ctx) => {
       if (a.parent) needNode(m, a.parent);
+      for (const j of a.joints ?? []) if (m.joints.some(x => x.id === j.id)) throw new CommandError(`joint ${j.id} exists`);
+      for (const t of a.io ?? []) if (m.io.some(x => x.tag === t.tag)) throw new CommandError(`tag ${t.tag} exists`);
       const id = ctx.newId();
       m.nodes.push({ id, type: 'block', blockType: a.blockType, name: a.name ?? '', params: a.params ?? {}, parent: a.parent,
         transform: { position: [snap(a.position[0], GRID_MACHINE_MM), snap(a.position[1], GRID_MACHINE_MM), snap(a.position[2], GRID_MACHINE_MM)], rotation: a.rotation ?? [0, 0, 0] }, sockets: a.sockets ?? [] });
+      for (const j of a.joints ?? []) { if (j.max < j.min) throw new CommandError(`joint ${j.id}: max < min`); m.joints.push({ ...j, node: id }); }
+      for (const t of a.io ?? []) {
+        if (t.binding?.kind === 'joint' && !m.joints.some(j => j.id === t.binding!.target)) throw new CommandError(`tag ${t.tag}: no joint ${t.binding.target}`);
+        m.io.push(t);
+      }
       return id;
     },
+  }),
+  move: def({
+    scope: 'machine', description: '노드 이동·회전 (position mm, 5 mm 스냅 / rotation deg)',
+    args: z.object({ id: z.string(), position: Vec3.optional(), rotation: Vec3.optional() }),
+    run: (m: Machine, a) => {
+      const n = needNode(m, a.id);
+      if (a.position) n.transform.position = [snap(a.position[0], GRID_MACHINE_MM), snap(a.position[1], GRID_MACHINE_MM), snap(a.position[2], GRID_MACHINE_MM)];
+      if (a.rotation) n.transform.rotation = [a.rotation[0], a.rotation[1], ((a.rotation[2] % 360) + 360) % 360];
+    },
+  }),
+  rename: def({
+    scope: 'machine', description: '노드 이름 변경',
+    args: z.object({ id: z.string(), name: z.string() }),
+    run: (m: Machine, a) => { needNode(m, a.id).name = a.name; },
+  }),
+  set_meta: def({
+    scope: 'machine', description: '설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경',
+    args: z.object({ name: z.string().min(1).optional(), bbox: Vec3.optional(), fidelity: z.enum(['L1', 'L2', 'L3']).optional() }),
+    run: (m: Machine, a) => {
+      if (a.bbox && a.bbox.some(v => v <= 0)) throw new CommandError('bbox values must be > 0');
+      if (a.name !== undefined) m.meta.name = a.name;
+      if (a.bbox) m.meta.bbox = a.bbox;
+      if (a.fidelity) m.meta.fidelity = a.fidelity;
+    },
+  }),
+  set_card: def({
+    scope: 'machine', description: '설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓)',
+    args: z.object({ cycle_time: z.number().nonnegative().nullable(), ok_rate: z.number().min(0).max(1).nullable(), operators: z.number().nonnegative(), inlet: z.string().nullable(), outlet: z.string().nullable() }).partial(),
+    run: (m: Machine, a) => { Object.assign(m.card, a); },
   }),
   set_param: def({
     scope: 'machine', description: '블록 파라미터 변경',

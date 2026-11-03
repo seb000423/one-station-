@@ -31,7 +31,7 @@ for (const scope of ['factory', 'machine'] as const) {
   for (const c of cat.filter(c => c.scope === scope)) md += `| \`${c.name}\` | ${c.description} | ${argList(c.args)} |\n`;
   md += '\n';
 }
-md += '## 이후 단계에서 추가\n\n| 명령 | 단계 |\n|---|---|\n| `run_scenario` | 5단계 (시뮬 엔진) |\n| `add_socket`, `set_joint`, `add_sequence_step` | 3단계 (머신빌더) |\n| `draw_slab`, `add_level` | 4단계 (팩토리빌더) |\n';
+md += '## 이후 단계에서 추가\n\n| 명령 | 단계 |\n|---|---|\n| `run_scenario` | 5단계 (시뮬 엔진) |\n| `add_socket`, `set_joint`, `add_sequence_step` | 3단계 (머신빌더) |\n| `add_level` | 4단계 (팩토리빌더) |\n';
 out('docs/one-twin/edit-api.md', md);
 
 const example = JSON.parse(readFileSync(new URL('assets/layouts/egr-module-asset.json', root), 'utf8')) as LegacyDoc;

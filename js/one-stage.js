@@ -45,7 +45,7 @@
     const overlay = new T.Group(); scene.add(overlay);  // helpers that are not mirrored
 
     const hemi = new T.HemisphereLight(0xfff4e2, 0x0b0b0c, 0.3);
-    const key = new T.DirectionalLight(0xfff5e8, 1.5);  // ivory key, the only shadow caster
+    const key = new T.DirectionalLight(0xfff5e8, 1.2);  // ivory key, the only shadow caster
     key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
     const rim = new T.DirectionalLight(0xc9d3e0, 0.5);
     scene.add(hemi, key, key.target, rim, rim.target);
@@ -73,12 +73,12 @@
     const shadowMesh = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new T.ShadowMaterial({ color: 0, opacity: 0.5, depthWrite: false }));
     shadowMesh.position.y = 0.001; shadowMesh.receiveShadow = true; shadowMesh.renderOrder = -1;
     const gridMat = new T.ShaderMaterial({
-      uniforms: { ...fu, uLine: { value: new T.Color(PAL.line) } }, transparent: true, depthWrite: false,
+      uniforms: { ...fu, uLine: { value: new T.Color(PAL.line) }, uS1: { value: 0.5 }, uS2: { value: 2.0 } }, transparent: true, depthWrite: false,
       extensions: { derivatives: true },
       vertexShader: vtx,
-      fragmentShader: `${fade} uniform vec3 uLine; varying vec2 vP;
+      fragmentShader: `${fade} uniform vec3 uLine; uniform float uS1; uniform float uS2; varying vec2 vP;
         float grid(vec2 p, float s, float w){ vec2 g = abs(fract(p / s - 0.5) - 0.5) / (fwidth(p / s) * w); return 1.0 - min(min(g.x, g.y), 1.0); }
-        void main(){ float a = grid(vP, 0.5, 1.0) * 0.024 + grid(vP, 2.0, 1.2) * 0.055; a *= 1.0 - edgeFade(vP); if (a < 0.002) discard; gl_FragColor = vec4(uLine, a); }`,
+        void main(){ float a = grid(vP, uS1, 1.0) * 0.024 + grid(vP, uS2, 1.2) * 0.055; a *= 1.0 - edgeFade(vP); if (a < 0.002) discard; gl_FragColor = vec4(uLine, a); }`,
     });
     const gridMesh = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), gridMat); gridMesh.position.y = 0.002;
     floor.add(floorMesh, shadowMesh, gridMesh);
@@ -188,9 +188,10 @@
     let last = performance.now();
     const render = () => { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; stepGhost(dt); controls.update(); composer.render(); };
     const setDir = v => { dir.copy(v).normalize(); };
+    const setGrid = (minor, major) => { gridMat.uniforms.uS1.value = minor; gridMat.uniforms.uS2.value = major; };
 
     window.addEventListener('resize', resize); resize();
-    return { renderer, scene, world, overlay, camera, controls, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, studio, addTwin, ghost, ring,
+    return { renderer, scene, world, overlay, camera, controls, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, setGrid, floor, studio, addTwin, ghost, ring,
       get ghosting() { return ghostT > 0.5; } };
   }
 

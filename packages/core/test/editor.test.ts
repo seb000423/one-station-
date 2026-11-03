@@ -127,6 +127,55 @@ describe('machine edit API', () => {
   });
 });
 
+describe('machine builder commands', () => {
+  const blankM = () => new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: '컨베이어 스테이션', bbox: [4000, 1200, 1800] } } as never, { newId: ids() });
+  it('add_block brings its axes and tags in one undo step', () => {
+    const e = blankM();
+    const cv = e.exec('add_block', { blockType: 'roller-conveyor', name: '롤러 컨베이어 1', position: [0, 0, 0],
+      joints: [{ id: 'CV1_BELT', type: 'lin', axis: [1, 0, 0], mode: 'continuous', min: 0, max: 3000, vmax: 300, amax: 1000 }],
+      io: [{ tag: 'CV1_RUN', dir: 'out', type: 'bool', binding: { kind: 'joint', target: 'CV1_BELT' } }, { tag: 'CV1_SPEED', dir: 'out', type: 'real' }] }) as string;
+    expect(e.doc.joints[0]!.node).toBe(cv);
+    expect(e.doc.io.map(t => t.tag)).toEqual(['CV1_RUN', 'CV1_SPEED']);
+    e.undo();
+    expect(e.doc.nodes).toEqual([]); expect(e.doc.joints).toEqual([]); expect(e.doc.io).toEqual([]);
+    e.redo();
+    expect(() => e.exec('add_block', { blockType: 'x', position: [0, 0, 0], io: [{ tag: 'CV1_RUN', dir: 'out', type: 'bool' }] })).toThrow(/exists/);
+    expect(() => e.exec('add_block', { blockType: 'x', position: [0, 0, 0], io: [{ tag: 'Q_RUN', dir: 'out', type: 'bool', binding: { kind: 'joint', target: 'nope' } }] })).toThrow(/no joint/);
+    expect(e.doc.nodes).toHaveLength(1);
+  });
+  it('move snaps to 5 mm, rename, set_meta, set_card', () => {
+    const e = blankM();
+    const n = e.exec('add_block', { blockType: 'cylinder', position: [0, 0, 0] }) as string;
+    e.exec('move', { id: n, position: [1002, -498, 801], rotation: [0, 0, -90] });
+    expect(e.doc.nodes[0]!.transform).toEqual({ position: [1000, -500, 800], rotation: [0, 0, 270] });
+    e.exec('rename', { id: n, name: '실린더 1' });
+    e.exec('set_meta', { name: '푸셔 스테이션', bbox: [3000, 1000, 1500] });
+    expect(() => e.exec('set_meta', { bbox: [0, 1, 1] })).toThrow(/> 0/);
+    e.exec('set_card', { cycle_time: 12.5, ok_rate: 0.98 });
+    expect(e.doc.card).toMatchObject({ cycle_time: 12.5, ok_rate: 0.98 });
+    expect(e.doc.meta).toMatchObject({ name: '푸셔 스테이션', bbox: [3000, 1000, 1500] });
+    e.validate();
+  });
+});
+
+describe('factory slab and roof', () => {
+  it('set_slab resizes the floor (or creates one), add_roof places a roof', () => {
+    const e = new Editor('factory', blank(), { newId: ids() });
+    e.exec('set_slab', { polygon: [[0, 0], [30000, 0], [30000, 20000], [0, 20000]] });
+    expect(e.doc.building.slabs[0]!.polygon[2]).toEqual([30000, 20000]);
+    expect(() => e.exec('set_slab', { id: 'nope', polygon: [[0, 0], [1, 0], [1, 1]] })).toThrow(/no slab/);
+    const r = e.exec('add_roof', { position: [15000, 10000], params: { w: 30000, d: 20000, type: 'gable' } }) as string;
+    expect(e.doc.building.roofs[0]!.id).toBe(r);
+    e.exec('set_meta', { name: '1공장' });
+    expect(e.doc.meta.name).toBe('1공장');
+    const empty = Factory.parse({ schema: FACTORY_SCHEMA, meta: { id: 'f', levels: [{ id: 'L1', name: '1F', height: 6000 }] }, building: {} });
+    const e2 = new Editor('factory', empty, { newId: ids() });
+    e2.exec('set_slab', { polygon: [[0, 0], [10000, 0], [10000, 8000], [0, 8000]] });
+    expect(e2.doc.building.slabs).toHaveLength(1);
+    e.validate(); e2.validate();
+  });
+});
+
 describe('command catalogue', () => {
   it('lists every command with a JSON Schema for its arguments', () => {
     const cat = commandCatalog();
