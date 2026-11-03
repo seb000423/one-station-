@@ -154,13 +154,13 @@
         + list.map(i => `<button class="item" draggable="true" data-add="${esc(i.key)}" title="${esc(i.why || i.name)}"><span class="code">${esc(i.code || '')}${i.grade ? `<i>${i.grade}차</i>` : ''}</span><b>${esc(i.name)}</b></button>`).join('') + '</div></div>';
     };
     if (tab === 'factory') {
-      $('palTitle').innerHTML = '에셋 팔레트 <small>골라서 놓을 곳 클릭 · 끌어다 놓기</small>';
+      $('palTitle').innerHTML = '에셋 팔레트';
       for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
       const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: 'Machine Builder에서 저장한 설비' }));
       sec('mine', '내 설비 (Machine Builder에서 저장)', mine.length ? mine : []);
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
-      $('palTitle').innerHTML = '블록 팔레트 <small>골라서 놓을 곳 클릭 · 끌어다 놓기</small>';
+      $('palTitle').innerHTML = '블록 팔레트';
       for (const c of L.MACHINE_CATS) sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
     }
     box.innerHTML = html;
@@ -202,14 +202,17 @@
   }
   function addLocal(id, at, yaw = 0) { const m = lib()[id]; if (!m) return; const v = Math.max(...Object.keys(m.versions).map(Number)); const [x, y] = at || viewPoint(500);
     const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: nextName(ed().doc, m.name), position: [x, y] }); if (nid && yaw) exec('move', { id: nid, yaw }, true); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
+  // a point given in a block's own frame (x along its length, y across) → stored mm
+  function localToStored(n, lx, ly, z) { const p = n.transform.position, r = n.transform.rotation[2] * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [S.snap(p[0] + lx * c - ly * s, 5), S.snap(p[1] + lx * s + ly * c, 5), z]; }
   function addBlock(id, at, onto, yaw = 0) {
     const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
     const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
     let pos, parent = null;
     if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null; }
-    else if (d.onTop && base) { const bp = base.transform.position; pos = [bp[0], bp[1], nodeTop(base)]; parent = base.id;
-      const bd = nodeDef(base); if (bd && bd.conveyor && (d.stops || d.sensor)) pos[0] = bp[0] + (base.params.length || 1000) / 2 - 150; // stopper / sensor near the outfeed end
-      if (bd && bd.conveyor && d.sensor) pos[1] = bp[1] - (base.params.w || 500) / 2 - 30; }
+    else if (d.onTop && base) { const bd = nodeDef(base), bpar = Object.assign({}, bd?.params, base.params); parent = base.id; yaw = yaw || base.transform.rotation[2];
+      // stopper / sensor near the outfeed end, a sensor on the side rail; everything follows the base's direction
+      const lx = bd && bd.conveyor && (d.stops || d.sensor) ? (bpar.length || 1000) / 2 - 150 : 0, ly = bd && bd.conveyor && d.sensor ? -((bpar.w || 500) / 2 + 30) : 0;
+      pos = localToStored(base, lx, ly, nodeTop(base)); }
     else { const xs = doc.nodes.filter(n => !n.parent).map(n => n.transform.position[0] + blockHalfX(n)); pos = [xs.length ? S.snap(Math.max(...xs) + 400, 50) : 0, 0, 0]; }
     const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent, position: pos, params, joints: d.joints(P, params), io: d.io(P, params) });
     if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true);
@@ -277,8 +280,8 @@
     if (f.type === 'select') return `<span class="k">${esc(f.label)}</span><select data-k="${esc(key)}">${f.options.map(([v, t]) => `<option value="${esc(v)}"${String(val) === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
-  const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 여기에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 여기에 <b>조작 패드</b>가 나옵니다: 화살표 이동, 회전, 높이. 방향키도 됩니다.</li><li>블록을 고르면 여기에 길이·속도 같은 숫자가 나옵니다. 고치면 3D가 바로 바뀝니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 오른쪽에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li><li><b>▶ 시뮬레이션</b>을 누르면 저장하고 이 공장을 SIMULATION에서 엽니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
     const many = selIds();
@@ -300,7 +303,7 @@
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
         html += `</div></div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
-      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">놓인 것</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div></div><div class="sec"><h2>이 화면 쓰는 법</h2>${howtoFactory}</div>`;
+      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div></div>`;
     } else {
       const n = sel && doc.nodes.find(x => x.id === sel);
       if (n) { const d = nodeDef(n) || { fields: [], params: {} }, P = nodeCode(n), p = n.transform.position;
@@ -310,12 +313,12 @@
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
-        html += `</div>${teleop(false)}`;
+        html += `</div>${attachPanel(n)}${teleop(false)}`;
       } else {
         const ct = doc.card;
         html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽 (자동)</span><span class="v">${(contentSize() || doc.meta.bbox).join(' × ')} mm</span>
           ${field(num('cycle_time', '사이클', 's', 0.5), ct.cycle_time ?? '', 'card.cycle_time')}${field(num('ok_rate', '양품률', '0~1', 0.01), ct.ok_rate ?? '', 'card.ok_rate')}${field(num('operators', '작업자', '명', 1), ct.operators, 'card.operators')}
-          <span class="k">카드</span><span class="v">사이클 ${ct.cycle_time ?? '–'} s · 양품률 ${ct.ok_rate != null ? (ct.ok_rate * 100).toFixed(1) + '%' : '–'}</span></div></div><div class="sec"><h2>이 화면 쓰는 법</h2>${howtoMachine}</div>`;
+          <span class="k">카드</span><span class="v">사이클 ${ct.cycle_time ?? '–'} s · 양품률 ${ct.ok_rate != null ? (ct.ok_rate * 100).toFixed(1) + '%' : '–'}</span></div></div>`;
       }
     }
     box.innerHTML = html;
@@ -383,6 +386,33 @@
       return; }
     if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === sel); if (!it) return; const yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw || 0); exec('move', { id: sel, yaw: norm(yaw + deg) }); }
     else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, norm(n.transform.rotation[2] + deg)] }); } }
+  /* 붙이기: what fits on / next to the selected block, placed and attached in one click */
+  const MOUNTS = ['robot-6axis', 'scara', 'cylinder', 'gripper', 'vacuum-pad', 'press-unit', 'screw-unit', 'dispenser', 'tower-lamp', 'pallet', 'tote'];
+  function attachOptions(n) { const d = nodeDef(n); if (!d) return []; const o = [];
+    if (d.conveyor) { o.push(['chain:fwd', '뒤에 컨베이어 잇기', '배출 끝에 같은 높이로 이어 붙입니다'], ['chain:back', '앞에 컨베이어 잇기', '투입 쪽에 이어 붙입니다'], ['chain:left', '끝에서 왼쪽으로 꺾기', '배출 끝에서 90° 왼쪽으로 잇습니다'], ['chain:right', '끝에서 오른쪽으로 꺾기', '배출 끝에서 90° 오른쪽으로 잇습니다'],
+      ['len:500', '길이 +500', '투입 끝은 그대로, 배출 쪽으로 늘립니다'], ['len:-500', '길이 −500', '배출 쪽을 줄입니다']);
+      for (const b of ['stopper', 'photo-sensor', 'proximity-sensor', 'pallet', 'tote', 'lifter']) o.push(['add:' + b, L.BLOCKS[b].name, b === 'lifter' ? '배출 끝 아래에 리프터를 놓습니다' : '이 컨베이어에 붙입니다']); }
+    else if (d.top(Object.assign({}, d.params, n.params)) > 0.05) for (const b of MOUNTS) if (L.BLOCKS[b]) o.push(['add:' + b, L.BLOCKS[b].name, '윗면 가운데에 붙입니다']);
+    return o; }
+  const attachPanel = n => { const o = attachOptions(n); if (!o.length) return '';
+    return `<div class="sec"><h2>붙이기 <small>누르면 알맞은 자리에 붙습니다</small></h2><div class="attach">${o.map(([k, t, why]) => `<button data-attach="${k}" title="${esc(why)}">${esc(t)}</button>`).join('')}</div></div>`; };
+  function doAttach(key) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === sel); if (!n) return; const d = nodeDef(n), p = Object.assign({}, d.params, n.params), [k, v] = key.split(':'), rot = n.transform.rotation[2];
+    if (k === 'len') { const dl = +v, L0 = +p.length, L1 = Math.max(500, L0 + dl), real = L1 - L0; if (!real) return;
+      ed().batch('stretch', () => { const kids = descendants(doc, n.id), r = rot * Math.PI / 180, ax = [Math.cos(r), Math.sin(r)];
+        exec('set_param', { id: n.id, key: 'length', value: L1 }, true); const c = n.transform.position; exec('move', { id: n.id, position: [c[0] + ax[0] * real / 2, c[1] + ax[1] * real / 2, c[2]] }, true);
+        for (const kd of kids) { const q = kd.transform.position, lx = (q[0] - c[0]) * ax[0] + (q[1] - c[1]) * ax[1]; if (lx > 0) exec('move', { id: kd.id, position: [q[0] + ax[0] * real, q[1] + ax[1] * real, q[2]] }, true); } });
+      return; }
+    if (k === 'chain') { const L2 = 3000, w = +p.w || 500, Lh = +p.length / 2;
+      const [lx, ly, dr] = v === 'fwd' ? [Lh + L2 / 2, 0, 0] : v === 'back' ? [-Lh - L2 / 2, 0, 0] : v === 'left' ? [Lh - w / 2, w / 2 + L2 / 2, 90] : [Lh - w / 2, -(w / 2 + L2 / 2), -90];
+      const at = localToStored(n, lx, ly, 0); ed().batch('chain', () => addBlockAt(n.blockType, at, ((rot + dr) % 360 + 360) % 360, { h: p.h, w: p.w, speed: p.speed, length: L2 })); return; }
+    if (k === 'add') { const bd = L.BLOCKS[v];
+      if (v === 'lifter') { const at = localToStored(n, +p.length / 2 + 350, 0, 0); ed().batch('add', () => addBlockAt(v, at, rot)); return; }
+      ed().batch('add', () => { const keep = sel; sel = n.id; addBlock(v); if (!sel || sel === n.id) sel = keep; }); } }
+  // a floor block at a stored point, facing yaw, with some params set
+  function addBlockAt(id, at, yaw, over = {}) { const d = L.BLOCKS[id], doc = ED.machine.doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
+    for (const [k, v] of Object.entries(over)) if (v !== undefined && k in params) params[k] = v;
+    const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent: null, position: [at[0], at[1], 0], params, joints: d.joints(P, params), io: d.io(P, params) }, true);
+    if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true); if (nid) { select(nid); toast(`${P} ${d.name} 연결`); } return nid; }
   const num = (key, label, unit, step) => ({ key, label, type: 'num', unit, step });
   $('props').addEventListener('change', e => {
     if ('tstep' in e.target.dataset || 'tang' in e.target.dataset) { const v = Math.abs(+e.target.value); if (v > 0) TELE[tab]['tstep' in e.target.dataset ? 'step' : 'ang'] = Math.min('tang' in e.target.dataset ? 180 : 100000, v); drawProps(); return; }
@@ -398,6 +428,7 @@
     if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
+    if (D.attach) { doAttach(D.attach); return; }
     if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
@@ -597,6 +628,10 @@
     drawCrumb();
   }
   $('bSave').onclick = save;
+  // 도움말: a popover from the header (?) instead of a block in the properties panel
+  const drawHelp = () => { $('helpBody').innerHTML = tab === 'factory' ? howtoFactory : howtoMachine; };
+  $('bHelp').onclick = () => { drawHelp(); $('helpBox').hidden = !$('helpBox').hidden; };
+  $('helpX').onclick = () => { $('helpBox').hidden = true; };
   $('bSim').onclick = e => { e.preventDefault(); if (tab === 'machine') save(); LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; location.href = '/sim?src=build'; };
   $('bExport').onclick = () => { const doc = ed().doc, a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
     a.download = `${(doc.meta.name || tab).replace(/[\\/:*?"<>|\s]+/g, '_')}.${tab}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
@@ -640,7 +675,7 @@
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
-    tab = t; LS.set(KEY.tab, t); sel = null; multi = new Set(); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    tab = t; LS.set(KEY.tab, t); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     for (const v of objs.values()) root.remove(v.obj); objs = new Map(); floorKey = '';
     $('mode').hidden = t !== 'machine'; $('bottom').hidden = true; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';
     $('search').value = ''; drawPalette(); refresh(); updateHint(); drawLog(); setTimeout(() => { stage.resize(); fitAll(); }, 0);
