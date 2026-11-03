@@ -177,7 +177,7 @@
   }
   $('pal').addEventListener('click', e => {
     const c = e.target.closest('.cat>button'); if (c) { const id = c.parentElement.dataset.cat; openCats[id] = !c.parentElement.classList.contains('open'); LS.set('one.build.cats', openCats); c.parentElement.classList.toggle('open'); return; }
-    const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit');
+    const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit'); if (xray) setXray(false);
     const [k, id] = b.dataset.add.split(/:(.*)/s);
     if (k === 'f') addFactory(id); else if (k === 'l') addLocal(id); else addBlock(id);
   });
@@ -298,10 +298,10 @@
   });
   $('props').addEventListener('click', e => { const a = e.target.dataset.act; if (a === 'rot') rotateSel(); else if (a === 'del') deleteSel(); else if (a === 'dup') dupSel(); });
 
-  function rotateSel() { if (!sel || mode === 'run') return; const doc = ed().doc;
+  function rotateSel() { if (!sel || mode === 'run' || xray) return; const doc = ed().doc;
     if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === sel); if (!it) return; const yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw || 0); exec('move', { id: sel, yaw: (yaw + 90) % 360 }); }
     else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, n.transform.rotation[2] + 90] }); } }
-  function deleteSel() { if (!sel || mode === 'run') return; if (tab === 'factory' && ed().doc.building.slabs.some(s => s.id === sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; } exec('delete', { id: sel }); select(null); }
+  function deleteSel() { if (!sel || mode === 'run' || xray) return; if (tab === 'factory' && ed().doc.building.slabs.some(s => s.id === sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; } exec('delete', { id: sel }); select(null); }
   function dupSel() { if (!sel || tab !== 'factory') return; const nid = exec('duplicate', { id: sel }); if (nid) select(nid); }
 
   /* ------------------------------------------------------------------ signals table and run mode (machine) */
@@ -387,7 +387,7 @@
   function pick(e) { setNdc(e); const hits = ray.intersectObjects(root.children, true).filter(h => h.object.visible && !h.object.isPoints);
     for (const h of hits) { const id = h.object.userData.pick; if (!id) continue; const o = objs.get(id)?.obj; if (tab === 'factory' && o && o.userData.roof && hits.some(x => x.object.userData.pick && x.object.userData.pick !== id)) continue; return id; } return null; }
   renderer.domElement.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return; const id = pick(e);
+    if (e.button !== 0 || xray) return; const id = pick(e); // X-ray is a view-only mode: dragging only turns the view
     if (!id) { if (!e.shiftKey) select(null); return; }
     select(id); if (mode === 'run') return;
     const o = objs.get(id).obj; plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
@@ -419,7 +419,7 @@
   }
   $('views').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; if (b.dataset.v === 'fit') fitAll(); else if (b.dataset.v === 'xray') setXray(!xray); else focusSel(); });
   let xray = false;
-  const setXray = on => { xray = on; if (on) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work)); stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
+  const setXray = on => { xray = on; if (on) { if (drag) { drag = null; controls.enabled = true; } select(null); toast('X-RAY는 보기 전용입니다 · 다시 누르면 편집으로 돌아갑니다'); } updateHint(); if (on) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work)); stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
 
   /* ------------------------------------------------------------------ keys, toolbar, files */
   window.addEventListener('keydown', e => {
@@ -479,7 +479,7 @@
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥 왼쪽 아래 · X 입고 → 출하'; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥면 중심 · X 투입 → 배출'; }
   }
-  function updateHint() { $('hint').textContent = tab === 'machine' && mode === 'run' ? '실행 중: 아래 신호 표에서 OUT 태그 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
+  function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 신호 표에서 OUT 태그 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
