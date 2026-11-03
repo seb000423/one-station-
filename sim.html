@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* ONE SIM: the demo line run by the DES, replayed in 3D on the same clock. Single dark look (black bars, one yellow accent). */
+/* ONE SIM: the factory laid out in ONE BUILDER (by default the partner plant line), run in 3D. Single dark look (black bars, one yellow accent). */
 :root{
   --bg:#000; --panel:#0a0a0b; --panel2:#141516; --line:#26282b; --fg:#ececec; --mute:#8f9296; --dim:#5d6064;
   --accent:#eec539; --accent-ink:#1d1600; --busy:#3ddc84; --idle:#5d6064; --blocked:#f08a24; --down:#ff4d4f; --setup:#4aa3ff;
@@ -154,7 +154,7 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 <div class="app">
   <header class="top">
     <a class="back" href="/">← ONE STATION</a>
-    <span class="crumb">데모 라인 · 용접 모듈 라인 (5셀) · DES 실행</span>
+    <span class="crumb">Factory Builder</span>
     <div class="logo">ONE <em>SIM</em></div>
     <nav class="modes" id="modes"><button data-m="run" class="on">실행</button><button data-m="cmp">시나리오 비교</button><button data-m="opt">최적화</button></nav>
   </header>
@@ -250,6 +250,7 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/meshopt_decoder.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/DRACOLoader.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/Pass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
@@ -259,10 +260,10 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 <script src="js/one-stage.js"></script>
 <script src="js/one-twin-sim.js"></script>
 <script>
-// ?src=build → the factory laid out in ONE BUILDER (js/sim-build.js); otherwise the demo line
+// the factory laid out in ONE BUILDER (js/sim-build.js); with none saved yet, the default partner plant line.
+// The old welding-module demo line (sim-run / sim-lab) is gone.
 (() => {
-  const src = new URLSearchParams(location.search).get('src');
-  const list = src === 'build' || src === 'builder' ? ['one-twin', 'one-library', 'one-scene', 'sim-build'] : ['sim-run', 'sim-lab'];
+  const list = ['one-twin', 'one-library', 'plant-data', 'plant-machines', 'one-scene', 'sim-build'];
   const next = i => { if (i >= list.length) return; const el = document.createElement('script'); el.src = 'js/' + list[i] + '.js'; el.onload = () => next(i + 1); el.onerror = () => console.error('load', list[i]); document.body.appendChild(el); };
   next(0);
 })();
