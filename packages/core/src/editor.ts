@@ -22,6 +22,7 @@ export class Editor<S extends 'factory' | 'machine'> {
   private listeners = new Set<(doc: Doc<S>, entry: HistoryEntry | null) => void>();
   limit = 200;
   ctx: CommandContext;
+  private batching: HistoryEntry[] | null = null;
 
   constructor(scope: S, doc: Doc<S>, opts: { newId?: () => string; validate?: boolean } = {}) {
     this.scope = scope;
@@ -40,10 +41,29 @@ export class Editor<S extends 'factory' | 'machine'> {
     if (!patches.length) return result;
     this.doc = next as Doc<S>;
     const entry = { name, args: parsed.data, patches, inverse, at: Date.now() };
+    if (this.batching) { this.batching.push(entry); return result; }
     this.done.push(entry); if (this.done.length > this.limit) this.done.shift();
     this.undone = [];
     this.emit(entry);
     return result;
+  }
+  /**
+   * Run several commands as one step: one undo entry, one change notification (e.g. moving a multi-selection).
+   * If any command throws, the ones already applied are rolled back and the error is rethrown.
+   */
+  batch<R>(name: string, fn: () => R): R {
+    if (this.batching) return fn();
+    const list: HistoryEntry[] = (this.batching = []);
+    let r: R;
+    try { r = fn(); }
+    catch (e) { for (const x of list.slice().reverse()) this.doc = applyPatches(this.doc, x.inverse); this.batching = null; throw e; }
+    this.batching = null;
+    if (!list.length) return r;
+    const entry: HistoryEntry = { name, args: list.map(x => ({ name: x.name, args: x.args })), patches: list.flatMap(x => x.patches), inverse: list.slice().reverse().flatMap(x => x.inverse), at: Date.now() };
+    this.done.push(entry); if (this.done.length > this.limit) this.done.shift();
+    this.undone = [];
+    this.emit(entry);
+    return r;
   }
   get canUndo(): boolean { return this.done.length > 0; }
   get canRedo(): boolean { return this.undone.length > 0; }

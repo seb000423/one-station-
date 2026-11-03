@@ -11,6 +11,7 @@
   /* ------------------------------------------------------------------ materials (charcoal · grey · ivory, one amber) */
   const MAT = {};
   const ROLE = {
+    wall: { color: '#4a4b50', metalness: 0.0, roughness: 0.85, envMapIntensity: 0.25 },
     frame: { color: '#3c3e43', metalness: 0.3, roughness: 0.55 },
     body: { color: '#9b988f', metalness: 0.05, roughness: 0.6 },
     light: { color: '#e4ddcf', metalness: 0.0, roughness: 0.65 },
@@ -254,7 +255,7 @@
       const rise = Math.min(3, d * 0.12), half = Math.hypot(d / 2, rise), ang = Math.atan2(rise, d / 2);
       for (const s of [-1, 1]) { const m = new T.Mesh(new T.BoxGeometry(w, 0.12, half), mat('body')); m.position.set(0, eave + rise / 2, s * d / 4); m.rotation.x = s * ang; m.castShadow = true; g.add(m); }
       return g; },
-    wall: (L, H, t) => { const g = new T.Group(); bx(g, 'body', L, H, t); bx(g, 'frame', L, 1.2, t + 0.02, 0, 0); return g; },
+    wall: (L, H, t) => { const g = new T.Group(); bx(g, 'wall', L, H, t); bx(g, 'frame', L, 1.2, t + 0.02, 0, 0); bx(g, 'light', L, 0.06, t + 0.02, 0, H - 0.06); return g; },
   };
   function rack(p) { const g = new T.Group(), bays = Math.max(1, p.bays | 0 || 2), lv = Math.max(1, p.levels | 0 || 3);
     if (p.variant === 'shelf') { const w = 1.0, d = 0.6, h = 0.45; for (let b = 0; b <= bays; b++) for (const s of [-1, 1]) bx(g, 'frame', 0.04, lv * h + 0.2, 0.04, -bays * w / 2 + b * w, 0, s * (d / 2 - 0.02)); for (let l = 0; l <= lv; l++) bx(g, 'body', bays * w, 0.03, d, 0, 0.1 + l * h); return g; }

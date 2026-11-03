@@ -23,7 +23,7 @@
   /* ---------------------------------------------------------------- the BUILDER document */
   let doc = null;
   try { doc = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { doc = null; }
-  const fail = msg => { $('loading').innerHTML = `<div style="max-width:440px;text-align:center;line-height:1.7;font-family:var(--sans);letter-spacing:0">${msg}<br><br><a class="btn pri" href="console.html?resume=1" style="text-decoration:none;display:inline-block">ONE BUILDER로 가기</a></div>`; };
+  const fail = msg => { $('loading').innerHTML = `<div style="max-width:440px;text-align:center;line-height:1.7;font-family:var(--sans);letter-spacing:0">${msg}<br><br><a class="btn pri" href="/build" style="text-decoration:none;display:inline-block">ONE BUILDER로 가기</a></div>`; };
   if (!doc || !Array.isArray(doc.objects)) { fail('ONE BUILDER에서 꾸민 라인이 이 브라우저에 없습니다.'); return; }
   doc.factory = Object.assign({ width: 20, depth: 14, height: 6 }, doc.factory || {});
 
@@ -427,7 +427,7 @@
     if (leads[0]) leads[0].textContent = '두 안을 같은 난수 시드로 여러 번 돌려 평균과 95% 신뢰구간을 냅니다. 같은 시드를 쓰므로 차이는 조건을 바꾼 효과만 남고, 판정은 시드별 차이로 합니다. 손계산 상한(가장 느린 공정, 투입 간격)도 함께 보여 줍니다.';
     if (leads[1]) leads[1].textContent = '느린 공정의 사이클 단축 조합을 찾습니다. 점수 = 시간당 생산 − 투자 비용(시간당 생산으로 환산)입니다. 세대마다 후보 전체를 시뮬레이션하고, 가장 좋은 안이 어떻게 좋아지는지 보여 줍니다.'; }
   document.querySelector('.crumb').textContent = `ONE BUILDER 라인 · 컨베이어 ${B.length}개 · 공정 ${stationsIn.length}개 · DES 실행`;
-  { const back = document.querySelector('.back'); back.href = 'console.html?resume=1'; back.textContent = '← ONE BUILDER'; } // back to the same layout
+  { const back = document.querySelector('.back'); back.href = '/build'; back.textContent = '← ONE BUILDER'; } // back to the same layout
   document.querySelector('aside .note').textContent = '컨베이어 옆에 놓인 설비가 공정이 됩니다. 사이클·양품률·고장은 ONE BUILDER의 설비 속성(라인 시뮬레이션)에서 바꿉니다. 사이클은 사람 작업 ±12%, 설비 ±4%로 흔들립니다. 같은 시드는 항상 같은 결과를 냅니다.';
 
   /* ---------------------------------------------------------------- transport */

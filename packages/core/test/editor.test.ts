@@ -26,6 +26,20 @@ describe('factory edit API', () => {
     expect(e.doc.machines[0]!.name).toBe('프레스');
     e.validate();
   });
+  it('batch: several commands are one undo step and roll back together on error', () => {
+    const e = new Editor('factory', blank(), { newId: ids() });
+    const a = e.exec('place_machine', { ref: 'press-station@1', position: [2000, 4000] }) as string;
+    const b = e.exec('place_machine', { ref: 'press-station@1', position: [6000, 4000] }) as string;
+    const before = e.doc; let calls = 0; e.subscribe(() => calls++);
+    e.batch('move selection', () => { e.exec('move', { id: a, by: [500, 0] }); e.exec('move', { id: b, by: [500, 0] }); });
+    expect(calls).toBe(1);
+    expect(e.doc.machines.map(m => m.transform.position[0])).toEqual([2500, 6500]);
+    e.undo(); expect(e.doc).toEqual(before);
+    e.redo(); expect(e.doc.machines[1]!.transform.position[0]).toBe(6500);
+    const mid = e.doc;
+    expect(() => e.batch('bad', () => { e.exec('move', { id: a, by: [500, 0] }); e.exec('move', { id: 'nope', by: [1, 0] }); })).toThrow();
+    expect(e.doc).toEqual(mid);
+  });
   it('a new command after undo drops the redo stack', () => {
     const e = new Editor('factory', blank(), { newId: ids() });
     e.exec('add_column', { position: [0, 0] });

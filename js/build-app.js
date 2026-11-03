@@ -31,7 +31,7 @@
   const load = (scope, make) => { const d = LS.get(KEY[scope], null); try { return d ? (scope === 'factory' ? S.Factory : S.Machine).parse(d) : make(); } catch { return make(); } };
   const ED = { factory: new C.Editor('factory', load('factory', newFactory)), machine: new C.Editor('machine', load('machine', newMachine)) };
   let tab = LS.get(KEY.tab, 'factory') === 'machine' ? 'machine' : 'factory';
-  let mode = 'edit', sel = null, dirty = { factory: false, machine: false };
+  let mode = 'edit', sel = null, multi = new Set(), dirty = { factory: false, machine: false };
   const lib = () => LS.get(KEY.lib, {}); // machine id → { name, versions: { n: machine doc } }
   const ed = () => ED[tab];
 
@@ -92,7 +92,7 @@
     }
     for (const v of objs.values()) root.remove(v.obj);
     objs = keep;
-    drawFloor(); if (sel && !objs.has(sel)) sel = null; if (xray) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work));
+    drawFloor(); for (const x of [...multi]) if (!objs.has(x)) multi.delete(x); if (sel && !objs.has(sel)) sel = multi.size ? [...multi][0] : null; if (xray) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work));
   }
   function placeObj(obj, pos, yawDeg = 0) { obj.position.copy(toS(pos)); obj.rotation.y = S.storedYawToScene(yawDeg); }
   function buildFactoryObj(it, doc) {
@@ -116,7 +116,7 @@
   }
   function buildMachineObj(n) { const o = L.buildBlock(n.blockType, n.params); placeObj(o, n.transform.position, n.transform.rotation[2]); o.userData.node = n; return o; }
 
-  const floorMat = new T.MeshStandardMaterial({ color: 0x1e1e24, roughness: 0.95, metalness: 0, transparent: true, opacity: 0.7, depthWrite: false });
+  const floorMat = new T.MeshBasicMaterial({ color: 0x2a2b31, transparent: true, opacity: 0.3, depthWrite: false }); // unlit: the room environment turned a lit slab pale grey
   const edgeMat = new T.LineBasicMaterial({ color: 0xe9e3d5, transparent: true, opacity: 0.55 });
   const dashMat = new T.LineDashedMaterial({ color: 0xe9e3d5, dashSize: 0.08, gapSize: 0.06, transparent: true, opacity: 0.55 });
   let floorKey = '';
@@ -131,10 +131,10 @@
       slabMesh = new T.Group();
       const m = new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), floorMat); m.receiveShadow = true; m.renderOrder = -1; slabMesh.add(m);
       const e = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), edgeMat); slabMesh.add(e);
-      slabMesh.position.set(c.x, 0.001, c.z); ov.add(slabMesh);
+      slabMesh.position.set(c.x, 0.001, c.z); ov.add(slabMesh); stage.mirrorPass.mirror = false; // tall walls mirrored in the floor washed it out
       { const m = Math.max(w, d) * 0.35 + 6; controls.minZoom = 1 / ((Math.max(w, d) / 2 + m) * 0.9); stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2 - m, 0, c.z - d / 2 - m), new T.Vector3(c.x + w / 2 + m, 6, c.z + d / 2 + m))); } stage.setGrid(0.5, 5);
     } else {
-      const [W, D, H] = doc.meta.bbox.map(v => v / 1000);
+      const [W, D, H] = doc.meta.bbox.map(v => v / 1000); stage.mirrorPass.mirror = true;
       envelope = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(1, 1, 1)), dashMat); envelope.computeLineDistances(); ov.add(envelope); updateEnvelope();
       originMark = new T.Group(); const ax = new T.ArrowHelper(new T.Vector3(1, 0, 0), new T.Vector3(0, 0.003, 0), Math.max(0.4, W * 0.18), 0xffae42, 0.08, 0.05); originMark.add(ax);
       const dot = new T.Mesh(new T.RingGeometry(0.03, 0.045, 24).rotateX(-Math.PI / 2), L.mat('glowA')); dot.position.y = 0.004; originMark.add(dot); ov.add(originMark);
@@ -160,8 +160,15 @@
   const selMark = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2)), new T.LineBasicMaterial({ color: 0xffae42 }));
   const selFill = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.08, depthWrite: false }));
   const selGrp = new T.Group(); selGrp.add(selFill, selMark); ov.add(selGrp); selGrp.visible = false;
-  const tmpBox = new T.Box3();
+  const tmpBox = new T.Box3(), multiMarks = [];
+  // everything selected: the primary first, then the Shift-added ones
+  const selIds = () => sel ? [sel, ...[...multi].filter(x => x !== sel && objs.has(x))] : [];
+  const isSlab = id => tab === 'factory' && ED.factory.doc.building.slabs.some(s => s.id === id);
   function updateSelMark() {
+    const extra = selIds().slice(1);
+    while (multiMarks.length < extra.length) { const g = selGrp.clone(); ov.add(g); multiMarks.push(g); }
+    multiMarks.forEach((g, i) => { const o = extra[i] && objs.get(extra[i])?.obj; g.visible = !!o; if (!o) return; tmpBox.setFromObject(o); if (tmpBox.isEmpty()) { g.visible = false; return; }
+      const sz = tmpBox.getSize(new T.Vector3()), c = tmpBox.getCenter(new T.Vector3()), pad = tab === 'factory' ? 0.25 : 0.04; g.position.set(c.x, 0.006, c.z); g.scale.set(Math.max(0.1, sz.x + pad), 1, Math.max(0.1, sz.z + pad)); });
     const o = sel && objs.get(sel)?.obj; selGrp.visible = !!o; if (!o) return;
     tmpBox.setFromObject(o); if (tmpBox.isEmpty()) { selGrp.visible = false; return; }
     const sz = tmpBox.getSize(new T.Vector3()), c = tmpBox.getCenter(new T.Vector3()), pad = tab === 'factory' ? 0.25 : 0.04;
@@ -175,16 +182,16 @@
     const sec = (id, name, items) => {
       const list = items.filter(i => !q || i.name.includes(q) || (i.code || '').toLowerCase().includes(q.toLowerCase())); if (!list.length) return;
       html += `<div class="cat${openCats[id] || q ? ' open' : ''}" data-cat="${id}"><button><span>${esc(name)}</span><small>${list.length}</small></button><div class="items">`
-        + list.map(i => `<button class="item" data-add="${esc(i.key)}" title="${esc(i.why || i.name)}"><span class="code">${esc(i.code || '')}${i.grade ? `<i>${i.grade}차</i>` : ''}</span><b>${esc(i.name)}</b></button>`).join('') + '</div></div>';
+        + list.map(i => `<button class="item" draggable="true" data-add="${esc(i.key)}" title="${esc(i.why || i.name)}"><span class="code">${esc(i.code || '')}${i.grade ? `<i>${i.grade}차</i>` : ''}</span><b>${esc(i.name)}</b></button>`).join('') + '</div></div>';
     };
     if (tab === 'factory') {
-      $('palTitle').innerHTML = '에셋 팔레트 <small>누르면 놓임</small>';
+      $('palTitle').innerHTML = '에셋 팔레트 <small>골라서 놓을 곳 클릭 · 끌어다 놓기</small>';
       for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
-      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: '설비 탭에서 저장한 설비' }));
-      sec('mine', '내 설비 (설비 탭에서 저장)', mine.length ? mine : []);
-      if (!mine.length && !q) html += '<p class="why">설비 탭에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
+      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: 'Machine Builder에서 저장한 설비' }));
+      sec('mine', '내 설비 (Machine Builder에서 저장)', mine.length ? mine : []);
+      if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
-      $('palTitle').innerHTML = '블록 팔레트 <small>누르면 놓임</small>';
+      $('palTitle').innerHTML = '블록 팔레트 <small>골라서 놓을 곳 클릭 · 끌어다 놓기</small>';
       for (const c of L.MACHINE_CATS) sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
     }
     box.innerHTML = html;
@@ -193,15 +200,16 @@
     const c = e.target.closest('.cat>button'); if (c) { const id = c.parentElement.dataset.cat; openCats[id] = !c.parentElement.classList.contains('open'); LS.set('one.build.cats', openCats); c.parentElement.classList.toggle('open'); return; }
     const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit'); if (xray) setXray(false);
     const [k, id] = b.dataset.add.split(/:(.*)/s);
-    if (k === 'f') addFactory(id); else if (k === 'l') addLocal(id); else addBlock(id);
+    if (k === 'f' && ['slab', 'add_roof'].includes(L.FACTORY[id]?.kind.cmd)) { addFactory(id); return; }
+    startPlace(k, id);
   });
   $('search').addEventListener('input', drawPalette);
 
   // where a new object goes: the view centre, on the floor, snapped
   const viewPoint = step => { const t = controls.target, p = fromS(t); return [S.snap(p[0], step), S.snap(p[1], step)]; };
-  function addFactory(id) {
+  function addFactory(id, at, yaw = 0) {
     const d = L.FACTORY[id], k = d.kind, doc = ed().doc, r = slabRect(doc);
-    let [x, y] = viewPoint(500); x = Math.min(r.x1 - 500, Math.max(r.x0 + 500, x)); y = Math.min(r.y1 - 500, Math.max(r.y0 + 500, y));
+    let [x, y] = at || viewPoint(500); x = Math.min(r.x1 - 500, Math.max(r.x0 + 500, x)); y = Math.min(r.y1 - 500, Math.max(r.y0 + 500, y));
     const params = JSON.parse(JSON.stringify(d.params || {}));
     let nid;
     switch (k.cmd) {
@@ -210,7 +218,7 @@
       case 'add_column': nid = exec('add_column', { position: [x, y], size: [params.size, params.size] }); break;
       case 'add_roof': { if (doc.building.roofs.length) { toast('지붕은 이미 있습니다. 선택해서 형식을 바꿀 수 있습니다'); select(doc.building.roofs[0].id); return; }
         nid = exec('add_roof', { position: [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2], params: { type: params.type, w: r.x1 - r.x0, d: r.y1 - r.y0 } }); break; }
-      case 'add_opening': nid = exec('add_opening', { kind: k.kind, position: [x, r.y1], params }); break;
+      case 'add_opening': { const ey = Math.abs(y - r.y0) < Math.abs(y - r.y1) ? r.y0 : r.y1; nid = exec('add_opening', { kind: k.kind, position: [x, ey], params }); break; }
       case 'add_marking': { const hl = params.length / 2, hw = params.width / 2;
         nid = exec('add_marking', { kind: params.variant, params, ...(params.variant === 'aisle' ? { polyline: [[x - hl, y], [x + hl, y]] } : { polygon: [[x - hl, y - hw], [x + hl, y - hw], [x + hl, y + hw], [x - hl, y + hw]] }) }); break; }
       case 'add_drop': nid = exec('add_drop', { kind: k.kind, position: [x, y], params }); break;
@@ -219,21 +227,61 @@
       case 'add_block': nid = exec('add_block', { type: k.type, position: [x, y], params }); break;
       case 'place_machine': nid = exec('place_machine', { ref: k.ref, name: d.name, position: [x, y], params }); break;
     }
-    if (nid) { select(nid); toast(`${d.name} 배치 · 끌어서 옮기고 R로 돌립니다`); }
+    if (nid && yaw) exec('move', { id: nid, yaw }, true);
+    if (nid) { select(nid); toast(`${d.name} 배치 · 오른쪽 조작 패드나 방향키로 맞춥니다`); }
   }
-  function addLocal(id) { const m = lib()[id]; if (!m) return; const v = Math.max(...Object.keys(m.versions).map(Number)); const [x, y] = viewPoint(500);
-    const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: m.name, position: [x, y] }); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
-  function addBlock(id) {
+  function addLocal(id, at, yaw = 0) { const m = lib()[id]; if (!m) return; const v = Math.max(...Object.keys(m.versions).map(Number)); const [x, y] = at || viewPoint(500);
+    const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: m.name, position: [x, y] }); if (nid && yaw) exec('move', { id: nid, yaw }, true); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
+  function addBlock(id, at, onto, yaw = 0) {
     const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
-    const base = sel && doc.nodes.find(n => n.id === sel);
+    const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
     let pos, parent = null;
-    if (d.onTop && base) { const bp = base.transform.position; pos = [bp[0], bp[1], nodeTop(base)]; parent = base.id;
+    if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null; }
+    else if (d.onTop && base) { const bp = base.transform.position; pos = [bp[0], bp[1], nodeTop(base)]; parent = base.id;
       const bd = nodeDef(base); if (bd && bd.conveyor && (d.stops || d.sensor)) pos[0] = bp[0] + (base.params.length || 1000) / 2 - 150; // stopper / sensor near the outfeed end
       if (bd && bd.conveyor && d.sensor) pos[1] = bp[1] - (base.params.w || 500) / 2 - 30; }
     else { const xs = doc.nodes.filter(n => !n.parent).map(n => n.transform.position[0] + blockHalfX(n)); pos = [xs.length ? S.snap(Math.max(...xs) + 400, 50) : 0, 0, 0]; }
     const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent, position: pos, params, joints: d.joints(P, params), io: d.io(P, params) });
+    if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true);
     if (nid) { select(nid); toast(`${P} ${d.name}: 축 ${d.joints(P, params).length} · 태그 ${d.io(P, params).length} 추가`); }
   }
+  /* placing: the chosen asset follows the pointer as a see-through preview; a click puts it there (Shift keeps placing) */
+  let placing = null;
+  function previewOf(k, id) {
+    let o = null;
+    try { if (k === 'b') o = L.buildBlock(id, L.BLOCKS[id].params);
+      else if (k === 'l') o = buildLocalMachine({ id, v: Math.max(...Object.keys(lib()[id].versions).map(Number)) });
+      else { const d = L.FACTORY[id], p = d.params || {};
+        o = d.kind.cmd === 'draw_wall' ? L.special.wall((p.length || 6000) / 1000, 4, 0.2) : d.kind.cmd === 'add_column' ? L.special.column({ size: p.size || 500, h: 6 })
+          : d.kind.cmd === 'add_marking' ? L.special.marking(p.variant, p) : L.buildFactory(id, JSON.parse(JSON.stringify(p))); } } catch (err) { o = null; }
+    const g = new T.Group(); if (o) g.add(o); else g.add(new T.Mesh(new T.BoxGeometry(0.8, 0.8, 0.8).translate(0, 0.4, 0)));
+    g.traverse(m => { if (!m.isMesh) return; m.castShadow = false; m.material = (Array.isArray(m.material) ? m.material[0] : m.material).clone(); Object.assign(m.material, { transparent: true, opacity: 0.55, depthWrite: false }); m.raycast = () => {}; });
+    const ring = new T.Mesh(new T.RingGeometry(0.0, 1, 40).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.18, depthWrite: false }));
+    tmpBox.setFromObject(g); const sz = tmpBox.getSize(new T.Vector3()); ring.scale.setScalar(Math.max(0.3, Math.hypot(sz.x, sz.z) / 2 + 0.1)); ring.position.y = 0.004; ring.raycast = () => {}; g.add(ring);
+    return g; }
+  function startPlace(k, id) { endPlace(); if (mode === 'run') setMode('edit'); if (xray) setXray(false);
+    const name = k === 'b' ? L.BLOCKS[id].name : k === 'l' ? lib()[id]?.name : L.FACTORY[id].name;
+    placing = { k, id, name, yaw: 0, at: null, onto: null, obj: previewOf(k, id) }; placing.obj.visible = false; ov.add(placing.obj);
+    document.querySelectorAll('#pal [data-add]').forEach(b => b.classList.toggle('placing', b.dataset.add === k + ':' + id));
+    renderer.domElement.style.cursor = 'copy'; updateHint(); toast(`${name}: 놓을 곳을 누르세요 · R 회전 · Esc 취소`); }
+  function endPlace() { if (!placing) return; ov.remove(placing.obj); placing = null; renderer.domElement.style.cursor = ''; document.querySelectorAll('#pal .placing').forEach(b => b.classList.remove('placing')); updateHint(); }
+  function trackPlace(e) {
+    setNdc(e); plane.constant = 0; let onto = null, z = 0;
+    if (placing.k === 'b' && L.BLOCKS[placing.id].onTop) { const id = pickExact(); const n = id && ED.machine.doc.nodes.find(x => x.id === id); if (n) { onto = n.id; z = nodeTop(n) / 1000; } }
+    if (!ray.ray.intersectPlane(plane, hit)) return; const st = tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50);
+    let p = fromS(hit); p = [S.snap(p[0], st), S.snap(p[1], st)];
+    if (tab === 'factory') { const r = slabRect(ed().doc); p = [Math.min(r.x1, Math.max(r.x0, p[0])), Math.min(r.y1, Math.max(r.y0, p[1]))]; }
+    placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
+  function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
+    if (!keep) endPlace();
+    if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); }
+  // drag straight from the palette onto the canvas works too
+  $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
+  $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
+  renderer.domElement.addEventListener('dragover', e => { if (!placing) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; trackPlace(e); });
+  renderer.domElement.addEventListener('dragleave', () => { if (placing) placing.obj.visible = false; });
+  renderer.domElement.addEventListener('drop', e => { if (!placing) return; e.preventDefault(); trackPlace(e); commitPlace(false); });
+  renderer.domElement.addEventListener('contextmenu', e => { if (placing) { e.preventDefault(); endPlace(); } });
   const blockHalfX = n => { const o = objs.get(n.id)?.obj; if (!o) return 300; tmpBox.setFromObject(o); return tmpBox.isEmpty() ? 300 : Math.max(100, (tmpBox.max.x - tmpBox.min.x) * 500); };
 
   /* ------------------------------------------------------------------ tree */
@@ -243,26 +291,31 @@
       const items = factoryItems(doc), groups = {};
       for (const it of items) { const g = it.path === 'machines' ? '설비' : (L.FACTORY[it.def] ? L.FACTORY_GROUPS.find(x => x.id === L.FACTORY[it.def].group)?.name : '기타') || '기타'; (groups[g] || (groups[g] = [])).push(it); }
       html += `<div data-id="${esc(doc.building.slabs[0]?.id || '')}" class="${sel === doc.building.slabs[0]?.id ? 'on' : ''}"><code>바닥</code><span>${esc(doc.meta.name)} · ${((slabRect(doc).x1 - slabRect(doc).x0) / 1000).toFixed(1)} × ${((slabRect(doc).y1 - slabRect(doc).y0) / 1000).toFixed(1)} m</span></div>`;
-      for (const [g, list] of Object.entries(groups)) { html += `<div class="grp">${esc(g)} · ${list.length}</div>`; for (const it of list) { n++; html += `<div data-id="${it.id}" class="${sel === it.id ? 'on' : ''}"><code>${esc(itemCode(it))}</code><span>${esc(itemName(it))}</span></div>`; } }
+      for (const [g, list] of Object.entries(groups)) { html += `<div class="grp">${esc(g)} · ${list.length}</div>`; for (const it of list) { n++; html += `<div data-id="${it.id}" class="${selIds().includes(it.id) ? 'on' : ''}"><code>${esc(itemCode(it))}</code><span>${esc(itemName(it))}</span></div>`; } }
     } else {
       html += `<div data-id="" class="${!sel ? 'on' : ''}"><code>설비</code><span>${esc(doc.meta.name)}</span></div>`;
       const kids = id => doc.nodes.filter(x => (x.parent || null) === id);
-      const walk = (id, depth) => { for (const x of kids(id)) { n++; html += `<div data-id="${x.id}" class="${sel === x.id ? 'on' : ''}" style="padding-left:${6 + depth * 14}px"><code>${esc(nodeCode(x))}</code><span>${esc(x.name || x.blockType)}</span></div>`; walk(x.id, depth + 1); } };
+      const walk = (id, depth) => { for (const x of kids(id)) { n++; html += `<div data-id="${x.id}" class="${selIds().includes(x.id) ? 'on' : ''}" style="padding-left:${6 + depth * 14}px"><code>${esc(nodeCode(x))}</code><span>${esc(x.name || x.blockType)}</span></div>`; walk(x.id, depth + 1); } };
       walk(null, 1);
     }
     box.innerHTML = html; $('treeN').textContent = n;
   }
-  $('tree').addEventListener('click', e => { const d = e.target.closest('[data-id]'); if (d) select(d.dataset.id || null, true); });
+  $('tree').addEventListener('click', e => { const d = e.target.closest('[data-id]'); if (!d) return; if ((e.shiftKey || e.ctrlKey || e.metaKey) && d.dataset.id) toggleSel(d.dataset.id); else select(d.dataset.id || null, true); });
 
   /* ------------------------------------------------------------------ properties */
   const field = (f, val, key = f.key) => {
     if (f.type === 'select') return `<span class="k">${esc(f.label)}</span><select data-k="${esc(key)}">${f.options.map(([v, t]) => `<option value="${esc(v)}"${String(val) === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
-  const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 누르면 화면 가운데에 놓입니다.</li><li>3D에서 <b>끌면</b> 옮겨집니다 (500 mm 단위, Alt를 누르면 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>R</b> 90° 회전 · <b>Delete</b> 삭제 · <b>Ctrl+D</b> 복사 · <b>Ctrl+Z / Y</b> 되돌리기.</li><li><b>설비</b> 탭에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 누르면 바닥에 놓입니다. 컨베이어를 고른 상태면 센서·스토퍼·워크는 그 위에 놓입니다.</li><li>3D에서 블록을 <b>끌면</b> 옮겨집니다 (50 mm 단위, Alt를 누르면 5 mm).</li><li>블록을 고르면 여기에 길이·속도 같은 숫자가 나옵니다. 고치면 3D가 바로 바뀝니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 공장 탭의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 여기에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 여기에 <b>조작 패드</b>가 나옵니다: 화살표 이동, 회전, 높이. 방향키도 됩니다.</li><li>블록을 고르면 여기에 길이·속도 같은 숫자가 나옵니다. 고치면 3D가 바로 바뀝니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
+    const many = selIds();
+    if (many.length > 1) {
+      const names = many.map(id => { if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === id); return it ? (itemCode(it) ? itemCode(it) + ' ' : '') + itemName(it) : ''; } const n = doc.nodes.find(x => x.id === id); return n ? nodeCode(n) + ' ' + n.name : ''; });
+      box.innerHTML = `<div class="sec"><h2>${many.length}개 선택 <small>Shift+클릭으로 더하거나 빼기</small></h2><p class="why">끌거나 아래 조작 패드로 한꺼번에 옮기고 돌립니다. 회전은 묶음 가운데를 중심으로 돕니다.</p><div class="taglist">${names.map(n => `<span>${esc(n)}</span>`).join('')}</div></div>${teleop(tab === 'factory')}`;
+      return; }
     if (tab === 'factory') {
       const it = sel && factoryItems(doc).find(x => x.id === sel), slab = doc.building.slabs.find(s => s.id === sel);
       if (slab) { const r = slabRect(doc); html = `<div class="sec"><h2>바닥 슬래브</h2><p class="why">모든 배치와 이동 경로가 놓이는 기준면입니다. 원점은 왼쪽 아래(입고) 모서리입니다.</p><div class="props">${field(num('w', '가로', 'm', 0.5), (r.x1 - r.x0) / 1000, 'slab.w')}${field(num('d', '세로', 'm', 0.5), (r.y1 - r.y0) / 1000, 'slab.d')}<span class="k">공장 이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"></div></div>`; }
@@ -276,7 +329,7 @@
         else if (it.path !== 'building.columns') for (const f of d.fields || []) { const pv = x.params[f.key] ?? d.params[f.key]; html += field(f, pv, 'p.' + f.key); }
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
-        html += `</div><div class="acts"><button class="btn" data-act="rot">R 회전</button><button class="btn" data-act="dup">복사</button><button class="btn" data-act="del">삭제</button></div></div>`;
+        html += `</div></div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
       } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">놓인 것</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div></div><div class="sec"><h2>이 화면 쓰는 법</h2>${howtoFactory}</div>`;
     } else {
       const n = sel && doc.nodes.find(x => x.id === sel);
@@ -287,7 +340,7 @@
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
-        html += `<div class="acts"><button class="btn" data-act="rot">R 회전</button><button class="btn" data-act="del">삭제</button></div></div>`;
+        html += `</div>${teleop(false)}`;
       } else {
         const ct = doc.card;
         html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽 (자동)</span><span class="v">${(contentSize() || doc.meta.bbox).join(' × ')} mm</span>
@@ -297,6 +350,44 @@
     }
     box.innerHTML = html;
   }
+  // the "teleop" pad: nudge, turn, raise, copy and delete the selected object without dragging
+  const STEPS = { factory: [100, 500, 1000], machine: [5, 50, 100] }; let stepI = { factory: 1, machine: 1 };
+  const teleop = canDup => { const st = STEPS[tab], i = stepI[tab];
+    return `<div class="sec tele"><h2>조작 <small>방향키로도 움직입니다 · Shift = 크게</small></h2>
+      <div class="tgrid"><div class="dpad"><span></span><button data-mv="up" title="화면 위쪽으로">▲</button><span></span><button data-mv="left" title="화면 왼쪽으로">◀</button><b>${st[i]}<small>mm</small></b><button data-mv="right" title="화면 오른쪽으로">▶</button><span></span><button data-mv="down" title="화면 아래쪽으로">▼</button><span></span></div>
+      <div class="tcol"><div class="seg2">${st.map((v, k) => `<button data-step="${k}" class="${k === i ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <div class="rotr"><button data-rot="-90">⟲ 90°</button><button data-rot="-15">⟲ 15°</button><button data-rot="15">15° ⟳</button><button data-rot="90">90° ⟳</button></div>
+      ${tab === 'machine' ? `<div class="rotr"><button data-z="1">높이 ▲</button><button data-z="-1">높이 ▼</button></div>` : ''}</div></div>
+      <div class="acts">${canDup ? '<button class="btn" data-act="dup">복사</button>' : ''}<button class="btn" data-act="del">삭제</button></div></div>`; };
+  // screen direction → the stored axis (±X / ±Y) it points along most, so ▲ always moves "up the screen"
+  function screenAxis(dir) { const f = new T.Vector3(); camera.getWorldDirection(f); f.y = 0; f.normalize(); const r = new T.Vector3(-f.z, 0, f.x);
+    const v = dir === 'up' ? f : dir === 'down' ? f.clone().negate() : dir === 'right' ? r : r.clone().negate();
+    const st = S.sceneToStored([v.x, 0, v.z]); return Math.abs(st[0]) >= Math.abs(st[1]) ? [Math.sign(st[0]), 0] : [0, Math.sign(st[1])]; }
+  function nudge(dir, big) { if (!sel || mode === 'run' || xray) return; const st = STEPS[tab][big ? 2 : stepI[tab]], [ax, ay] = screenAxis(dir);
+    moveSelBy([ax * st, ay * st, 0]); }
+  // move every selected object by the same amount, as one undo step (children ride along with their parent)
+  function moveSelBy(by) { const ids = selIds().filter(x => !isSlab(x)); if (!ids.length) return;
+    ed().batch(ids.length > 1 ? `move ${ids.length}` : 'move', () => {
+      if (tab === 'factory') for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true);
+      else { const doc = ED.machine.doc, set = new Set(ids), up = n => { for (let p = n.parent; p; p = doc.nodes.find(x => x.id === p)?.parent) if (set.has(p)) return true; return false; };
+        for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); } } }); }
+  function moveNode(id, by) { by = by.slice(); const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return; const p = n.transform.position;
+    if (p[2] + by[2] < 0) by[2] = -p[2]; if (!by[0] && !by[1] && !by[2]) return;
+    const kids = []; const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { kids.push(k); walk(k.id); } }; walk(id);
+    exec('move', { id, position: [p[0] + by[0], p[1] + by[1], p[2] + by[2]] }); for (const k of kids) { const q = k.transform.position; exec('move', { id: k.id, position: [q[0] + by[0], q[1] + by[1], q[2] + by[2]] }, true); } }
+  function turnSel(deg) { if (!sel || mode === 'run' || xray) return; const doc = ed().doc, norm = a => ((Math.round(a) % 360) + 360) % 360;
+    const ids = selIds().filter(x => !isSlab(x));
+    if (ids.length > 1) { // turn the whole selection about its centre
+      const posOf = id => { if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === id); const x = it.item; return x.transform ? x.transform.position : [(x.from[0] + x.to[0]) / 2, (x.from[1] + x.to[1]) / 2, 0]; } return doc.nodes.find(x => x.id === id).transform.position; };
+      let all = ids; if (tab === 'machine') { const set = new Set(ids); const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { if (!set.has(k.id)) { set.add(k.id); } walk(k.id); } }; ids.forEach(walk); all = [...set]; }
+      const ps = all.map(posOf), cx = ps.reduce((a, p) => a + p[0], 0) / ps.length, cy = ps.reduce((a, p) => a + p[1], 0) / ps.length, r = deg * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r);
+      const snapStep = tab === 'factory' ? 10 : 5;
+      ed().batch(`turn ${ids.length}`, () => all.forEach((id, i) => { const p = ps[i], dx = p[0] - cx, dy = p[1] - cy, np = [S.snap(cx + dx * c - dy * sn, snapStep), S.snap(cy + dx * sn + dy * c, snapStep), p[2] || 0];
+        if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === id), yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw ?? Math.round(Math.atan2(it.item.to[1] - it.item.from[1], it.item.to[0] - it.item.from[0]) * 180 / Math.PI)); exec('move', { id, position: [np[0], np[1]], yaw: norm(yaw + deg) }, true); }
+        else { const n = doc.nodes.find(x => x.id === id); exec('move', { id, position: np, rotation: [0, 0, norm(n.transform.rotation[2] + deg)] }, true); } }));
+      return; }
+    if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === sel); if (!it) return; const yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw || 0); exec('move', { id: sel, yaw: norm(yaw + deg) }); }
+    else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, norm(n.transform.rotation[2] + deg)] }); } }
   const num = (key, label, unit, step) => ({ key, label, type: 'num', unit, step });
   $('props').addEventListener('change', e => {
     const k = e.target.dataset.k; if (!k || !sel && !k.startsWith('meta.') && !k.startsWith('card.')) return;
@@ -310,13 +401,18 @@
     if (k.startsWith('pos.')) { const n = doc.nodes.find(x => x.id === sel); if (!n) return; const p = [...n.transform.position]; p[+k.slice(4)] = v ?? 0; exec('move', { id: sel, position: p }); return; }
     if (k.startsWith('p.')) exec('set_param', { id: sel, key: k.slice(2), value: v });
   });
-  $('props').addEventListener('click', e => { const a = e.target.dataset.act; if (a === 'rot') rotateSel(); else if (a === 'del') deleteSel(); else if (a === 'dup') dupSel(); });
+  $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
+    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
+    else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot); else if (D.z) moveNode(sel, [0, 0, +D.z * STEPS.machine[stepI.machine]]);
+    else if (D.step) { stepI[tab] = +D.step; drawProps(); } });
 
-  function rotateSel() { if (!sel || mode === 'run' || xray) return; const doc = ed().doc;
-    if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === sel); if (!it) return; const yaw = it.item.transform ? it.item.transform.rotation[2] : (it.item.params?.yaw || 0); exec('move', { id: sel, yaw: (yaw + 90) % 360 }); }
-    else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, n.transform.rotation[2] + 90] }); } }
-  function deleteSel() { if (!sel || mode === 'run' || xray) return; if (tab === 'factory' && ed().doc.building.slabs.some(s => s.id === sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; } exec('delete', { id: sel }); select(null); }
-  function dupSel() { if (!sel || tab !== 'factory') return; const nid = exec('duplicate', { id: sel }); if (nid) select(nid); }
+  function rotateSel() { turnSel(90); }
+  function deleteSel() { if (!sel || mode === 'run' || xray) return; if (isSlab(sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; }
+    const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
+    if (ids.length > 1) toast(`${ids.length}개 삭제 · Ctrl+Z로 되돌립니다`); select(null); }
+  function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [];
+    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const nid = exec('duplicate', { id }, true); if (nid) out.push(nid); } }); selectMany(out); }
+  function selectAll() { const doc = ed().doc; selectMany(tab === 'factory' ? factoryItems(doc).map(x => x.id) : doc.nodes.filter(n => !n.parent).map(n => n.id)); }
 
   /* ------------------------------------------------------------------ signals table and run mode (machine) */
   const RUN = { t: 0, v: {}, tags: {}, procs: {}, works: {}, last: 0 };
@@ -405,33 +501,59 @@
   const ray = new T.Raycaster(), ndc = new T.Vector2(), plane = new T.Plane(new T.Vector3(0, 1, 0), 0), hit = new T.Vector3();
   let drag = null;
   const setNdc = e => { const r = renderer.domElement.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); };
-  function pick(e) { setNdc(e); const hits = ray.intersectObjects(root.children, true).filter(h => h.object.visible && !h.object.isPoints);
+  function pickExact() { const hits = ray.intersectObjects(root.children, true).filter(h => h.object.visible && !h.object.isPoints);
     for (const h of hits) { const id = h.object.userData.pick; if (!id) continue; const o = objs.get(id)?.obj; if (tab === 'factory' && o && o.userData.roof && hits.some(x => x.object.userData.pick && x.object.userData.pick !== id)) continue; return id; } return null; }
+  // thin things (an extinguisher, a sensor, a stopper) are a few pixels wide on screen: a click near them counts
+  const pc = new T.Vector3();
+  function pickNear(e) { const r = renderer.domElement.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; let best = null, bestA = Infinity;
+    for (const [id, v] of objs) { tmpBox.setFromObject(v.obj); if (tmpBox.isEmpty()) continue; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+      for (let i = 0; i < 8; i++) { pc.set(i & 1 ? tmpBox.max.x : tmpBox.min.x, i & 2 ? tmpBox.max.y : tmpBox.min.y, i & 4 ? tmpBox.max.z : tmpBox.min.z).project(camera);
+        const sx = (pc.x + 1) / 2 * r.width, sy = (1 - pc.y) / 2 * r.height; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); }
+      const a = (x1 - x0) * (y1 - y0); if (a > 90 * 90) continue; const pad = 12;
+      if (mx >= x0 - pad && mx <= x1 + pad && my >= y0 - pad && my <= y1 + pad && a < bestA) { best = id; bestA = a; } }
+    return best; }
+  function pick(e) { setNdc(e); const ex = pickExact(), near = pickNear(e); if (!near || near === ex) return ex;
+    if (!ex) return near; tmpBox.setFromObject(objs.get(ex).obj); const s = tmpBox.getSize(pc); return s.x * s.z > 1 || s.y < 0.05 ? near : ex; }
   renderer.domElement.addEventListener('pointerdown', e => {
+    if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
     if (e.button !== 0 || xray) return; const id = pick(e); // X-ray is a view-only mode: dragging only turns the view
-    if (!id) { if (!e.shiftKey) select(null); return; }
-    select(id); if (mode === 'run') return;
-    const o = objs.get(id).obj; plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
-    drag = { id, o, start: o.position.clone(), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
+    if (!id) { if (e.shiftKey && mode === 'edit') { startBox(e); return; } select(null); return; }
+    if (e.shiftKey && mode === 'edit') { toggleSel(id); return; }
+    const group = selIds().includes(id) && selIds().length > 1; if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
+    plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
+    const ids = group ? selIds().filter(x => !isSlab(x)) : [id], os = ids.map(x => objs.get(x)?.obj).filter(Boolean);
+    drag = { id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', e => {
+    if (placing && !drag) { trackPlace(e); return; }
     if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
-    drag.o.position.set(drag.start.x + d.x, drag.start.y, drag.start.z + d.z); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
+    drag.os.forEach((o, i) => o.position.set(drag.starts[i].x + d.x, drag.starts[i].y, drag.starts[i].z + d.z)); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
   });
   const endDrag = () => {
-    if (!drag) return; const { id, d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
-    const by = S.sceneToStored([d.x, 0, d.z]);
-    if (tab === 'factory') exec('move', { id, by: [by[0], by[1]] });
-    else { const n = ED.machine.doc.nodes.find(x => x.id === id); if (!n) return; const p = n.transform.position, np = [p[0] + by[0], p[1] + by[1], p[2]];
-      // children ride along
-      const kids = []; const walk = pid => { for (const k of ED.machine.doc.nodes.filter(x => x.parent === pid)) { kids.push(k); walk(k.id); } }; walk(id);
-      exec('move', { id, position: np }); for (const k of kids) { const q = k.transform.position; exec('move', { id: k.id, position: [q[0] + by[0], q[1] + by[1], q[2]] }, true); } }
+    if (!drag) return; const { d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
+    const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
+  // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
+  let boxSel = null; const boxEl = document.createElement('div'); boxEl.className = 'boxsel'; boxEl.hidden = true; $('labels').parentElement.appendChild(boxEl);
+  function startBox(e) { const r = renderer.domElement.getBoundingClientRect(); boxSel = { x0: e.clientX - r.left, y0: e.clientY - r.top, r }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); }
+  renderer.domElement.addEventListener('pointermove', e => { if (!boxSel) return; const x = e.clientX - boxSel.r.left, y = e.clientY - boxSel.r.top;
+    Object.assign(boxSel, { x1: x, y1: y }); boxEl.hidden = false; Object.assign(boxEl.style, { left: Math.min(x, boxSel.x0) + 'px', top: Math.min(y, boxSel.y0) + 'px', width: Math.abs(x - boxSel.x0) + 'px', height: Math.abs(y - boxSel.y0) + 'px' }); });
+  renderer.domElement.addEventListener('pointerup', () => { if (!boxSel) return; const b = boxSel; boxSel = null; boxEl.hidden = true; controls.enabled = true; if (b.x1 === undefined) return;
+    const [x0, x1] = [Math.min(b.x0, b.x1), Math.max(b.x0, b.x1)], [y0, y1] = [Math.min(b.y0, b.y1), Math.max(b.y0, b.y1)], got = [...selIds()];
+    for (const [id, v] of objs) { if (isSlab(id) || (tab === 'machine' && v.data.parent)) continue; tmpBox.setFromObject(v.obj); if (tmpBox.isEmpty()) continue; tmpBox.getCenter(v3).project(camera);
+      const sx = (v3.x + 1) / 2 * b.r.width, sy = (1 - v3.y) / 2 * b.r.height; if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1 && !got.includes(id)) got.push(id); }
+    selectMany(got); if (got.length > 1) toast(`${got.length}개 선택 · 끌거나 조작 패드로 한꺼번에 움직입니다`); });
   renderer.domElement.addEventListener('pointerup', endDrag); renderer.domElement.addEventListener('pointercancel', endDrag);
 
-  function select(id, focus) { sel = id || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
+  function toggleSel(id) { if (!id || isSlab(id)) return select(id);
+    if (!sel || isSlab(sel)) return select(id);
+    if (id === sel) { const rest = selIds().slice(1); multi = new Set(rest.slice(1)); sel = rest[0] || null; }
+    else if (multi.has(id)) multi.delete(id); else multi.add(id);
+    drawTree(); drawProps(); updateSelMark(); }
+  function selectMany(ids) { ids = ids.filter(x => !isSlab(x)); multi = new Set(ids.slice(1)); sel = ids[0] || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
+  function select(id, focus) { multi = new Set(); sel = id || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
   function fitAll() {
     const doc = ed().doc;
@@ -444,15 +566,19 @@
 
   /* ------------------------------------------------------------------ keys, toolbar, files */
   window.addEventListener('keydown', e => {
-    if (e.target.matches('input, select, textarea')) return;
     const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    // a select (e.g. 종류) keeps focus after a change; only text fields swallow keys
+    if (e.target.matches('select') && !mod && (k === 'delete' || k === 'backspace' || k === 'escape')) e.target.blur();
+    else if (e.target.matches('input, select, textarea')) return;
     if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); if (mode === 'edit') ed().undo(); }
     else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); if (mode === 'edit') ed().redo(); }
     else if (mod && k === 'd') { e.preventDefault(); dupSel(); }
     else if (mod && k === 's') { e.preventDefault(); save(); }
-    else if (k === 'r' && !mod) rotateSel();
+    else if (mod && k === 'a') { e.preventDefault(); if (mode === 'edit' && !xray) selectAll(); }
+    else if (k === 'r' && !mod) { if (placing) { placing.yaw = (placing.yaw + 90) % 360; if (placing.at) placeObj(placing.obj, [placing.at[0], placing.at[1], placing.obj.position.y * 1000], placing.yaw); } else rotateSel(); }
     else if (k === 'delete' || k === 'backspace') deleteSel();
-    else if (k === 'escape') select(null);
+    else if (k.startsWith('arrow') && sel) { e.preventDefault(); nudge(k.slice(5), e.shiftKey); }
+    else if (k === 'escape') { if (placing) endPlace(); else select(null); }
     else if (k === 'f') sel ? focusSel() : fitAll();
     else if (k === 'x' && !mod) setXray(!xray);
   });
@@ -470,7 +596,7 @@
       const sz = contentSize(); if (sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
       const snap = JSON.parse(JSON.stringify(cur)); snap.meta.version = v; snap.card.footprint = [cur.meta.bbox[0], cur.meta.bbox[1]];
       m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all);
-      dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · 공장 탭의 '내 설비'에 나옵니다`); log(`저장 v${v}`);
+      dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · Factory Builder의 '내 설비'에 나옵니다`); log(`저장 v${v}`);
     } else { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; toast('공장을 이 브라우저에 저장했습니다 · 파일로 받으려면 내보내기'); }
     drawCrumb();
   }
@@ -478,20 +604,32 @@
   $('bExport').onclick = () => { const doc = ed().doc, a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
     a.download = `${(doc.meta.name || tab).replace(/[\\/:*?"<>|\s]+/g, '_')}.${tab}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
   $('bOpen').onclick = () => $('file').click();
+  // several files at once: every machine.json goes into 내 설비 (as its next version), the last one opens in Machine Builder;
+  // a factory.json opens in Factory Builder (if there are several, the last one wins)
+  const openDoc = (scope, j) => { ED[scope] = new C.Editor(scope, j); ED[scope].subscribe(() => { dirty[scope] = true; LS.set(KEY[scope], ED[scope].doc); if (scope === tab) refresh(); }); LS.set(KEY[scope], ED[scope].doc); };
   $('file').onchange = async () => {
-    const f = $('file').files[0]; $('file').value = ''; if (!f) return;
-    try { const j = JSON.parse(await f.text()); const scope = j.schema === S.FACTORY_SCHEMA ? 'factory' : j.schema === S.MACHINE_SCHEMA ? 'machine' : null;
-      if (!scope) throw new Error('factory.json 또는 machine.json이 아닙니다'); ED[scope] = new C.Editor(scope, j); ED[scope].subscribe(() => { dirty[scope] = true; LS.set(KEY[scope], ED[scope].doc); if (scope === tab) refresh(); });
-      LS.set(KEY[scope], ED[scope].doc); switchTab(scope, true); toast(`${j.meta?.name || f.name} 불러옴`); }
-    catch (e) { toast('불러오지 못했습니다: ' + (e.message || e), true); }
+    const files = [...$('file').files]; $('file').value = ''; if (!files.length) return;
+    const ok = [], bad = []; let lastScope = null, lastMachine = null, factory = null;
+    for (const f of files) {
+      try { const j = JSON.parse(await f.text()); const scope = j.schema === S.FACTORY_SCHEMA ? 'factory' : j.schema === S.MACHINE_SCHEMA ? 'machine' : null;
+        if (!scope) throw new Error('factory.json / machine.json이 아님');
+        if (scope === 'machine') { const doc = S.Machine.parse(j), all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
+          const snap = JSON.parse(JSON.stringify(doc)); snap.meta.version = v; m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all); lastMachine = doc; }
+        else factory = S.Factory.parse(j);
+        lastScope = scope; ok.push(j.meta?.name || f.name); }
+      catch (e) { bad.push(`${f.name} (${e.message || e})`); }
+    }
+    if (lastMachine) openDoc('machine', lastMachine); if (factory) openDoc('factory', factory);
+    if (lastScope) switchTab(files.length > 1 && factory ? 'factory' : lastScope, true);
+    toast(ok.length ? `${ok.length}개 불러옴: ${ok.join(', ')}${bad.length ? ` · 실패 ${bad.length}개` : ''}` : '불러오지 못했습니다: ' + bad.join(', '), !ok.length);
   };
 
   /* ------------------------------------------------------------------ chrome */
   function drawCrumb() {
     const doc = ed().doc;
-    if (tab === 'factory') $('crumb').innerHTML = `<span>공장</span><span>/</span><b>${esc(doc.meta.name)}</b><span class="ver">${dirty.factory ? '수정됨' : ''}</span>`;
+    if (tab === 'factory') $('crumb').innerHTML = `<b>${esc(doc.meta.name)}</b><span class="ver">${dirty.factory ? '수정됨' : ''}</span>`;
     else { const m = lib()[doc.meta.id], v = m ? Math.max(...Object.keys(m.versions).map(Number)) : 0;
-      $('crumb').innerHTML = `<span>설비</span><span>/</span><b>${esc(doc.meta.name)}</b><span class="pill">${doc.meta.fidelity}</span><span class="ver">v0.1.${v}${dirty.machine ? ' · 수정됨' : ''}</span>`; }
+      $('crumb').innerHTML = `<b>${esc(doc.meta.name)}</b><span class="pill">${doc.meta.fidelity}</span><span class="ver">v0.1.${v}${dirty.machine ? ' · 수정됨' : ''}</span>`; }
   }
   function drawBar() {
     const doc = ed().doc;
@@ -501,11 +639,11 @@
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
   }
-  function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
+  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '끌어서 옮기기 · Shift+클릭 / Shift+드래그 = 여러 개 선택 · Ctrl+A 전체 · 빈 곳 끌기 = 화면 회전 · 휠 확대'; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
-    tab = t; LS.set(KEY.tab, t); sel = null; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    tab = t; LS.set(KEY.tab, t); sel = null; multi = new Set(); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     for (const v of objs.values()) root.remove(v.obj); objs = new Map(); floorKey = '';
     $('mode').hidden = t !== 'machine'; $('bottom').hidden = true; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';
     $('search').value = ''; drawPalette(); refresh(); updateHint(); drawLog(); setTimeout(() => { stage.resize(); fitAll(); }, 0);
@@ -513,21 +651,37 @@
 
   /* ------------------------------------------------------------------ labels (projected HTML) */
   const lblBox = $('labels'), lbls = new Map(), v3 = new T.Vector3();
+  // labels never pile up: the selected / hovered one first, then the rest by size; a label that would overlap one already
+  // shown drops to its short code, and if even that overlaps it is hidden until you zoom in or point at it
+  let hoverId = null; const lw = new Map(), meas = document.createElement('div'); meas.className = 'lbl'; meas.style.visibility = 'hidden'; meas.style.left = '-999px'; lblBox.appendChild(meas);
+  const wOf = (el, html) => { let w = lw.get(html); if (w === undefined) { meas.innerHTML = html; w = meas.offsetWidth; if (w) lw.set(html, w); else w = 80; } return w; };
   function drawLabels() {
-    const r = renderer.domElement.getBoundingClientRect(), want = new Set();
-    if (tab === 'machine') for (const n of ED.machine.doc.nodes) { if (n.parent && sel !== n.id) continue; want.add(n.id); }
-    else for (const it of factoryItems(ED.factory.doc)) if (it.path === 'machines' || it.id === sel) want.add(it.id);
+    const r = renderer.domElement.getBoundingClientRect(), want = new Set(), sels = new Set(selIds());
+    if (tab === 'machine') for (const n of ED.machine.doc.nodes) { if (n.parent && !sels.has(n.id) && hoverId !== n.id) continue; want.add(n.id); }
+    else for (const it of factoryItems(ED.factory.doc)) if (it.path === 'machines' || sels.has(it.id) || it.id === hoverId) want.add(it.id);
     for (const [id, el] of lbls) if (!want.has(id)) { el.remove(); lbls.delete(id); }
+    const items = [];
     for (const id of want) {
       const o = objs.get(id)?.obj; if (!o) continue; let el = lbls.get(id);
       if (!el) { el = document.createElement('div'); el.className = 'lbl'; lblBox.appendChild(el); lbls.set(id, el); }
-      tmpBox.setFromObject(o); if (tmpBox.isEmpty()) continue; tmpBox.getCenter(v3); v3.y = tmpBox.max.y + 0.05; v3.project(camera);
-      const vis = Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; el.style.display = vis ? '' : 'none'; if (!vis) continue;
-      el.style.left = ((v3.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v3.y) / 2 * r.height) + 'px';
+      tmpBox.setFromObject(o); if (tmpBox.isEmpty()) { el.style.display = 'none'; continue; } const size = tmpBox.getSize(v3).length(); tmpBox.getCenter(v3); v3.y = tmpBox.max.y + 0.05; v3.project(camera);
+      if (Math.abs(v3.x) > 1.05 || Math.abs(v3.y) > 1.05) { el.style.display = 'none'; continue; }
       let code, name; if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); code = nodeCode(n); name = n.name; } else { const it = factoryItems(ED.factory.doc).find(x => x.id === id); code = itemCode(it); name = itemName(it); }
-      const html = `${code ? `<b>${esc(code)}</b>` : ''}${esc(name)}`; if (el.innerHTML !== html) el.innerHTML = html; el.classList.toggle('on', id === sel);
+      items.push({ id, el, x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, size, code, name, pri: id === sel ? 3 : id === hoverId ? 2 : sels.has(id) ? 1 : 0 });
+    }
+    items.sort((a, b) => b.pri - a.pri || b.size - a.size);
+    const placed = [], H = 22, hits = (x0, x1, y0, y1) => placed.some(p => x0 < p[1] + 4 && x1 > p[0] - 4 && y0 < p[3] + 2 && y1 > p[2] - 2);
+    for (const it of items) {
+      const full = `${it.code ? `<b>${esc(it.code)}</b>` : ''}${esc(it.name)}`, short = it.code ? `<b>${esc(it.code)}</b>` : full;
+      let html = full, w = wOf(it.el, full) ; const y0 = it.y - H, y1 = it.y;
+      if (it.pri < 2 && hits(it.x - w / 2, it.x + w / 2, y0, y1)) { html = short; w = wOf(it.el, short); if (hits(it.x - w / 2, it.x + w / 2, y0, y1)) { it.el.style.display = 'none'; continue; } }
+      placed.push([it.x - w / 2, it.x + w / 2, y0, y1]);
+      if (it.el.innerHTML !== html) it.el.innerHTML = html; it.el.style.display = ''; it.el.style.left = it.x + 'px'; it.el.style.top = it.y + 'px';
+      it.el.classList.toggle('on', sels.has(it.id)); it.el.classList.toggle('hov', it.pri === 2); it.el.style.zIndex = it.pri >= 2 ? 2 : 1;
     }
   }
+  renderer.domElement.addEventListener('pointermove', e => { if (drag || placing || e.buttons) return; setNdc(e); const id = pickExact(); if (id !== hoverId) hoverId = id; });
+  renderer.domElement.addEventListener('pointerleave', () => { hoverId = null; });
 
   /* ------------------------------------------------------------------ loop */
   let last = performance.now();

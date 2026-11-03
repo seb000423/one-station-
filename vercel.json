@@ -1,6 +1,9 @@
 {
+  "redirects": [
+    { "source": "/console.html", "destination": "/build", "permanent": false }
+  ],
   "rewrites": [
-    { "source": "/builder", "destination": "/console.html" },
+    { "source": "/builder", "destination": "/build.html" },
     { "source": "/monitor", "destination": "/console2.html" },
     { "source": "/sim", "destination": "/sim.html" },
     { "source": "/build", "destination": "/build.html" }
