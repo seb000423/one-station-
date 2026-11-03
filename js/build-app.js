@@ -132,13 +132,13 @@
       const m = new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), floorMat); m.receiveShadow = true; m.renderOrder = -1; slabMesh.add(m);
       const e = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), edgeMat); slabMesh.add(e);
       slabMesh.position.set(c.x, 0.001, c.z); ov.add(slabMesh);
-      stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2, 0, c.z - d / 2), new T.Vector3(c.x + w / 2, 6, c.z + d / 2))); stage.setGrid(0.5, 5);
+      { const m = Math.max(w, d) * 0.35 + 6; controls.minZoom = 1 / ((Math.max(w, d) / 2 + m) * 0.9); stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2 - m, 0, c.z - d / 2 - m), new T.Vector3(c.x + w / 2 + m, 6, c.z + d / 2 + m))); } stage.setGrid(0.5, 5);
     } else {
       const [W, D, H] = doc.meta.bbox.map(v => v / 1000);
       envelope = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(1, 1, 1)), dashMat); envelope.computeLineDistances(); ov.add(envelope); updateEnvelope();
       originMark = new T.Group(); const ax = new T.ArrowHelper(new T.Vector3(1, 0, 0), new T.Vector3(0, 0.003, 0), Math.max(0.4, W * 0.18), 0xffae42, 0.08, 0.05); originMark.add(ax);
       const dot = new T.Mesh(new T.RingGeometry(0.03, 0.045, 24).rotateX(-Math.PI / 2), L.mat('glowA')); dot.position.y = 0.004; originMark.add(dot); ov.add(originMark);
-      const R = Math.max(W, D) * 0.9 + 1; stage.setBounds(new T.Box3(new T.Vector3(-R, 0, -R), new T.Vector3(R, H, R))); stage.setGrid(0.1, 0.5);
+      const R = Math.max(12, Math.max(W, D) * 2); controls.minZoom = 1 / (R * 0.75); stage.setBounds(new T.Box3(new T.Vector3(-R, 0, -R), new T.Vector3(R, H, R))); stage.setGrid(0.1, 0.5);
     }
   }
 
@@ -498,8 +498,8 @@
     if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
     else { $('sizeLab').textContent = '설비 크기 (자동)'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = true; [$('sW').value, $('sD').value, $('sH').value] = contentSize() || doc.meta.bbox; $('sH').hidden = $('sHx').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
-    if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥 왼쪽 아래 · X 입고 → 출하'; }
-    else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').innerHTML = '점선 = 설비 외곽 (블록을 따라감) · 원점 = 바닥면 중심 · X 투입 → 배출'; }
+    if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
+    else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
   }
   function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
