@@ -151,7 +151,7 @@ h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
 .why{color:var(--mute);font-size:12px;line-height:1.5;margin:-2px 0 10px}
 .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 .taglist{font-family:var(--mono);font-size:11.5px;color:var(--mute);display:grid;gap:2px}
-.bottom{border:1px solid var(--line);border-radius:6px;margin:0 6px 6px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 400px;height:230px;background:var(--panel);position:relative}
+.bottom{border:1px solid var(--line);border-radius:6px;margin:0 6px 6px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 400px;height:300px;background:var(--panel);position:relative}
 .bottom.fold{height:36px}
 .bgrip{position:absolute;left:0;right:0;top:0;height:8px;cursor:ns-resize;z-index:6}.bgrip::after{content:'';position:absolute;left:50%;top:2px;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:var(--line2)}.bgrip:hover::after{background:var(--amber)}
 .bottom.fold .tbl,.bottom.fold .swrow,.bottom.fold .logb,.bottom.fold #seq{display:none}
@@ -177,7 +177,8 @@ tr.hl td{background:rgba(255,174,66,.07)}
 .car{display:inline-block;width:12px;color:var(--mute);transition:transform .15s}.sub.shut .car,.seqb.shut .seqcar{transform:rotate(-90deg)}
 .sub.shut>.swrow,.sub.shut>.tbl{display:none}.sub.grow.shut{flex:0}
 .seqcar{background:none;border:0;padding:0;cursor:pointer;font-size:12px}.bottom.seqshut{grid-template-columns:minmax(0,1fr) 150px}.seqb.shut #seq,.seqb.shut .bhead .btn,.seqb.shut #seqN{display:none}
-.swrow{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px;max-height:132px;overflow-y:auto}.swrow small{color:var(--dim)}
+#subSw{flex:none}#subTbl{min-height:96px}#subTbl.shut{min-height:0}.ctl:has(#subTbl.shut) #subSw{flex:1}.ctl:has(#subSw.shut) #subSw{flex:0}
+.swrow{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:8px 14px 0;margin-bottom:8px;flex:none;box-sizing:border-box;overflow-y:auto;scroll-snap-type:y mandatory;scroll-padding-top:8px}.swrow .sw{scroll-snap-align:start}.swrow small{color:var(--dim)}
 .sw{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:4px;padding:3px 4px 3px 8px;font-size:11.5px;background:#121317}.sw.hl{border-color:var(--amber)}
 .sw b{font-family:var(--mono);font-weight:500;color:var(--mute)}.sw .nm{color:var(--fg);white-space:nowrap}.swl{display:inline-flex;align-items:center;gap:4px;color:var(--mute);white-space:nowrap}
 .onoff{display:inline-flex;border:1px solid var(--line2);border-radius:3px;overflow:hidden}.onoff button{background:transparent;border:0;color:var(--dim);font:600 10.5px var(--mono);padding:3px 7px;cursor:pointer}
@@ -238,7 +239,7 @@ tr.xtra td{color:var(--dim)}
       <canvas id="c"></canvas>
       <div id="labels"></div>
       <div class="hint" id="hint"></div>
-      <div class="views" id="views"><button class="chip" data-v="fit">전체 보기</button><button class="chip" data-v="sel">선택 보기</button><button class="chip" data-v="xray" id="xrayChip" title="선으로 투시해서 보기 (X)">X-RAY</button><button class="chip" id="olBtn" title="이름으로 골라 선택 (L) · 같은 자리를 다시 누르면 뒤 객체">객체 목록 ▾</button></div>
+      <div class="views" id="views"><button class="chip" data-v="fit">전체 보기</button><button class="chip" data-v="sel">선택 보기</button><button class="chip" id="originChip" title="설비 원점 보기 · 바닥면 중심, 공장에 놓을 때 기준점 (X = 투입 → 배출)">원점</button><button class="chip" data-v="xray" id="xrayChip" title="선으로 투시해서 보기 (X)">X-RAY</button><button class="chip" id="olBtn" title="이름으로 골라 선택 (L) · 같은 자리를 다시 누르면 뒤 객체">객체 목록 ▾</button></div>
       <div class="objlist" id="objList" hidden><input id="olQ" placeholder="이름·코드로 찾기 (Enter = 첫 번째)"><div id="olList"></div><small>Shift+클릭 = 여러 개 · 화면에서 같은 자리를 다시 누르면 뒤 객체가 골라집니다</small></div>
       <div class="chips"><div id="chipCount"></div><div id="chipOrigin"></div></div>
       <div class="toast" id="toast" hidden></div>
