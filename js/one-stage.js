@@ -2,8 +2,8 @@
 // Orthographic isometric camera from (1,1,1), one ivory key light with shadows + a weak rim light, Neutral tone mapping,
 // a floor whose edge melts radially into the background, a shader grid (0.5 m and 2 m, no depth write), a faint floor
 // mirror and a very light bloom that only the glowing rings / status lamps pass. No outlines.
-// Also: a "studio" colour mode (charcoal · grey · ivory + one amber accent) and a point-cloud twin of every mesh for the
-// 가상 검증 step (the points share the meshes' geometry and transforms, so they move with the line).
+// Also: a "studio" colour mode (charcoal · grey · ivory + one amber accent) and an X-ray mode (crease-edge lines of every
+// mesh, see-through, moving parts in amber).
 //
 // Needs: three.min.js, OrbitControls, postprocessing Pass / EffectComposer / ShaderPass, CopyShader,
 // LuminosityHighPassShader, UnrealBloomPass (all three@0.147.0 examples/js).
@@ -162,19 +162,29 @@
         } });
     };
 
-    /* ---- point-cloud twin: a Points child per mesh (same geometry, so it follows every animated node) on its own layer */
-    const ptsMat = new T.PointsMaterial({ color: new T.Color(0.55, 0.53, 0.49), size: 1.0, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
-    const addTwin = root => {
-      const meshes = []; root.traverse(o => { if (o.isMesh && !o.isSkinnedMesh && !o.userData.noTwin) meshes.push(o); });
-      for (const m of meshes) { const p = new T.Points(m.geometry, ptsMat); p.layers.set(GHOST_LAYER); p.userData.noTwin = true; p.raycast = () => {}; m.add(p); }
+    /* ---- X-ray twin: crease edges of every mesh as lines on their own layer (children of the meshes, so they move with
+       every animated node). X-ray on = the solid layer is hidden and only the lines are drawn: you see through the whole
+       line. Objects the caller marks as accents (moving parts) are drawn in amber, bright enough to pass the bloom. */
+    const xrMat = new T.LineBasicMaterial({ color: new T.Color(0.86, 0.83, 0.76), transparent: true, opacity: 0, depthWrite: false });
+    const xrAccent = new T.LineBasicMaterial({ color: new T.Color(3.2, 1.75, 0.45), transparent: true, opacity: 0, depthWrite: false });
+    const edgeCache = new Map();
+    const edgesOf = g => { let e = edgeCache.get(g.uuid); if (!e) { e = new T.EdgesGeometry(g, 28); edgeCache.set(g.uuid, e); } return e; };
+    // accent(obj) → true for objects to draw in amber (checked on the mesh and its ancestors)
+    const addTwin = (root, accent) => {
+      const meshes = []; root.traverse(o => { if (o.isMesh && !o.isSkinnedMesh && !o.userData.twin && !o.userData.noTwin) meshes.push(o); });
+      for (const m of meshes) {
+        let hot = false; if (accent) for (let a = m; a && !hot; a = a.parent) hot = accent(a);
+        const l = new T.LineSegments(edgesOf(m.geometry), hot ? xrAccent : xrMat); l.layers.set(GHOST_LAYER); l.userData.noTwin = true; l.raycast = () => {};
+        m.add(l); m.userData.twin = true;
+      }
     };
     let ghostT = 0, ghostTo = 0;
     const ghost = on => { ghostTo = on ? 1 : 0; };
     const stepGhost = dt => {
       if (ghostT === ghostTo) return;
-      ghostT = ghostTo > ghostT ? Math.min(1, ghostT + dt / 0.5) : Math.max(0, ghostT - dt / 0.7);
-      ptsMat.opacity = Math.min(1, ghostT * 1.2) * 0.7;
-      if (ghostT > 0.55) camera.layers.disable(0); else camera.layers.enable(0);
+      ghostT = ghostTo > ghostT ? Math.min(1, ghostT + dt / 0.35) : Math.max(0, ghostT - dt / 0.35);
+      xrMat.opacity = ghostT * 0.42; xrAccent.opacity = ghostT;
+      if (ghostT > 0.5) camera.layers.disable(0); else camera.layers.enable(0);
       if (ghostT > 0) camera.layers.enable(GHOST_LAYER); else camera.layers.disable(GHOST_LAYER);
     };
 
