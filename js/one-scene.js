@@ -52,15 +52,16 @@
     const blockP = n => Object.assign({}, L.BLOCKS[n.blockType]?.params, n.params);
     function portCandidates(doc) { const out = [];
       for (const n of doc.nodes) { const d = L.BLOCKS[n.blockType]; if (!d) continue; const code = n.params.tag || '';
-        if (d.conveyor) { out.push({ key: `${n.id}/in`, label: `${code} 투입 끝`, kind: 'in' }, { key: `${n.id}/out`, label: `${code} 배출 끝`, kind: 'out' }); }
+        if (d.conveyor || d.curve) { out.push({ key: `${n.id}/in`, label: `${code} 투입 끝`, kind: 'in' }, { key: `${n.id}/out`, label: `${code} 배출 끝`, kind: 'out' }); }
         else if (d.work || d.sensor || d.stops) continue;
         else if (d.top(blockP(n)) > 0.05 || d.cat === 'process' || d.cat === 'transport') out.push({ key: `${n.id}/top`, label: `${code} ${d.name.replace(/\s*\(.*\)$/, '')} 윗면`, kind: 'any' }); }
       return out; }
     function portAt(doc, key) { if (!key) return null; const [id, end] = key.split('/'), n = doc.nodes.find(x => x.id === id); if (!n) return null; const d = L.BLOCKS[n.blockType]; if (!d) return null;
       const p = blockP(n), q = n.transform.position, r = n.transform.rotation[2] * Math.PI / 180, a = [Math.cos(r), Math.sin(r)], top = q[2] + d.top(p) * 1000;
+      if (d.curve && (end === 'in' || end === 'out')) { const g = L.curveGeom(n), u = end === 'in' ? 0 : 1, pt = g.point(u); return { key, pos: [pt[0], pt[1], g.top], dir: g.heading(u) }; }
       if (end === 'in' || end === 'out') { const s = end === 'in' ? -1 : 1, L2 = (+p.length || 1000) / 2; return { key, pos: [q[0] + a[0] * s * L2, q[1] + a[1] * s * L2, top], dir: a }; }
       return { key, pos: [q[0], q[1], top], dir: a }; }
-    function autoPorts(doc) { const convs = doc.nodes.filter(n => L.BLOCKS[n.blockType]?.conveyor && !n.parent);
+    function autoPorts(doc) { const convs = doc.nodes.filter(n => (L.BLOCKS[n.blockType]?.conveyor || L.BLOCKS[n.blockType]?.curve) && !n.parent);
       if (convs.length) { const ends = convs.map(c => ({ c, i: portAt(doc, `${c.id}/in`), o: portAt(doc, `${c.id}/out`) })), near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 600;
         const first = ends.find(e => !ends.some(f => f !== e && near(f.o.pos, e.i.pos))) || ends[0], last = ends.slice().reverse().find(e => !ends.some(f => f !== e && near(e.o.pos, f.i.pos))) || ends[ends.length - 1];
         return { inlet: first.i, outlet: last.o }; }
@@ -78,7 +79,7 @@
       if (!P) return null; const r = (it.item.transform.rotation[2] || 0) * Math.PI / 180; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item), dir: [Math.cos(r), Math.sin(r)] }; }
     /** The route a part takes through a machine, inlet → outlet (machine frame mm): along its conveyor chain when it has one
        (each conveyor's outfeed end, then the point where the part lands on the next conveyor), else straight across. */
-    function machinePath(doc) { const P = portsOf(doc), convs = doc.nodes.filter(n => L.BLOCKS[n.blockType]?.conveyor && !n.parent);
+    function machinePath(doc) { const P = portsOf(doc), convs = doc.nodes.filter(n => (L.BLOCKS[n.blockType]?.conveyor || L.BLOCKS[n.blockType]?.curve) && !n.parent);
       const pts = [P.inlet.pos]; if (!convs.length) { pts.push(P.outlet.pos); return pts; }
       const axis = c => { const i = portAt(doc, `${c.id}/in`).pos, o = portAt(doc, `${c.id}/out`).pos; return { c, i, o, w: (+blockP(c).w || 500) }; }, A = convs.map(axis);
       const onto = (p, a) => { const dx = a.o[0] - a.i[0], dy = a.o[1] - a.i[1], L2 = dx * dx + dy * dy || 1, t = ((p[0] - a.i[0]) * dx + (p[1] - a.i[1]) * dy) / L2, q = [a.i[0] + dx * t, a.i[1] + dy * t, a.i[2]];
@@ -87,6 +88,7 @@
       let cur = owner(P.inlet.key) || A.map(a => ({ a, d: Math.hypot(a.i[0] - P.inlet.pos[0], a.i[1] - P.inlet.pos[1]) })).sort((x, y) => x.d - y.d)[0].a;
       const last = owner(P.outlet.key), seen = new Set();
       for (let k = 0; cur && k < 30; k++) { seen.add(cur); const e = onto(pts[pts.length - 1], cur); if (e.d > 1) pts.push(e.q);
+        if (L.BLOCKS[cur.c.blockType].curve) { const g = L.curveGeom(cur.c); for (const u of [0.25, 0.5, 0.75]) { const q = g.point(u); pts.push([q[0], q[1], g.top]); } }
         if (cur === last) break; pts.push(cur.o);
         let nx = null; for (const a of A) { if (seen.has(a)) continue; const h = onto(cur.o, a); if (h.t > -0.25 && h.t < 1.0 && h.d < a.w / 2 + 300) { nx = a; break; } } cur = nx; }
       pts.push(P.outlet.pos); return pts.filter((p, i) => !i || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1], p[2] - pts[i - 1][2]) > 1); }

@@ -344,6 +344,19 @@
     top: p => mm(p.h), conveyor: true, heightKey: 'h', pose: (g, p, v) => conveyorPose(g, v.BELT),
     joints: (P, p) => [J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, p.length, p.speed, 1000)], io: convIo,
     build: p => conveyorShape(v, mm(p.length), mm(p.w), mm(p.h)) });
+  // a 90° curve: rollers fan out between an inner and an outer rail, so the line turns without a seam.
+  // Stored frame: origin = centre of the arc, the work enters at (0, ∓r) heading +X and leaves at (r, 0) heading ±Y
+  // (turn 'left' = to +Y, 'right' = to −Y). Shared with the run logic through curveGeom().
+  bdef('curve-conveyor', { name: '커브 컨베이어 (90°)', cat: 'transport', code: 'CV', curve: true, heightKey: 'h', params: { r: 750, w: 500, h: 900, speed: 300, turn: 'left' },
+    fields: [sel('turn', '방향', [['left', '왼쪽으로'], ['right', '오른쪽으로']]), num('r', '중심 반경', 'mm', 10), num('w', '폭', 'mm', 10), num('h', '반송 높이', 'mm', 10), num('speed', '속도', 'mm/s', 10)],
+    top: p => mm(p.h), joints: (P, p) => [J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, Math.PI / 2 * p.r, p.speed, 1000)], io: convIo,
+    build: p => { const g = new T.Group(), R = mm(p.r), W = mm(p.w), H = mm(p.h), sg = p.turn === 'right' ? -1 : 1, th = u => sg * (-Math.PI / 2) * (1 - u);
+      const at = (r, t) => [r * Math.cos(t), -r * Math.sin(t)];
+      for (const rr of [R - W / 2 - 0.01, R + W / 2 + 0.01]) for (let i = 0; i < 16; i++) { const t0 = th(i / 16), t1 = th((i + 1) / 16), a = at(rr, t0), b = at(rr, t1), m = bx(g, 'frame', Math.hypot(b[0] - a[0], b[1] - a[1]) + 0.004, 0.1, 0.05, (a[0] + b[0]) / 2, H - 0.1, (a[1] + b[1]) / 2); m.rotation.y = Math.atan2(-(b[1] - a[1]), b[0] - a[0]); }
+      const rl = grp(g, 'rollers'); const n = Math.max(6, Math.round(R * Math.PI / 2 / 0.1));
+      for (let i = 0; i <= n; i++) { const t = th((i + 0.5) / (n + 1)), c = at(R, t), k = grp(rl, 'r', c[0], H - 0.03, c[1]); k.rotation.y = t; cy(k, 'light', 0.024, W - 0.04, 0, 0, 0, 'x', 10); }
+      for (const u of [0.04, 0.5, 0.96]) for (const rr of [R - W / 2 + 0.05, R + W / 2 - 0.05]) { const c = at(rr, th(u)); bx(g, 'frame', 0.05, H - 0.08, 0.05, c[0], 0, c[1]); }
+      return g; } });
   // a square module where a line turns 90°: the work rides in, stops on the centre, and leaves on the conveyor at its side
   bdef('transfer-corner', { name: '직각 전환 유닛 (턴테이블)', cat: 'transport', code: 'CT', corner: true, heightKey: 'h', params: { w: 500, h: 900 }, fields: [num('w', '크기', 'mm', 10), num('h', '반송 높이', 'mm', 10)],
     top: p => mm(p.h), io: P => [out(`${P}_RUN`), inn(`${P}_FAULT`)],
@@ -432,7 +445,15 @@
   bdef('screw-unit', { name: '체결 (스크류·너트런너)', cat: 'process', code: 'SCW', onTop: true, params: { spindles: 1, cycle: 5 }, fields: [num('spindles', '축 수', '축', 1, 1), num('cycle', '사이클', 's', 0.5)], io: procIo,
     build: p => { const g = new T.Group(), n = Math.max(1, p.spindles | 0); bx(g, 'light', 0.1 + n * 0.08, 0.2, 0.15, 0, 0.25); for (let i = 0; i < n; i++) cy(g, 'steel', 0.012, 0.25, -((n - 1) * 0.08) / 2 + i * 0.08, 0); return g; } });
 
+  /** 90° curve in stored mm, about its node: point(u) and heading(u) for u = 0 (entry) … 1 (exit). */
+  function curveGeom(n) { const p = Object.assign({}, B['curve-conveyor'].params, n.params), sg = p.turn === 'right' ? -1 : 1, q = n.transform.position, yaw = n.transform.rotation[2] * Math.PI / 180;
+    const c = Math.cos(yaw), s = Math.sin(yaw), th = u => sg * (-Math.PI / 2) * (1 - u), rot = (x, y) => [q[0] + x * c - y * s, q[1] + x * s + y * c];
+    return { R: +p.r, W: +p.w, top: q[2] + +p.h, len: Math.PI / 2 * p.r, sg, point: u => { const t = th(u); return rot(p.r * Math.cos(t), p.r * Math.sin(t)); },
+      heading: u => { const t = th(u), hx = -Math.sin(t) * sg, hy = Math.cos(t) * sg; return [hx * c - hy * s, hx * s + hy * c]; },
+      // nearest u of a point and its distance from the centre line (null when outside the sector)
+      locate: pt => { const dx = pt[0] - q[0], dy = pt[1] - q[1], lx = dx * c + dy * s, ly = -dx * s + dy * c, r = Math.hypot(lx, ly), t = Math.atan2(ly, lx), u = 1 - t / (sg * (-Math.PI / 2));
+        return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

@@ -260,13 +260,15 @@
      Piece positions are mm about the layout origin, yaw in degrees; X = 투입 → 배출. */
   const CV = 'roller-conveyor';
   const CT = 'transfer-corner';
+  const CU = 'curve-conveyor', RC = 750; // curve centre-line radius
   const SHAPES = {
-    'l-right': { name: '직각 전환 라인 · 우측 90°', code: 'CV×2 CT', why: '직선 3 m → 직각 전환 유닛 → 오른쪽으로 3 m. 이음매가 맞닿아 겹치지 않습니다',
-      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: -1750, yaw: -90 }] },
-    'l-left': { name: '직각 전환 라인 · 좌측 90°', code: 'CV×2 CT', why: '직선 3 m → 직각 전환 유닛 → 왼쪽으로 3 m',
-      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: 1750, yaw: 90 }] },
-    'u-turn': { name: '리턴 라인 · 180° 회송', code: 'CV×3 CT×2', why: '나간 라인이 두 번의 직각 전환으로 같은 쪽으로 되돌아옵니다',
-      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CT, x: 1750, y: 0, yaw: 0 }, { t: CV, x: 1750, y: 1750, yaw: 90 }, { t: CT, x: 1750, y: 3500, yaw: 90 }, { t: CV, x: 0, y: 3500, yaw: 180 }] },
+    'l-right': { name: '직각 전환 라인 · 우측 90°', code: 'CV×2 커브', why: '직선 3 m → 90° 커브 → 오른쪽으로 3 m. 롤러가 끊김 없이 이어집니다',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CU, x: 1500, y: -RC, yaw: 0, p: { turn: 'right', r: RC } }, { t: CV, x: 1500 + RC, y: -RC - 1500, yaw: -90 }] },
+    'l-left': { name: '직각 전환 라인 · 좌측 90°', code: 'CV×2 커브', why: '직선 3 m → 90° 커브 → 왼쪽으로 3 m',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CU, x: 1500, y: RC, yaw: 0, p: { turn: 'left', r: RC } }, { t: CV, x: 1500 + RC, y: RC + 1500, yaw: 90 }] },
+    'u-turn': { name: '리턴 라인 · 180° 회송', code: 'CV×3 커브×2', why: '나간 라인이 90° 커브 두 개로 같은 쪽으로 되돌아옵니다',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CU, x: 1500, y: RC, yaw: 0, p: { turn: 'left', r: RC } }, { t: CV, x: 1500 + RC, y: RC + 1500, yaw: 90 },
+        { t: CU, x: 1500, y: RC + 3000, yaw: 90, p: { turn: 'left', r: RC } }, { t: CV, x: 0, y: 2 * RC + 3000, yaw: 180 }] },
     'two-level': { name: '상하 2단 순환 라인', code: 'CV×2 LFT×2', why: '상단은 작업, 하단은 빈 팔레트 회송. 양 끝 리프터가 단 사이를 오르내립니다',
       pieces: [{ t: CV, x: 0, y: 0, yaw: 0, p: { h: 900 } }, { t: CV, x: 0, y: 0, yaw: 180, p: { h: 450, w: 300 } }, { t: 'lifter', x: 1800, y: 0, yaw: 0, p: { stroke: 450 } }, { t: 'lifter', x: -1800, y: 0, yaw: 0, p: { stroke: 450 } }] },
   };
@@ -455,14 +457,14 @@
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
       if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
   // conveyors that meet end to end or at a side transfer, at the same height: they rise and fall together
-  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner)), P = n => { const p = Object.assign({}, nodeDef(n).params, n.params); if (nodeDef(n).corner) p.length = p.w; return p; };
-    const ends = n => { if (!nodeDef(n).corner) return ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos); const q = n.transform.position, h = +P(n).w / 2; return [[q[0] + h, q[1]], [q[0] - h, q[1]], [q[0], q[1] + h], [q[0], q[1] - h]]; }, H = n => +P(n).h;
-    const over = (p, b) => { const r = b.transform.rotation[2] * Math.PI / 180, dx = p[0] - b.transform.position[0], dy = p[1] - b.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r);
+  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner || nodeDef(n)?.curve)), P = n => { const p = Object.assign({}, nodeDef(n).params, n.params); if (nodeDef(n).corner) p.length = p.w; return p; };
+    const ends = n => { if (nodeDef(n).curve) { const g = L.curveGeom(n); return [g.point(0), g.point(1)]; } if (!nodeDef(n).corner) return ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos); const q = n.transform.position, h = +P(n).w / 2; return [[q[0] + h, q[1]], [q[0] - h, q[1]], [q[0], q[1] + h], [q[0], q[1] - h]]; }, H = n => +P(n).h;
+    const over = (p, b) => { if (nodeDef(b).curve) return ends(b).some(e => Math.hypot(e[0] - p[0], e[1] - p[1]) <= +P(b).w / 2 + 80); const r = b.transform.rotation[2] * Math.PI / 180, dx = p[0] - b.transform.position[0], dy = p[1] - b.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r);
       return Math.abs(a) <= +P(b).length / 2 + 80 && Math.abs(l) <= +P(b).w / 2 + 80; };
     const meets = (a, b) => Math.abs(H(a) - H(b)) < 5 && (ends(a).some(p => over(p, b)) || ends(b).some(p => over(p, a)));
     const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
     return out; }
-  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => { const d = nodeDef(doc.nodes.find(n => n.id === id)); return d?.conveyor || d?.corner; }))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
+  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => { const d = nodeDef(doc.nodes.find(n => n.id === id)); return d?.conveyor || d?.corner || d?.curve; }))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
     if (ids.length > picked.length) msg = `이어진 컨베이어 ${ids.length - picked.length}개도 같은 높이로 같이 움직였습니다`;
     ed().batch('height', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!n || (n.parent && set.has(n.parent))) continue;
       if (d.heightKey && !n.parent) { const cur = +(n.params[d.heightKey] ?? d.params[d.heightKey]); setParamKeepKids(id, d.heightKey, Math.max(100, cur + dz)); }
@@ -549,7 +551,7 @@
   function genSequence(doc) {
     const io = new Map(doc.io.map(t => [t.tag, t])), out = t => io.get(t)?.dir === 'out';
     const B = doc.nodes.map(n => ({ n, P: nodeCode(n), d: nodeDef(n) })).filter(x => x.d);
-    const convs = B.filter(x => (x.d.conveyor || x.d.corner) && out(`${x.P}_RUN`)), stops = B.filter(x => x.d.stops && out(`${x.P}_UP`)), sens = B.filter(x => x.d.sensor && io.has(`${x.P}_ON`));
+    const convs = B.filter(x => (x.d.conveyor || x.d.corner || x.d.curve) && out(`${x.P}_RUN`)), stops = B.filter(x => x.d.stops && out(`${x.P}_UP`)), sens = B.filter(x => x.d.sensor && io.has(`${x.P}_ON`));
     const procs = B.filter(x => !x.d.conveyor).map(x => ({ ...x, go: out(`${x.P}_START`) ? `${x.P}_START` : out(`${x.P}_TRIG`) ? `${x.P}_TRIG` : null, done: io.has(`${x.P}_DONE`) ? `${x.P}_DONE` : io.has(`${x.P}_OK`) ? `${x.P}_OK` : null })).filter(x => x.go && x.done);
     const near = (a, b) => Math.hypot(a.n.transform.position[0] - b.n.transform.position[0], a.n.transform.position[1] - b.n.transform.position[1]);
     const sensor = stops.length && sens.length ? sens.slice().sort((a, b) => near(a, stops[0]) - near(b, stops[0]))[0] : sens[0];
@@ -650,6 +652,8 @@
     }
     // works ride on running conveyors and stop at raised stoppers
     const convs = doc.nodes.filter(n => nodeDef(n)?.conveyor), stops = doc.nodes.filter(n => nodeDef(n)?.stops), corners = doc.nodes.filter(n => nodeDef(n)?.corner);
+    const curves = doc.nodes.filter(n => nodeDef(n)?.curve).map(n => ({ n, g: L.curveGeom(n) }));
+    const onCurve = (p, top, tol = 1) => { for (const c of curves) { if (Math.abs(c.g.top - top) > 60) continue; const l = c.g.locate(p); if (l && Math.abs(l.off) <= c.g.W / 2 + tol) return { c, l }; } return null; };
     const cframe = c => { const q = c.transform.position, r = c.transform.rotation[2] * Math.PI / 180; return { q, a: [Math.cos(r), Math.sin(r)], nrm: [-Math.sin(r), Math.cos(r)], wh: (c.params.w || 500) / 2, top: q[2] + (c.params.h || 900) }; };
     const inCorner = (p, top) => corners.find(c => { const f = cframe(c); if (Math.abs(f.top - top) > 60) return false; const dx = p[0] - f.q[0], dy = p[1] - f.q[1]; return Math.abs(dx * f.a[0] + dy * f.a[1]) <= f.wh + 1 && Math.abs(dx * f.nrm[0] + dy * f.nrm[1]) <= f.wh + 1; });
     // works ride conveyors along each conveyor's own direction; at an end they pass onto a conveyor that continues
@@ -657,6 +661,12 @@
     const frame = c => { const q = c.transform.position, r = c.transform.rotation[2] * Math.PI / 180; return { q, a: [Math.cos(r), Math.sin(r)], nrm: [-Math.sin(r), Math.cos(r)], Lh: (c.params.length || 3000) / 2, wh: (c.params.w || 500) / 2, top: q[2] + (c.params.h || 900) }; };
     const loc = (f, p) => [(p[0] - f.q[0]) * f.a[0] + (p[1] - f.q[1]) * f.a[1], (p[0] - f.q[0]) * f.nrm[0] + (p[1] - f.q[1]) * f.nrm[1]];
     for (const n of doc.nodes) { const w = RUN.works[n.id]; if (!w) continue; const z = n.transform.position[2], hw = (n.params.w || 300) / 2; let best = null;
+      // on a curve: ride along the arc at its centre line; at the exit, onto whatever continues
+      const oc = onCurve(w.p, z); if (oc) { const { c, l } = oc, P = nodeCode(c.n); if (!tags[`${P}_RUN`]) continue; const sp = (tags[`${P}_SPEED`] > 0 ? tags[`${P}_SPEED`] : c.n.params.speed || 300) * (tags[`${P}_DIR`] ? -1 : 1);
+        let u = l.u + sp * dt / c.g.len; if (u > 1 || u < 0) { const e = u > 1 ? 1 : 0, ep = c.g.point(e), hd = c.g.heading(e).map(v => v * Math.sign(sp)), probe = [ep[0] + hd[0] * 5, ep[1] + hd[1] * 5];
+          const next = !!inCorner(probe, c.g.top) || curves.some(o => o !== c && Math.abs(o.g.top - c.g.top) < 5 && o.g.locate(probe)) || convs.some(o => { const g = frame(o); if (Math.abs(g.top - c.g.top) > 5) return false; const [ex, ey] = loc(g, probe); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
+          w.p = next ? [ep[0] + hd[0] * (Math.abs(u - e) * c.g.len + 6), ep[1] + hd[1] * (Math.abs(u - e) * c.g.len + 6)] : ep; continue; }
+        w.p = c.g.point(u); continue; }
       // on a turn module: ride to its centre first; from the centre the conveyor at its side takes the work
       const cn = inCorner(w.p, z); if (!cn) delete w.centred; else if (w.centred !== cn.id) { const q = cn.transform.position, dx = q[0] - w.p[0], dy = q[1] - w.p[1], dd = Math.hypot(dx, dy);
         if (dd > 2) { if (!tags[`${nodeCode(cn)}_RUN`]) continue; const st = Math.min(dd, (cn.params.speed || 300) * dt); w.p = [w.p[0] + dx / dd * st, w.p[1] + dy / dd * st]; continue; } w.centred = cn.id; }
@@ -666,7 +676,7 @@
         for (const s0 of stops) { if (!(RUN.v[`${nodeCode(s0)}_Z`] > 5)) continue; const [sx, sy] = loc(f, s0.transform.position); if (Math.abs(sy) > f.wh) continue;
           if (sp > 0 && lx + hw <= sx + 1 && nx + hw > sx) nx = sx - hw; if (sp < 0 && lx - hw >= sx - 1 && nx - hw < sx) nx = sx + hw; }
         const endP = [f.q[0] + f.a[0] * (Math.sign(sp) * f.Lh), f.q[1] + f.a[1] * (Math.sign(sp) * f.Lh)];
-        const handover = !!inCorner(endP, f.top) || convs.some(o => { if (o === c) return false; const g = frame(o); if (Math.abs(g.top - f.top) > 5) return false; const [ex, ey] = loc(g, endP); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
+        const handover = !!inCorner(endP, f.top) || !!onCurve(endP, f.top, 60) || convs.some(o => { if (o === c) return false; const g = frame(o); if (Math.abs(g.top - f.top) > 5) return false; const [ex, ey] = loc(g, endP); return Math.abs(ey) <= g.wh + 60 && ex >= -g.Lh - g.wh - 60 && ex <= g.Lh; });
         if (!handover) nx = Math.max(-f.Lh + hw, Math.min(f.Lh - hw, nx));
         const adv = Math.abs(nx - lx); if (!best || adv > best.adv) best = { adv, p: [w.p[0] + f.a[0] * (nx - lx), w.p[1] + f.a[1] * (nx - lx)] }; }
       if (best) w.p = best.p; }
@@ -894,14 +904,16 @@
   const portGrp = new T.Group(); ov.add(portGrp);
   const arrowGeo = (() => { const sh = new T.Shape(); sh.moveTo(0.22, 0); sh.lineTo(-0.12, 0.14); sh.lineTo(-0.05, 0); sh.lineTo(-0.12, -0.14); sh.lineTo(0.22, 0); return new T.ShapeGeometry(sh).rotateX(-Math.PI / 2); })();
   const portMat = { in: new T.MeshBasicMaterial({ color: 0xe9e3d5, side: T.DoubleSide, depthWrite: false, transparent: true, opacity: 0.95 }), out: new T.MeshBasicMaterial({ color: 0xffae42, side: T.DoubleSide, depthWrite: false, transparent: true, opacity: 0.95 }) };
-  const portLbl = { in: document.createElement('div'), out: document.createElement('div') }; for (const [k, el] of Object.entries(portLbl)) { el.className = 'lbl port ' + k; el.textContent = k === 'in' ? '입구' : '출구'; $('labels').appendChild(el); }
+  const portLbl = { in: document.createElement('div'), out: document.createElement('div') }; for (const [k, el] of Object.entries(portLbl)) { el.className = 'lbl port ' + k; el.textContent = k === 'in' ? '투입' : '배출'; $('labels').appendChild(el); }
   let portAnchors = [];
   function addPortArrow(pos, dir, kind, scale, lift) { const g = new T.Group(), m = new T.Mesh(arrowGeo, portMat[kind]); m.scale.setScalar(scale); m.renderOrder = 3; g.add(m);
     const p = toS([pos[0], pos[1], lift ? pos[2] + 15 : 20]); g.position.copy(p);
     g.rotation.y = S.storedYawToScene(Math.atan2(dir[1], dir[0]) * 180 / Math.PI); portGrp.add(g); return p; }
   function drawPorts() { portGrp.clear(); portAnchors = [];
     if (tab === 'machine') { const P = SCN.portsOf(ED.machine.doc); if (!ED.machine.doc.nodes.length) return;
-      portAnchors.push(['in', addPortArrow(P.inlet.pos, P.inlet.dir, 'in', 1.2, true)], ['out', addPortArrow(P.outlet.pos, P.outlet.dir, 'out', 1.2, true)]); }
+      // a flat arrow at belt height just past each end (not on the rollers): where parts come in and go out
+      const off = (q, d, k) => [q.pos[0] + d[0] * k, q.pos[1] + d[1] * k, q.pos[2]];
+      portAnchors.push(['in', addPortArrow(off(P.inlet, P.inlet.dir, -280), P.inlet.dir, 'in', 0.9, true)], ['out', addPortArrow(off(P.outlet, P.outlet.dir, 280), P.outlet.dir, 'out', 0.9, true)]); }
     else { for (const it of factoryItems(ED.factory.doc)) { if (it.path !== 'machines' && it.path !== 'storage') continue; const P = portsF(it); if (!P) continue;
         addPortArrow(P.inA, P.dir, 'in', 3, false); const o = addPortArrow(P.outA, P.dir, 'out', 3, false); portGrp.children[portGrp.children.length - 1].userData.port = { id: it.id, kind: 'outlet' }; portGrp.children[portGrp.children.length - 2].userData.port = { id: it.id, kind: 'inlet' }; }
       drawFlows(); } }
@@ -940,7 +952,7 @@
         for (const [fa, fb, A, B] of [[id, oid, me.outlet, o.inlet], [oid, id, o.outlet, me.inlet]]) if (Math.hypot(A[0] - B[0], A[1] - B[1]) <= 800 && !doc.flows.some(f => f.from === `${fa}.outlet` && f.to === `${fb}.inlet`) && !doc.flows.some(f => f.from === `${fa}.outlet`)) { if (exec('connect_flow', { from: `${fa}.outlet`, to: `${fb}.inlet`, via: 'conveyor' }, true)) n++; } } }
     if (n) setTimeout(() => toast(`맞닿은 설비 ${n}곳을 컨베이어 흐름으로 이었습니다`), 0); }
   function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
-      const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height - 8) + 'px'; } }
+      const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
   function refresh() { syncScene(); drawPorts(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
@@ -959,7 +971,7 @@
   // 동작 시험: what each moving block is doing right now, always labelled so nothing hides behind a cabinet
   function runState(n) { const d = nodeDef(n); if (!d) return null; const P = nodeCode(n), t = RUN.tags, has = k => k in t;
     if (d.work) return { txt: '워크', on: true };
-    if (d.conveyor || d.corner) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
+    if (d.conveyor || d.corner || d.curve) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
     if (d.stops) { const up = has(`${P}_IS_UP`) ? t[`${P}_IS_UP`] : t[`${P}_UP`]; return { txt: up ? '올림 · 워크 멈춤' : '내림', on: !!up }; }
     if (d.sensor) return { txt: t[`${P}_ON`] ? '워크 감지' : '감지 없음', on: !!t[`${P}_ON`] };
     const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) return { txt: pr?.busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: !!pr?.busy };

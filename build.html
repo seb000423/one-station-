@@ -20,8 +20,8 @@ html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden;word-break:keep-all}
 button,select,input{font:inherit;color:inherit}
 [hidden]{display:none!important}
-.app{height:100%;display:grid;grid-template-rows:52px 46px minmax(0,1fr) auto}
-header{display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line)}
+.app{height:100%;display:grid;grid-template-rows:52px 46px minmax(0,1fr) auto;background:#0a0a0c}
+header{display:flex;align-items:center;gap:14px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--bg)}
 .home{color:var(--mute);text-decoration:none;border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:12px}
 .home:hover{color:var(--fg);border-color:var(--line2)}
 .logo{font-family:var(--mono);font-weight:600;letter-spacing:.32em;font-size:14px}
@@ -51,15 +51,15 @@ header{position:relative}
 .btn:hover{border-color:var(--mute)}
 .btn.pri{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);font-weight:600}
 .btn:disabled{opacity:.4;cursor:default}
-.bar{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);min-width:0;overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--bg);min-width:0;overflow:hidden}
 .bar .lab{color:var(--mute);white-space:nowrap}
 .bar input.n{width:70px;background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:12px;text-align:right}
 .bar .x{color:var(--dim)}
-.bar .hint{color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.view .hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);max-width:calc(100% - 24px);color:var(--fg);font-size:12px;background:rgba(15,16,18,.86);border:1px solid var(--line2);border-radius:4px;padding:4px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}.view .hint:empty{display:none}
 .bar .units{font-family:var(--mono);font-size:11.5px;color:var(--dim);white-space:nowrap}
 .sep{width:1px;height:22px;background:var(--line)}
-main{display:grid;grid-template-columns:290px minmax(0,1fr) 310px;min-height:0}
-aside{background:var(--panel);min-height:0;overflow-y:auto}
+main{display:grid;grid-template-columns:290px minmax(0,1fr) 310px;gap:6px;padding:6px;min-height:0;background:#0a0a0c}
+aside{background:var(--panel);min-height:0;overflow-y:auto;border:1px solid var(--line);border-radius:6px}
 aside.l{border-right:1px solid var(--line)}
 aside.r{border-left:1px solid var(--line)}
 .sec{padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -88,7 +88,7 @@ h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
 .tree div span{overflow:hidden;text-overflow:ellipsis}
 .tree .grp{color:var(--dim);font-size:11px;cursor:default;padding-top:8px}
 .tree .grp:hover{background:none}
-.view{position:relative;min-width:0;min-height:0;overflow:hidden}
+.view{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--line2);border-radius:6px}
 #c{display:block;width:100%;height:100%;touch-action:none}
 #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .lbl{position:absolute;transform:translate(-50%,-100%);font-size:11.5px;padding:3px 7px;border:1px solid var(--line2);border-radius:3px;background:rgba(15,16,18,.86);white-space:nowrap}
@@ -98,9 +98,9 @@ h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
 .lbl.live{border-color:var(--amber);background:var(--amber);color:#111}.lbl.live b{color:#111}.lbl.idle{color:var(--dim)}
 .flowlbl{position:absolute;z-index:3;transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;font:600 11px var(--sans);padding:2px 8px;border-radius:10px;border:1px solid var(--amber);background:rgba(15,16,18,.9);color:var(--amber);white-space:nowrap}
 .flowlbl:hover,.flowlbl.on{background:var(--amber);color:#111}
-.lbl.port{font-size:11px;padding:2px 6px;font-weight:600}
-.lbl.port.in{color:#111;background:#e9e3d5;border-color:#e9e3d5}
-.lbl.port.out{color:#111;background:var(--amber);border-color:var(--amber)}
+.lbl.port{font-size:10.5px;padding:1px 6px;font-weight:500;transform:translate(-50%,10px);background:rgba(15,16,18,.72);border-radius:2px;letter-spacing:.04em;pointer-events:none}
+.lbl.port.in{color:#e9e3d5;border-color:rgba(233,227,213,.5)}
+.lbl.port.out{color:var(--amber);border-color:rgba(255,174,66,.55)}
 .tele h2 small{font-weight:400}
 .tgrid{display:flex;gap:12px;align-items:center}
 .dpad{display:grid;grid-template-columns:repeat(3,34px);grid-template-rows:repeat(3,34px);gap:3px}
@@ -148,9 +148,9 @@ h2 small{font-weight:400;color:var(--dim);font-size:11.5px}
 .why{color:var(--mute);font-size:12px;line-height:1.5;margin:-2px 0 10px}
 .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 .taglist{font-family:var(--mono);font-size:11.5px;color:var(--mute);display:grid;gap:2px}
-.bottom{border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) 400px;height:230px;background:var(--panel);position:relative}
+.bottom{border:1px solid var(--line);border-radius:6px;margin:0 6px 6px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) 400px;height:230px;background:var(--panel);position:relative}
 .bottom.fold{height:36px}
-.bgrip{position:absolute;left:0;right:0;top:-4px;height:8px;cursor:ns-resize;z-index:6}.bgrip::after{content:'';position:absolute;left:50%;top:2px;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:var(--line2)}.bgrip:hover::after{background:var(--amber)}
+.bgrip{position:absolute;left:0;right:0;top:0;height:8px;cursor:ns-resize;z-index:6}.bgrip::after{content:'';position:absolute;left:50%;top:2px;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:var(--line2)}.bgrip:hover::after{background:var(--amber)}
 .bottom.fold .tbl,.bottom.fold .logb,.bottom.fold #seq{display:none}
 .bhead{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line)}
 .bhead h3{margin:0;font-size:12.5px;font-weight:600;white-space:nowrap}.bhead small{color:var(--dim)}
@@ -168,7 +168,7 @@ tr.hl td{background:rgba(255,174,66,.07)}
 .logb .lg{font-family:var(--mono);font-size:11.5px;color:var(--mute);padding:8px 14px;overflow-y:auto;height:calc(100% - 35px);display:grid;align-content:start;gap:2px}
 .logb .lg b{color:var(--fg);font-weight:400}
 .fold-btn{margin-left:auto}
-.cellseg{margin-left:8px;display:inline-flex;gap:2px}.cellseg button{padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellseg button.on{border-color:var(--amber);color:var(--amber)}.cellwarn{margin-left:8px;color:#ff5a4f;font-size:11.5px;border:1px solid #ff5a4f;border-radius:3px;padding:1px 6px}
+.cellseg{margin-left:8px;display:inline-flex;gap:2px}.cellseg button{padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellseg button.on{border-color:var(--amber);color:var(--amber)}.cellwarn{white-space:nowrap;margin-left:8px;color:#ff5a4f;font-size:11.5px;border:1px solid #ff5a4f;border-radius:3px;padding:1px 6px}
 .seqb{border-left:1px solid var(--line);min-width:0}.seqb .bhead .btn{padding:3px 9px;font-size:11.5px}
 .seqst{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:6px 14px;border-bottom:1px solid var(--line);font-size:12px}
 .seqst b{font-family:var(--mono);color:var(--dim);font-weight:500}.seqst small{display:block;color:var(--dim);font-family:var(--mono);font-size:10.5px;margin-top:2px;line-height:1.5}
@@ -208,7 +208,6 @@ tr.hl td{background:rgba(255,174,66,.07)}
     <input class="n" id="sW" type="number"><span class="x">×</span><input class="n" id="sD" type="number"><span class="x" id="sHx">×</span><input class="n" id="sH" type="number">
     <span class="lab" id="sizeUnit">m</span><span class="seg2 cellseg" id="cellSeg" hidden title="고정: 정한 크기의 작업 칸 안에서 설계합니다 · 블록 따라: 놓인 블록에 맞춰 늘어납니다"><button data-c="fixed">고정</button><button data-c="auto">블록 따라</button></span><span class="cellwarn" id="cellWarn" hidden>작업 칸 밖</span>
     <span class="sep"></span>
-    <span class="hint" id="hint"></span>
     <span class="sp"></span>
     <span class="units" id="units"></span>
   </div>
@@ -221,6 +220,7 @@ tr.hl td{background:rgba(255,174,66,.07)}
     <div class="view">
       <canvas id="c"></canvas>
       <div id="labels"></div>
+      <div class="hint" id="hint"></div>
       <div class="views" id="views"><button class="chip" data-v="fit">전체 보기</button><button class="chip" data-v="sel">선택 보기</button><button class="chip" data-v="xray" id="xrayChip" title="선으로 투시해서 보기 (X)">X-RAY</button><button class="chip" id="olBtn" title="이름으로 골라 선택 (L) · 같은 자리를 다시 누르면 뒤 객체">객체 목록 ▾</button></div>
       <div class="objlist" id="objList" hidden><input id="olQ" placeholder="이름·코드로 찾기 (Enter = 첫 번째)"><div id="olList"></div><small>Shift+클릭 = 여러 개 · 화면에서 같은 자리를 다시 누르면 뒤 객체가 골라집니다</small></div>
       <div class="chips"><div id="chipCount"></div><div id="chipOrigin"></div></div>
