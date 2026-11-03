@@ -4,7 +4,6 @@ export * from './line';
 export * from './kinematics';
 export * from './signals';
 export * from './nav';
-export * from './demo-line';
 export * from './scenario';
 export * from './optimize';
 export * from './layout-line';

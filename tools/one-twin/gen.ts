@@ -2,11 +2,10 @@
  * Generated files (run `npm run gen:twin` after changing packages/schema or packages/core):
  *   schemas/*.schema.json             JSON Schema 2020-12 of each document type
  *   docs/one-twin/edit-api.md         the edit API command list
- *   assets/one-twin/example.factory.json  the default example line converted to factory.json
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
-import { Factory, Machine, BlockDef, Spec, importLegacy, type LegacyDoc } from '@one-twin/schema';
+import { Factory, Machine, BlockDef, Spec } from '@one-twin/schema';
 import { commandCatalog } from '@one-twin/core';
 
 const root = new URL(`file://${process.cwd()}/`); // run from the repo root (npm run gen:twin)
@@ -34,5 +33,3 @@ for (const scope of ['factory', 'machine'] as const) {
 md += '## 이후 단계에서 추가\n\n| 명령 | 단계 |\n|---|---|\n| `run_scenario` | 5단계 (시뮬 엔진) |\n| `add_socket`, `set_joint`, `add_sequence_step` | 3단계 (머신빌더) |\n| `add_level` | 4단계 (팩토리빌더) |\n';
 out('docs/one-twin/edit-api.md', md);
 
-const example = JSON.parse(readFileSync(new URL('assets/layouts/egr-module-asset.json', root), 'utf8')) as LegacyDoc;
-out('assets/one-twin/example.factory.json', js(importLegacy(example, { id: 'example-line', name: '예시 공정 (용접 모듈 라인)' })));

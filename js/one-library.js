@@ -305,7 +305,8 @@
     { id: 'accessory', name: '설비 공통 부속·표시', note: '제어·조작·상태 표시 장치' },
     { id: 'flow', name: '흐름 요소', note: '워크가 라인을 흘러가게 하는 요소' },
     { id: 'production', name: '생산 설비 대표', note: '공정 분류마다 대표 설비 (블랙박스 카드)' },
-    { id: 'option', name: '예시 라인용 (선택)', note: '용접 모듈 예시 라인을 보여 줄 때만' },
+    // group 'option' (the old welding-module example line's furnace and leak tester) is no longer in the palette;
+    // the defs stay so factories saved with them still open
   ];
 
   /* ------------------------------------------------------------------ machine-builder blocks */
@@ -314,7 +315,7 @@
   const MACHINE_CATS = [
     { id: 'structure', name: '구조' }, { id: 'transport', name: '반송' }, { id: 'pneumatic', name: '공압' }, { id: 'electric', name: '전동' },
     { id: 'robot', name: '로봇' }, { id: 'sensor', name: '센서' }, { id: 'work', name: '워크·용기' }, { id: 'feeder', name: '피더' }, { id: 'process', name: '공정' },
-  ];
+  ]; // blocks of cat 'model' (모델 객체) come with a plant station and are not in the palette
   const B = {};
   const bdef = (id, o) => { B[id] = Object.assign({ id, params: {}, fields: [], joints: () => [], io: () => [], top: () => 0, onTop: false }, o); };
   const J = (id, type, axis, mode, min, max, vmax, amax) => ({ id, type, axis, mode, min, max, home: min, vmax, amax, verified: { vmax: false, amax: false } });
@@ -462,6 +463,58 @@
   bdef('screw-unit', { name: '체결 (스크류·너트런너)', cat: 'process', code: 'SCW', onTop: true, params: { spindles: 1, cycle: 5 }, fields: [num('spindles', '축 수', '축', 1, 1), num('cycle', '사이클', 's', 0.5)], io: procIo,
     build: p => { const g = new T.Group(), n = Math.max(1, p.spindles | 0); bx(g, 'light', 0.1 + n * 0.08, 0.2, 0.15, 0, 0.25); for (let i = 0; i < n; i++) cy(g, 'steel', 0.012, 0.25, -((n - 1) * 0.08) / 2 + i * 0.08, 0); return g; } });
 
+  /* ---- 모델 객체: one part of a converted plant station (assets/models/plant/<src>.glb, node P_…). Every part is its own
+     block, so size (w · d · h against the original w0 · d0 · h0), position and motion are edited one by one. Robots swing
+     their joint chain and index tables turn while their process runs (동작 시험), over 사이클 seconds. */
+  const GLB = {}, GLB_READY = {};
+  let gltfLoader = null;
+  function plantGlb(src) {
+    if (GLB[src]) return GLB[src];
+    if (!T.GLTFLoader) return (GLB[src] = Promise.reject(new Error('GLTFLoader missing')));
+    if (!gltfLoader) { gltfLoader = new T.GLTFLoader(); if (T.DRACOLoader) { const dl = new T.DRACOLoader(); dl.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/draco/gltf/'); gltfLoader.setDRACOLoader(dl); } }
+    return (GLB[src] = new Promise((ok, bad) => gltfLoader.load(`assets/models/plant/${src}.glb`, g => { g.scene.updateMatrixWorld(true); GLB_READY[src] = g.scene; ok(g.scene); }, undefined, bad)));
+  }
+  const modelListeners = new Set(); // called when a station GLB has arrived (the builder redraws its selection box)
+  // joint chain of a rig: J1 and its first J child, then that one's, … (fingers and side bones stay as they are)
+  function jointChain(o) { const out = []; let j = null; o.traverse(x => { if (!j && /^J\d+(_\d+)?$/.test(x.name)) j = x; });
+    while (j && out.length < 6) { out.push(j); let nx = null; j.traverse(x => { if (!nx && x !== j && /^J\d+(_\d+)?$/.test(x.name)) nx = x; }); j = nx; } return out; }
+  function rigOf(c, kind) {
+    c.updateMatrixWorld(true); const ch = jointChain(c); if (!ch.length) return null; const up = new T.Vector3(0, 1, 0);
+    const wp = ch.map(j => j.getWorldPosition(new T.Vector3())), reach = wp[wp.length - 1].clone().sub(wp[0]); reach.y = 0; if (reach.lengthSq() < 1e-6) reach.set(1, 0, 0); reach.normalize();
+    const pitch = new T.Vector3().crossVectors(up, reach).normalize();
+    const axisW = i => { if (kind === 'rotary') return up; if (i === 0) return up;
+      if (i === 3 || i === 5) { const a = wp[Math.min(i + 1, wp.length - 1)].clone().sub(wp[i]); if (i === 5 || a.lengthSq() < 1e-8) a.copy(wp[i]).sub(wp[i - 1]); return a.lengthSq() > 1e-8 ? a.normalize() : reach; }
+      return pitch; };
+    const list = kind === 'rotary' ? [ch[ch.length - 1]] : ch;
+    return list.map((j, k) => { const i = kind === 'rotary' ? 0 : k, pq = new T.Quaternion(); if (j.parent) j.parent.getWorldQuaternion(pq);
+      return { j, i, base: j.quaternion.clone(), axis: axisW(i).clone().applyQuaternion(pq.invert()).normalize() }; });
+  }
+  // swing of joint i at k = 0…1 of the cycle (degrees): out and back, each joint its own way
+  const SWING = [55, 22, -28, 70, 35, 90];
+  const qa = new T.Quaternion();
+  function poseRig(rig, kind, k) { if (!rig) return; const s = Math.sin(Math.PI * k), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    for (const r of rig) { const deg = kind === 'rotary' ? 90 * e : SWING[r.i] * s * (r.i === 0 ? Math.sin(Math.PI * k * 2) : 1); r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, deg * Math.PI / 180)); } }
+  function attachModel(g, p, scene) {
+    const src = scene.getObjectByName(p.node); if (!src) return;
+    const c = src.clone(true); c.position.set(0, 0, 0); c.updateMatrix();
+    const fit = new T.Group(); fit.name = 'fit'; fit.scale.set(+p.w / (+p.w0 || +p.w), +p.h / (+p.h0 || +p.h), +p.d / (+p.d0 || +p.d)); fit.add(c);
+    c.traverse(m => { m.userData.pick = g.userData.pick; if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
+    const ph = g.getObjectByName('placeholder'); if (ph) g.remove(ph);
+    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null;
+    for (const f of modelListeners) f(g);
+  }
+  bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,
+    params: { src: '', node: '', kind: 'static', w0: 1000, d0: 1000, h0: 1000, w: 1000, d: 1000, h: 1000, cycle: 6 },
+    fields: p => [num('w', '가로', 'mm', 10, 1), num('d', '세로', 'mm', 10, 1), num('h', '높이', 'mm', 10, 1), ...(p.kind === 'robot' || p.kind === 'rotary' ? [num('cycle', p.kind === 'robot' ? '동작 시간 (속도)' : '인덱스 시간 (속도)', 's', 0.5, 0.5)] : [])],
+    top: p => mm(p.h), heightKey: null,
+    io: (P, p) => p.kind === 'robot' ? robotIo(P) : p.kind === 'rotary' ? procIo(P) : [],
+    build: p => { const g = new T.Group(); g.name = 'model-part';
+      const ph = bx(g, 'glass', Math.max(0.02, mm(p.w)), Math.max(0.02, mm(p.h)), Math.max(0.02, mm(p.d))); ph.name = 'placeholder'; ph.castShadow = false;
+      if (!p.src || !p.node) return g;
+      if (GLB_READY[p.src]) attachModel(g, p, GLB_READY[p.src]); else plantGlb(p.src).then(sc => attachModel(g, p, sc)).catch(() => {});
+      return g; },
+    pose: (g, p, v) => poseRig(g.userData.rig, p.kind, v.RUN || 0) });
+
   /** 90° curve in stored mm, about its node: point(u) and heading(u) for u = 0 (entry) … 1 (exit). */
   function curveGeom(n) { const p = Object.assign({}, B['curve-conveyor'].params, n.params), sg = p.turn === 'right' ? -1 : 1, q = n.transform.position, yaw = n.transform.rotation[2] * Math.PI / 180;
     const c = Math.cos(yaw), s = Math.sin(yaw), th = u => sg * (-Math.PI / 2) * (1 - u), rot = (x, y) => [q[0] + x * c - y * s, q[1] + x * s + y * c];
@@ -472,5 +525,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

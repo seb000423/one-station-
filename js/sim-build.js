@@ -9,7 +9,8 @@
   const $ = id => document.getElementById(id), T = window.THREE, L = window.OneLibrary;
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const fdoc = read('one.build.factory'), lib = read('one.build.machines') || {};
+  // no factory saved in ONE BUILDER yet: the default partner plant line (js/plant-machines.js)
+  const P = window.OnePlant, fdoc = read('one.build.factory') || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
 
   // header: this page now shows the builder's factory
   const back = document.querySelector('.back'); back.href = '/build'; back.textContent = '← ONE BUILDER';

@@ -38,7 +38,8 @@
   const ED = { factory: new C.Editor('factory', load('factory', newFactory)), machine: new C.Editor('machine', load('machine', newMachine)) };
   let tab = LS.get(KEY.tab, 'factory') === 'machine' ? 'machine' : 'factory';
   let mode = 'edit', sel = null, multi = new Set(), dirty = { factory: false, machine: false };
-  const lib = () => LS.get(KEY.lib, {}); // machine id → { name, versions: { n: machine doc } }
+  // machine id → { name, versions: { n: machine doc } }; the partner plant stations (js/plant-machines.js) are always in it
+  const lib = () => window.OnePlant ? window.OnePlant.withPlant(LS.get(KEY.lib, {})) : LS.get(KEY.lib, {});
   const ed = () => ED[tab];
 
   const logLines = [];
@@ -180,7 +181,7 @@
     if (tab === 'factory') {
       $('palTitle').innerHTML = '에셋 팔레트';
       for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id && !d.retired).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
-      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: 'Machine Builder에서 저장한 설비' }));
+      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: m.builtin ? '협력사 설비 · 객체 하나하나의 크기·위치·속도를 Machine Builder에서 바꿀 수 있습니다' : 'Machine Builder에서 저장한 설비' }));
       sec('mine', '내 설비 (Machine Builder에서 저장)', mine.length ? mine : []);
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
@@ -380,14 +381,15 @@
         else if (it.path !== 'building.columns') for (const f of d.fields || []) { const pv = x.params[f.key] ?? d.params[f.key]; html += field(f, pv, 'p.' + f.key); }
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
-        html += `</div></div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
-      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div></div>`;
+        html += `</div>${it.local ? `<p class="why" style="margin-top:10px">객체 하나하나의 크기·위치·속도는 Machine Builder에서 바꿉니다. 저장하면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts"><button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
+      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
+        ${window.OnePlant ? `<p class="why" style="margin-top:10px">예시 공정: 감마 라인 (1 조립 → 2 페이스트 도포 → 3 브레이징 → 4 검사)</p><div class="acts"><button class="btn" data-act="example">예시 공정 불러오기</button></div>` : ''}</div>`;
     } else {
       const n = sel && doc.nodes.find(x => x.id === sel);
       if (n) { const d = nodeDef(n) || { fields: [], params: {} }, P = nodeCode(n), p = n.transform.position;
         const tags = doc.io.filter(t => t.tag.startsWith(P + '_')), joints = doc.joints.filter(j => j.node === n.id);
         html = `<div class="sec"><h2><span><b style="font-family:var(--mono)">${esc(P)}</b> ${esc(d.name || n.blockType)}</span></h2><div class="props"><span class="k">이름</span><input data-k="name" value="${esc(n.name)}">`;
-        for (const f of d.fields) html += field(f, n.params[f.key] ?? d.params[f.key], 'p.' + f.key);
+        for (const f of typeof d.fields === 'function' ? d.fields(Object.assign({}, d.params, n.params)) : d.fields) html += field(f, n.params[f.key] ?? d.params[f.key], 'p.' + f.key);
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
@@ -609,7 +611,7 @@
     if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
-    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
+    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal(); else if (D.act === 'example') loadExample();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.flip) { if (mode !== 'run' && !xray) reverseLine(flowIds()); } else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
 
@@ -1068,13 +1070,27 @@
 
   });
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.t !== tab) switchTab(b.dataset.t); });
+  // a machine placed in the factory → Machine Builder, at the version the factory uses
+  function editLocal() { const it = sel && factoryItems(ED.factory.doc).find(x => x.id === sel); if (!it?.local) return; const m = lib()[it.local.id]; if (!m) return;
+    const v = m.versions[it.local.v] ? it.local.v : Math.max(...Object.keys(m.versions).map(Number)), doc = m.versions[v];
+    if (dirty.machine && ED.machine.doc.meta.id !== doc.meta.id && !confirm('Machine Builder에서 저장하지 않은 변경이 있습니다. 버리고 이 설비를 열까요?')) return;
+    openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(doc)))); dirty.machine = false; switchTab('machine', true);
+    toast(`${m.name} v${v} · 객체를 골라 오른쪽에서 크기·위치·동작 시간을 바꾸고 '설비 카드 저장'을 누릅니다`); }
+  // the example process (감마 라인) back in Factory Builder; the factory on screen is kept under one.build.factory.before-plant
+  function loadExample() { const doc = ED.factory.doc;
+    if ((doc.machines.length || doc.building.walls.length) && !confirm('지금 공장 대신 예시 공정을 엽니다. 지금 공장은 이 브라우저에 따로 보관됩니다. 계속할까요?')) return;
+    if (doc.machines.length || doc.building.walls.length) LS.set(KEY.factory + '.before-plant', doc);
+    openDoc('factory', window.OnePlant.defaultFactory()); dirty.factory = false; switchTab('factory', true); toast('예시 공정 · 감마 라인을 열었습니다'); }
   function save() {
     if (tab === 'machine') {
       const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
       const sz = contentSize(); if (!doc.meta.cellFixed && sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
       const snap = JSON.parse(JSON.stringify(cur)); snap.meta.version = v; snap.card.footprint = [cur.meta.bbox[0], cur.meta.bbox[1]];
       m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all);
-      dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · Factory Builder의 '내 설비'에 나옵니다`); log(`저장 v${v}`);
+      // the same machine already placed in the factory now uses this version
+      const placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${doc.meta.id}@`) && x.ref !== `local:${doc.meta.id}@${v}`);
+      if (placed.length) ED.factory.batch('set_machine_ref', () => { for (const x of placed) ED.factory.exec('set_machine_ref', { id: x.id, ref: `local:${doc.meta.id}@${v}` }); });
+      dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · ${placed.length ? `공장에 놓인 ${placed.length}대도 v${v}로 바뀌었습니다` : "Factory Builder의 '내 설비'에 나옵니다"}`); log(`저장 v${v}`);
     } else { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; toast('공장을 이 브라우저에 저장했습니다 · 파일로 받으려면 내보내기'); }
     drawCrumb();
   }
@@ -1260,20 +1276,13 @@
     select(cv); addBlock('work-box'); const w = sel; ED.machine.exec('move', { id: w, position: [cvn.transform.position[0] - 1100, 0, ED.machine.doc.nodes.find(n => n.id === w).transform.position[2]] });
     ED.machine.exec('set_card', { cycle_time: 12, ok_rate: 0.995 }); sel = null; for (const v of objs.values()) root.remove(v.obj); objs = new Map(); tab = t; logLines.length = 0;
   }
-  if (!ED.factory.doc.building.walls.length && !ED.factory.doc.machines.length && !LS.get(KEY.factory + '.seeded', false)) {
-    LS.set(KEY.factory + '.seeded', true); const e = ED.factory, r = slabRect(e.doc);
-    e.exec('draw_wall', { from: [r.x0, r.y1], to: [r.x1, r.y1], thickness: 200 }); e.exec('draw_wall', { from: [r.x0, r.y0], to: [r.x0, r.y1], thickness: 200 });
-    e.exec('add_column_grid', { origin: [6000, 6000], nx: 4, ny: 2, dx: 6000, dy: 8000 });
-    e.exec('add_opening', { kind: 'shutter', position: [4000, r.y1], params: { w: 3500, h: 4000 } }); e.exec('add_opening', { kind: 'door', position: [9000, r.y1], params: { w: 1000, h: 2100 } });
-    e.exec('add_marking', { kind: 'aisle', polyline: [[2000, 3000], [28000, 3000]], params: { variant: 'aisle', length: 26000, width: 3000 } });
-    e.exec('place_machine', { ref: 'lib:press@1', name: L.FACTORY.press.name, position: [8000, 10000], params: { cycle_time: 6, ok_rate: 0.995 } });
-    e.exec('add_block', { type: 'conveyor', position: [12500, 10000], params: { variant: 'roller', length: 4000, w: 800, h: 800 } });
-    e.exec('place_machine', { ref: 'lib:handling-robot@1', name: L.FACTORY['handling-robot'].name, position: [16500, 10000], params: { cycle_time: 12, ok_rate: 0.999 } });
-    e.exec('place_machine', { ref: 'lib:vision-inspection@1', name: L.FACTORY['vision-inspection'].name, position: [19500, 10000], params: { cycle_time: 8, ok_rate: 0.98 } });
-    e.exec('add_storage', { kind: 'rack', position: [25000, 15000], params: { variant: 'pallet', bays: 2, levels: 3 } });
-    e.exec('add_mover', { kind: 'forklift', position: [22000, 3000] }); e.exec('add_mover', { kind: 'worker', position: [12500, 8800] });
-    e.exec('add_block', { type: 'control-cabinet', position: [8000, 12500] }); e.exec('add_block', { type: 'andon-board', position: [14500, 13500], params: { mount: 2800 } });
+  // the default factory is the partner plant line (js/plant-machines.js), shown once to every browser; a factory made
+  // before it is kept under one.build.factory.before-plant
+  if (window.OnePlant && !LS.get(KEY.factory + '.plant', false)) {
+    if (ED.factory.doc.building.walls.length || ED.factory.doc.machines.length) LS.set(KEY.factory + '.before-plant', ED.factory.doc);
+    LS.set(KEY.factory + '.plant', true); LS.set(KEY.factory + '.seeded', true); openDoc('factory', window.OnePlant.defaultFactory());
   }
+  L.onModel(() => { updateSelMark(); });
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
