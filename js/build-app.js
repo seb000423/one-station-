@@ -30,7 +30,11 @@
   const newMachine = () => S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id: S.uuidv7(), name: '새 설비', bbox: [4000, 2400, 2000], cellFixed: false, fidelity: 'L2' } });
   // drafts made while a fixed 4000 × 2400 × 2000 cell was the default go back to 블록 따라 (the default now)
   const load = (scope, make) => { const d = LS.get(KEY[scope], null); try { if (!d) return make(); const doc = (scope === 'factory' ? S.Factory : S.Machine).parse(d);
-    if (scope === 'machine' && doc.meta.cellFixed && doc.meta.bbox.join() === '4000,2400,2000') doc.meta.cellFixed = false; return doc; } catch { return make(); } };
+    if (scope === 'machine' && doc.meta.cellFixed && doc.meta.bbox.join() === '4000,2400,2000') doc.meta.cellFixed = false;
+    // drafts saved before delete took a block's unbound tags along still carry them (TL1_RED with no TL1): drop those
+    if (scope === 'machine') { const codes = new Set(doc.nodes.map(n => n.params.tag).filter(Boolean)), dead = new Set(doc.io.filter(t => { const m = /^([A-Z]+\d+)_/.exec(t.tag); return m && !codes.has(m[1]); }).map(t => t.tag));
+      if (dead.size) { doc.io = doc.io.filter(t => !dead.has(t.tag)); for (const st of doc.sequence.steps) { st.wait = st.wait.filter(w => !dead.has(w.tag)); st.set = st.set.filter(x => !dead.has(x.tag)); } } }
+    return doc; } catch { return make(); } };
   const ED = { factory: new C.Editor('factory', load('factory', newFactory)), machine: new C.Editor('machine', load('machine', newMachine)) };
   let tab = LS.get(KEY.tab, 'factory') === 'machine' ? 'machine' : 'factory';
   let mode = 'edit', sel = null, multi = new Set(), dirty = { factory: false, machine: false };
@@ -64,7 +68,7 @@
   /* ------------------------------------------------------------------ machine: block prefixes and placement */
   const nodeDef = n => L.BLOCKS[n.blockType];
   const nodeCode = n => n.params.tag || '';
-  const nextCode = (doc, code) => { const used = new Set(doc.nodes.map(nodeCode)); for (let i = 1; ; i++) if (!used.has(code + i)) return code + i; };
+  const nextCode = (doc, code) => { const used = new Set([...doc.nodes.map(nodeCode), ...(doc.io || []).map(t => t.tag.split('_')[0])]); for (let i = 1; ; i++) if (!used.has(code + i)) return code + i; };
   const nodeTop = n => { const d = nodeDef(n); return n.transform.position[2] + (d ? d.top(Object.assign({}, d.params, n.params)) * 1000 : 0); };
 
   /* ------------------------------------------------------------------ scene objects (rebuilt only when their data changed) */
@@ -344,7 +348,7 @@
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
   const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 오른쪽에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li><li><b>▶ 시뮬레이션</b>을 누르면 저장하고 이 공장을 SIMULATION에서 엽니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 Control Panel이 열립니다. 객체마다 ON / OFF를 누르면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 Control Panel이 열립니다. 객체마다 ON / OFF를 누르면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li>아래 <b>동작 순서</b>의 <b>블록으로 만들기</b>는 놓인 컨베이어·스토퍼·센서·공정·리프트를 보고 순서를 새로 만듭니다(지금 순서는 지워지고 실행 취소로 되돌림). <b>워크 다시 투입</b>은 워크를 처음 놓은 자리로 다시 올려 같은 시험을 반복합니다.</li><li>바닥의 <b>원 + 화살표</b>는 설비 원점과 X 방향(투입 → 배출)을 나타내는 기준 표시입니다. 객체가 아니라 지워지지 않습니다.</li><li>위 막대의 <b>객체 선택</b> 목록으로 이름을 골라 선택하고, <b>전체 지우기</b>로 지금 탭의 객체를 한 번에 지웁니다(Ctrl+Z로 복구).</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
     const many = selIds();
@@ -545,24 +549,28 @@
     CLOSE: '잡기', IS_CLOSED: '잡음', IS_OPEN: '벌림', OK: '양품 / 정상', NG: '불량', START: '시작', BUSY: '작업 중', DONE: '완료', READY: '준비됨', TRIG: '촬영', SERVO_ON: '서보 켜기', POS: '위치 지정 (mm)',
     INPOS: '위치 도착', ALARM: '알람', INDEX: '회전 각도 지정 (°)', PROG: '프로그램 번호', START_PB: '시작 버튼', STOP_PB: '정지 버튼', ESTOP: '비상정지 버튼', RED: '빨간 램프', YEL: '노란 램프', GRN: '초록 램프', NEXT: '다음 트레이', EMPTY: '비었음' };
   const meaning = (t, P) => { const k = t.tag.slice(P.length + 1); return MEAN[k] || (k === 'ON' && t.dir === 'in' ? '감지됨' : k); };
-  // Signal = the on/off (bool) points that really drive or report something in the run: commands that move a joint or
-  // start a process, end-position / presence sensors, process states, panel buttons and lamps. Set-points (speed,
-  // position, program no.) and diagnostics (fault, alarm) are tags too, but they sit under "기타 태그".
+  // Signal = the on/off (bool) points that the 동작 시험 really reads or writes: commands that move a joint, roll a
+  // belt (RUN, DIR) or start a process, end-position / presence sensors, process results (DONE, OK, NG), panel
+  // buttons (START / STOP / 비상정지 act on 자동 운전 and motion), lamps and servo-on. Set-points (speed, position,
+  // program no.) and diagnostics nothing sets yet (fault, alarm, empty) are tags too, but they sit under "기타 태그".
   const HMI = /_(START_PB|STOP_PB|ESTOP|RED|YEL|GRN|SERVO_ON)$/;
-  function realSignals(doc) { const ref = new Set(doc.io.map(t => t.binding?.target).filter(Boolean)), lifts = new Set(doc.nodes.filter(n => nodeDef(n)?.lift).map(nodeCode));
-    return new Set(doc.io.filter(t => t.type === 'bool' && !/_(FAULT|ALARM)$/.test(t.tag) && (t.binding || ref.has(t.tag) || HMI.test(t.tag) || (/_DIR$/.test(t.tag) && lifts.has(t.tag.slice(0, -4))))).map(t => t.tag)); }
+  function realSignals(doc) { const ref = new Set(doc.io.map(t => t.binding?.target).filter(Boolean)), belts = new Set(), corners = new Set(), procs = new Set();
+    for (const n of doc.nodes) { const d = nodeDef(n); if (!d) continue; const P = nodeCode(n); if (d.conveyor || d.curve) belts.add(P); if (d.corner) corners.add(P); if (!d.conveyor) procs.add(P); }
+    const pre = t => t.tag.replace(/_[A-Z]+$/, '');
+    return new Set(doc.io.filter(t => t.type === 'bool' && !/_(FAULT|ALARM|EMPTY)$/.test(t.tag) && (t.binding || ref.has(t.tag) || HMI.test(t.tag)
+      || (/_DIR$/.test(t.tag) && belts.has(pre(t))) || (/_RUN$/.test(t.tag) && corners.has(pre(t))) || (/_(NG|DONE|OK|BUSY|READY)$/.test(t.tag) && t.dir === 'in' && procs.has(pre(t))))).map(t => t.tag)); }
   const IO = { all: false };
   function drawIo() {
     const doc = ED.machine.doc, selP = sel && nodeCode(doc.nodes.find(n => n.id === sel) || { params: {} }), real = realSignals(doc), extra = doc.io.length - real.size;
-    $('ioN').textContent = `Signal ${real.size}개`; $('ioAll').textContent = IO.all ? '기타 태그 숨기기' : `기타 태그 ${extra}개 보기`; $('ioAll').hidden = !extra;
+    $('ioN').textContent = `Signal ${real.size}개`; $('tblN').textContent = IO.all ? `${doc.io.length}개 (기타 태그 포함)` : `${real.size}개`; $('ioAll').textContent = IO.all ? '기타 태그 숨기기' : `기타 태그 ${extra}개 보기`; $('ioAll').hidden = !extra;
     const owner = t => doc.nodes.find(n => t.tag.startsWith(nodeCode(n) + '_'));
     // ON / OFF for every object that can be switched (its real command signals)
     const sw = []; for (const n of doc.nodes) { const P = nodeCode(n), outs = doc.io.filter(t => t.dir === 'out' && t.type === 'bool' && real.has(t.tag) && owner(t) === n); if (!outs.length) continue;
       sw.push(`<div class="sw${selP === P ? ' hl' : ''}"><b>${esc(P)}</b><span class="nm">${esc(n.name)}</span>${outs.map(t => { const on = !!RUN.tags[t.tag];
         return `<span class="swl">${outs.length > 1 || !/_RUN$/.test(t.tag) ? esc(meaning(t, P)) : ''}<span class="onoff"><button data-sw="${esc(t.tag)}" data-v="1" class="${on ? 'on' : ''}">ON</button><button data-sw="${esc(t.tag)}" data-v="0" class="${on ? '' : 'off'}">OFF</button></span></span>`; }).join('')}</div>`); }
-    $('ioSw').innerHTML = sw.join('') || '<small>켜고 끌 수 있는 객체가 없습니다</small>';
-    $('io').innerHTML = doc.io.filter(t => IO.all || real.has(t.tag)).map(t => { const n = owner(t), P = n ? nodeCode(n) : '', v = RUN.tags[t.tag], manual = mode === 'run' && (t.dir === 'out' || !t.binding);
-      const kind = !real.has(t.tag) ? '기타 태그' : t.dir === 'out' ? '명령' : t.binding ? '상태 (자동)' : '상태 (직접 켜기)';
+    $('ioSw').innerHTML = sw.join('') || '<small>켜고 끌 수 있는 객체가 없습니다</small>'; $('swN').textContent = sw.length ? `${sw.length}개 객체` : '';
+    $('io').innerHTML = doc.io.filter(t => IO.all || real.has(t.tag)).map(t => { const n = owner(t), P = n ? nodeCode(n) : '', v = RUN.tags[t.tag], auto = !!t.binding || (t.dir === 'in' && /_(NG|DONE|OK|BUSY|READY)$/.test(t.tag)), manual = mode === 'run' && (t.dir === 'out' || !auto);
+      const kind = !real.has(t.tag) ? '기타 태그' : t.dir === 'out' ? '명령' : auto ? '상태 (자동)' : '상태 (직접 켜기)';
       return `<tr class="${selP && P === selP ? 'hl' : ''}${real.has(t.tag) ? '' : ' xtra'}"><td class="ko">${esc(n ? n.name : '')}</td><td>${esc(t.tag)}</td><td class="ko">${esc(meaning(t, P))}</td><td><span class="kind">${kind}</span></td><td class="val${manual ? ' click' : ''}${v === true ? ' on' : ''}" data-tag="${esc(t.tag)}">${fmtVal(t, v)}</td></tr>`; }).join('')
       || '<tr><td colspan="5" style="color:var(--dim);font-family:var(--sans)">블록을 놓으면 그 블록의 신호가 여기에 생깁니다.</td></tr>';
   }
@@ -627,6 +635,7 @@
       AUTO.t += dt; dt = 0; if (AUTO.t < (st.delay || 0)) return;
       const nx = st.next?.[0]; AUTO.i = nx ? Math.max(0, steps.findIndex(q => q.id === nx)) : (AUTO.i + 1) % steps.length; AUTO.phase = 'wait'; drawSeq(); } }
   function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;
+    if (on && doc.io.some(x => /_ESTOP$/.test(x.tag) && RUN.tags[x.tag])) { toast('비상정지가 눌려 있습니다 · 먼저 비상정지를 해제하세요', true); return; }
     if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
     if (on && !doc.nodes.some(n => nodeDef(n)?.work)) toast('워크 블록이 없어 센서가 켜지지 않습니다 · 편집에서 컨베이어 위에 워크를 놓아 주세요');
     AUTO.on = on; AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; $('bAuto').textContent = on ? '■ 자동 운전 멈춤' : '▶ 자동 운전'; $('bAuto').classList.toggle('pri', on); if (on) log('자동 운전 시작 · 동작 순서를 차례로 실행합니다'); drawSeq(); drawIo(); }
@@ -682,7 +691,11 @@
   $('seq').addEventListener('keydown', e => e.stopPropagation());
   $('bAuto').onclick = () => setAuto(!AUTO.on);
   $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 지우고 블록에서 다시 만들까요? (실행 취소로 되돌릴 수 있습니다)')) return; AUTO.open = -1; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
-  $('bWorkBack').onclick = () => { const doc = ED.machine.doc; for (const n of doc.nodes) if (nodeDef(n)?.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]] }; log('워크를 처음 위치로 되돌렸습니다'); };
+  // 워크 다시 투입: every work goes back to the spot (and height) it was placed at, as if it were loaded again;
+  // 자동 운전 starts over from its first step. Conveyors, stoppers and other outputs keep their state.
+  $('bWorkBack').onclick = () => { const doc = ED.machine.doc; let k = 0; for (const n of doc.nodes) if (nodeDef(n)?.work) { RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2] }; k++; }
+    if (!k) { toast('워크 블록이 없습니다. 팔레트의 워크를 컨베이어 위에 놓으세요', true); return; }
+    AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; log(`워크 ${k}개를 처음 놓은 자리로 다시 투입${AUTO.on ? ' · 자동 운전은 1단계부터' : ''}`); drawSeq(); };
   // the panel under the view: drag its top edge to make it taller or shorter; the 3D view takes the rest
   (() => { const b = $('bottom'), g = $('bGrip'); let h0 = LS.get('one.build.bottomH', 260), drag = null;
     const apply = h => { h0 = Math.max(120, Math.min(innerHeight * 0.7, h)); b.style.height = h0 + 'px'; stage.resize(); };
@@ -691,13 +704,26 @@
     g.addEventListener('pointermove', e => { if (drag) apply(drag.h - (e.clientY - drag.y)); });
     g.addEventListener('pointerup', () => { if (drag) { drag = null; LS.set('one.build.bottomH', h0); } });
     g.addEventListener('dblclick', () => $('bFold').click()); })();
-  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); b.style.height = b.classList.contains('fold') ? '' : LS.get('one.build.bottomH', 260) + 'px'; $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
+  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); b.style.height = b.classList.contains('fold') ? '' : LS.get('one.build.bottomH', 260) + 'px'; $('bFold').textContent = b.classList.contains('fold') ? '▴ 전체 펼치기' : '▾ 전체 접기'; setTimeout(stage.resize, 0); };
+  // each part of the bottom panel folds on its own (객체별 ON / OFF, 신호 목록, 동작 순서); remembered per browser
+  const FOLD = LS.get('one.build.fold', {}); const applyFold = () => { for (const id of ['subSw', 'subTbl']) $(id).classList.toggle('shut', !!FOLD[id]); $('bottom').classList.toggle('seqshut', !!FOLD.seq); document.querySelector('.seqb').classList.toggle('shut', !!FOLD.seq); };
+  for (const h of document.querySelectorAll('.shead[data-fold]')) h.onclick = () => { FOLD[h.dataset.fold] = !FOLD[h.dataset.fold]; LS.set('one.build.fold', FOLD); applyFold(); };
+  $('seqFold').onclick = () => { FOLD.seq = !FOLD.seq; LS.set('one.build.fold', FOLD); applyFold(); }; applyFold();
 
+  // OP 조작반: START = 자동 운전 시작, STOP = 자동 운전 정지, 비상정지 = 자동 운전 정지 + 모든 동작 멈춤 (풀면 이어서)
+  function panelButtons(doc, tags) { const pb = RUN.pb || (RUN.pb = {});
+    for (const t of doc.io) { const m = /_(START_PB|STOP_PB|ESTOP)$/.exec(t.tag); if (!m) continue; const on = !!tags[t.tag], was = !!pb[t.tag]; pb[t.tag] = on; if (on === was) continue;
+      if (m[1] === 'ESTOP') { if (on) { if (AUTO.on) setAuto(false); log(`${t.tag} 비상정지 · 모든 동작 멈춤`); } else log(`${t.tag} 비상정지 해제`); }
+      else if (on && m[1] === 'STOP_PB' && AUTO.on) { setAuto(false); log(`${t.tag} 정지 버튼 · 자동 운전 정지`); }
+      else if (on && m[1] === 'START_PB' && !AUTO.on && !doc.io.some(x => /_ESTOP$/.test(x.tag) && tags[x.tag])) { setAuto(true); log(`${t.tag} 시작 버튼 · 자동 운전`); } }
+    return doc.io.some(x => /_ESTOP$/.test(x.tag) && tags[x.tag]); }
   function stepRun(dt) {
     const doc = ED.machine.doc, tags = RUN.tags, byNode = new Map(doc.nodes.map(n => [n.id, n]));
+    if (panelButtons(doc, tags)) return;
     RUN.t += dt;
     for (const j of doc.joints) {
       const t = doc.io.find(x => x.dir === 'out' && x.binding?.kind === 'joint' && x.binding.target === j.id); let v = RUN.v[j.id] ?? j.min;
+      const sv = `${j.id.replace(/_[A-Z0-9]+$/, '')}_SERVO_ON`; if (sv in tags && !tags[sv]) continue; // a servo axis holds still until its servo is on
       if (j.mode === 'continuous') { const P = j.id.replace(/_[A-Z0-9]+$/, ''); const sp = tags[`${P}_SPEED`] > 0 ? tags[`${P}_SPEED`] : j.vmax; RUN.v[j.id] = v + (t && tags[t.tag] ? (tags[`${P}_DIR`] ? -1 : 1) * sp * dt : 0); continue; }
       const target = !t ? v : j.mode === 'onoff' ? (tags[t.tag] ? j.max : j.min) : Math.min(j.max, Math.max(j.min, +tags[t.tag] || 0));
       const step = j.vmax * dt; v = Math.abs(target - v) <= step ? target : v + Math.sign(target - v) * step; RUN.v[j.id] = v; RUN.v[j.id + ':target'] = target;
@@ -747,9 +773,9 @@
       else if (b.kind === 'sensor') { const [jid, end] = b.target.split(':'), j = doc.joints.find(x => x.id === jid); if (!j) continue; const v = RUN.v[jid];
         tags[t.tag] = end === 'max' ? Math.abs(v - j.max) < 0.5 : end === 'min' ? Math.abs(v - j.min) < 0.5 : Math.abs(v - (RUN.v[jid + ':target'] ?? v)) < 0.5; }
     }
-    for (const n of doc.nodes) { const P = nodeCode(n), d = nodeDef(n); if (!d) continue; const start = doc.io.find(t => t.tag === `${P}_START` || t.tag === `${P}_TRIG` || t.tag === `${P}_ON` && t.dir === 'out' || (t.tag === `${P}_RUN` || t.tag === `${P}_NEXT`) && !d.conveyor); if (!start) continue;
+    for (const n of doc.nodes) { const P = nodeCode(n), d = nodeDef(n); if (!d) continue; const start = doc.io.find(t => t.tag === `${P}_START` || t.tag === `${P}_TRIG` || t.tag === `${P}_ON` && t.dir === 'out' || (t.tag === `${P}_RUN` || t.tag === `${P}_NEXT`) && !d.conveyor && !d.corner); if (!start) continue;
       const pr = RUN.procs[P] || (RUN.procs[P] = { busy: false, t0: 0, prev: false }), on = !!tags[start.tag], cyc = Math.max(0.2, +(n.params.cycle || d.params.cycle || (start.tag.endsWith('_TRIG') ? 0.5 : 1)));
-      if (on && !pr.prev) { pr.busy = true; pr.t0 = RUN.t; tags[`${P}_DONE`] = false; }
+      if (on && !pr.prev) { pr.busy = true; pr.t0 = RUN.t; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; }
       if (!on) { pr.busy = false; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; }
       if (pr.busy && RUN.t - pr.t0 >= cyc) { pr.busy = false; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; const ok = Math.random() < (n.params.ok_rate ?? 1); if (`${P}_OK` in tags) tags[`${P}_OK`] = ok; if (`${P}_NG` in tags) tags[`${P}_NG`] = !ok; if (`${P}_READY` in tags) tags[`${P}_READY`] = true; }
       if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = pr.busy; if (start.tag === `${P}_ON` && `${P}_OK` in tags) tags[`${P}_OK`] = on;
@@ -801,19 +827,34 @@
   function objLabel(id) { if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); return n ? `${nodeCode(n)} ${n.name}` : ''; } const it = factoryItems(ED.factory.doc).find(x => x.id === id); return it ? `${itemCode(it) || ''} ${itemName(it)}`.trim() : ''; }
 
   /* object list (객체 목록): pick anything by name, also what is hard to click */
-  function drawObjList() { const q = ($('olQ').value || '').trim().toLowerCase(), rows = [];
+  function objRows() { const rows = [];
     if (tab === 'machine') { const doc = ED.machine.doc, depth = n => { let d = 0; for (let p = n.parent; p && d < 6; p = doc.nodes.find(x => x.id === p)?.parent) d++; return d; };
       const order = []; const walk = pid => { for (const n of doc.nodes.filter(x => (x.parent || null) === pid)) { order.push(n); walk(n.id); } }; walk(null); for (const n of doc.nodes) if (!order.includes(n)) order.push(n);
       for (const n of order) rows.push({ id: n.id, code: nodeCode(n), name: n.name, d: depth(n), g: '' }); }
     else { const G = { 'building.walls': '건물', 'building.columns': '건물', 'building.roofs': '건물', 'building.openings': '건물', 'building.slabs': '건물', markings: '바닥 표시', machines: '설비', storage: '물류·보관', movers: '물류·보관', 'utilities.drops': '전기·공압', blocks: '기타' };
       for (const it of factoryItems(ED.factory.doc)) rows.push({ id: it.id, code: itemCode(it) || '', name: itemName(it), d: 0, g: G[it.path] || '기타' });
       rows.sort((a, b) => a.g.localeCompare(b.g)); }
+    return rows; }
+  function drawObjList() { const q = ($('olQ').value || '').trim().toLowerCase(), rows = objRows();
     const hit = rows.filter(r => !q || `${r.code} ${r.name}`.toLowerCase().includes(q)), sels = new Set(selIds()); let g0 = null, html = '';
     for (const r of hit) { if (r.g && r.g !== g0) { html += `<h4>${esc(r.g)}</h4>`; g0 = r.g; }
       html += `<button data-oid="${r.id}" class="${sels.has(r.id) ? 'on' : ''}" style="padding-left:${10 + r.d * 14}px"><b>${esc(r.code)}</b>${esc(r.name)}</button>`; }
     $('olList').innerHTML = html || '<p>찾는 객체가 없습니다</p>'; }
   function toggleObjList(on = $('objList').hidden) { $('objList').hidden = !on; if (on) { $('olQ').value = ''; drawObjList(); setTimeout(() => $('olQ').focus(), 0); } }
   $('olBtn').onclick = () => toggleObjList();
+  // dropdown in the bar: every object of this tab by group, the selected one shown; picking one selects and frames it
+  function drawObjSel() { const rows = objRows(), cur = selIds(); let g0 = null, html = `<option value="">객체 선택 (${rows.length}개)</option>`;
+    for (const r of rows) { if (r.g !== g0) { if (g0 !== null) html += '</optgroup>'; html += `<optgroup label="${esc(r.g || (tab === 'machine' ? '블록' : '기타'))}">`; g0 = r.g; }
+      html += `<option value="${esc(r.id)}">${'\u00a0\u00a0'.repeat(r.d)}${esc([r.code, r.name].filter(Boolean).join(' · ') || '(이름 없음)')}</option>`; }
+    if (g0 !== null) html += '</optgroup>'; const el = $('objSel'); el.innerHTML = html; el.value = cur.length === 1 && rows.some(r => r.id === cur[0]) ? cur[0] : ''; }
+  $('objSel').onchange = e => { const id = e.target.value; if (xray) setXray(false); if (id) select(id, true); else select(null); e.target.blur(); };
+  // 전체 지우기: everything placed in this tab goes in one step (one Ctrl+Z brings it all back); the floor slab stays
+  $('bClear').onclick = () => { if (mode === 'run') { toast('편집 모드에서 지울 수 있습니다', true); return; }
+    const doc = ed().doc, ids = tab === 'factory' ? factoryItems(doc).filter(x => !isSlab(x.id)).map(x => x.id) : doc.nodes.filter(n => !n.parent).map(n => n.id);
+    if (!ids.length) { toast('지울 객체가 없습니다'); return; }
+    if (!confirm(`${tab === 'factory' ? 'Factory Builder' : 'Machine Builder'}의 객체 ${ids.length}개를 모두 지울까요?${tab === 'machine' ? ' (블록의 신호와 동작 순서도 같이 지워집니다)' : ''}\nCtrl+Z로 한 번에 되돌릴 수 있습니다.`)) return;
+    ed().batch(`clear ${ids.length}`, () => { for (const id of ids) exec('delete', { id }, true); if (tab === 'machine' && ed().doc.sequence.steps.length) exec('set_sequence', { steps: [] }, true); });
+    select(null); toast(`${ids.length}개 지움 · Ctrl+Z로 되돌립니다`); };
   $('olQ').addEventListener('input', drawObjList);
   $('olQ').addEventListener('keydown', e => { if (e.key === 'Escape') toggleObjList(false); if (e.key === 'Enter') { const b = $('olList').querySelector('[data-oid]'); if (b) b.click(); } e.stopPropagation(); });
   $('olList').addEventListener('click', e => { const b = e.target.closest('[data-oid]'); if (!b) return; if (e.shiftKey || e.ctrlKey || e.metaKey) toggleSel(b.dataset.oid); else select(b.dataset.oid); drawObjList(); focusSel(); });
@@ -860,8 +901,8 @@
     if (id === sel) { const rest = selIds().slice(1); multi = new Set(rest.slice(1)); sel = rest[0] || null; }
     else if (multi.has(id)) multi.delete(id); else multi.add(id);
     drawTree(); drawProps(); updateSelMark(); }
-  function selectMany(ids) { ids = ids.filter(x => !isSlab(x)); multi = new Set(ids.slice(1)); sel = ids[0] || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
-  function select(id, focus) { multi = new Set(); sel = id || null; drawTree(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
+  function selectMany(ids) { ids = ids.filter(x => !isSlab(x)); multi = new Set(ids.slice(1)); sel = ids[0] || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
+  function select(id, focus) { multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
   function fitAll() {
     const doc = ed().doc;
@@ -870,7 +911,7 @@
   }
   $('views').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; if (b.dataset.v === 'fit') fitAll(); else if (b.dataset.v === 'xray') setXray(!xray); else focusSel(); });
   let xray = false;
-  const setXray = on => { xray = on; if (on) { if (drag) { drag = null; controls.enabled = true; } select(null); toast('X-RAY는 보기 전용입니다 · 다시 누르면 편집으로 돌아갑니다'); } updateHint(); if (on) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work)); stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
+  const setXray = on => { xray = on; if (on) { if (drag) { drag = null; controls.enabled = true; } select(null); } updateHint(); if (on) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work)); stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
 
   /* ------------------------------------------------------------------ keys, toolbar, files */
   window.addEventListener('keydown', e => {
@@ -969,6 +1010,8 @@
   const portMat = { in: new T.MeshBasicMaterial({ color: 0xe9e3d5, side: T.DoubleSide, depthWrite: false, transparent: true, opacity: 0.95 }), out: new T.MeshBasicMaterial({ color: 0xffae42, side: T.DoubleSide, depthWrite: false, transparent: true, opacity: 0.95 }) };
   const portLbl = { in: document.createElement('div'), out: document.createElement('div') }; for (const [k, el] of Object.entries(portLbl)) { el.className = 'lbl port ' + k; el.textContent = k === 'in' ? '투입' : '배출'; $('labels').appendChild(el); }
   let portAnchors = [];
+  // the ring + arrow on the floor is the machine's origin (0, 0) and its X axis (투입 → 배출); it is a guide, not an object
+  const originLbl = document.createElement('div'); originLbl.className = 'lbl origin'; originLbl.textContent = '설비 원점 · X = 투입 → 배출'; originLbl.title = '편집용 기준 표시입니다. 객체가 아니라 지워지지 않습니다'; $('labels').appendChild(originLbl);
   function addPortArrow(pos, dir, kind, scale, lift) { const g = new T.Group(), m = new T.Mesh(arrowGeo, portMat[kind]); m.scale.setScalar(scale); m.renderOrder = 3; g.add(m);
     const p = toS([pos[0], pos[1], lift ? pos[2] + 15 : 20]); g.position.copy(p);
     g.rotation.y = S.storedYawToScene(Math.atan2(dir[1], dir[0]) * 180 / Math.PI); portGrp.add(g); return p; }
@@ -1014,9 +1057,11 @@
       for (const [oid, o] of P) { if (oid === id || !o) continue;
         for (const [fa, fb, A, B] of [[id, oid, me.outlet, o.inlet], [oid, id, o.outlet, me.inlet]]) if (Math.hypot(A[0] - B[0], A[1] - B[1]) <= 800 && !doc.flows.some(f => f.from === `${fa}.outlet` && f.to === `${fb}.inlet`) && !doc.flows.some(f => f.from === `${fa}.outlet`)) { if (exec('connect_flow', { from: `${fa}.outlet`, to: `${fb}.inlet`, via: 'conveyor' }, true)) n++; } } }
     if (n) setTimeout(() => toast(`맞닿은 설비 ${n}곳을 컨베이어 흐름으로 이었습니다`), 0); }
-  function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
+  function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect();
+    if (tab !== 'machine' || !originMark || xray || mode === 'run') originLbl.style.display = 'none';
+    else { const v = originMark.position.clone().project(camera); originLbl.style.display = ''; originLbl.style.left = ((v.x + 1) / 2 * r.width + 10) + 'px'; originLbl.style.top = ((1 - v.y) / 2 * r.height + 12) + 'px'; } for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
-  function refresh() { syncScene(); drawPorts(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
+  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
     tab = t; LS.set(KEY.tab, t); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));

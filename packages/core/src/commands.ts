@@ -386,16 +386,20 @@ export const machineCommands = {
     },
   }),
   delete: def({
-    scope: 'machine', description: '노드 삭제 (자식 노드와 그 축·태그 바인딩도 함께)',
+    scope: 'machine', description: '노드 삭제 (자식 노드와 그 축, 그 블록 코드로 시작하는 태그도 함께. 동작 순서에서 지운 태그를 쓰던 조건·출력은 빠짐)',
     args: z.object({ id: z.string() }),
     run: (m: Machine, a) => {
       needNode(m, a.id);
       const gone = new Set([a.id]);
       for (let grew = true; grew;) { grew = false; for (const n of m.nodes) if (n.parent && gone.has(n.parent) && !gone.has(n.id)) { gone.add(n.id); grew = true; } }
       const joints = new Set(m.joints.filter(j => gone.has(j.node)).map(j => j.id));
+      // a block's own tags carry its code as prefix (CV1_RUN, TL1_RED …): they go with it, bound or not
+      const codes = m.nodes.filter(n => gone.has(n.id) && typeof n.params.tag === 'string' && n.params.tag).map(n => `${n.params.tag}_`);
+      const dead = new Set(m.io.filter(t => codes.some(c => t.tag.startsWith(c)) || (t.binding?.kind === 'joint' && joints.has(t.binding.target))).map(t => t.tag));
       m.nodes = m.nodes.filter(n => !gone.has(n.id));
       m.joints = m.joints.filter(j => !joints.has(j.id));
-      m.io = m.io.filter(t => !(t.binding?.kind === 'joint' && joints.has(t.binding.target)));
+      m.io = m.io.filter(t => !dead.has(t.tag) && !(t.binding && t.binding.kind !== 'joint' && dead.has(t.binding.target)));
+      for (const st of m.sequence.steps) { st.wait = st.wait.filter(w => !dead.has(w.tag)); st.set = st.set.filter(x => !dead.has(x.tag)); }
     },
   }),
 };

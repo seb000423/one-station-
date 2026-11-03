@@ -429,7 +429,7 @@
   bdef('proximity-sensor', { name: '근접 센서', cat: 'sensor', code: 'PX', onTop: true, params: { range: 8 }, fields: [num('range', '감지 거리', 'mm', 1)], sensor: true,
     io: P => [inn(`${P}_ON`, 'bool', { kind: 'sensor', target: 'work' })], build: () => { const g = new T.Group(); cy(g, 'steel', 0.009, 0.06, 0, 0, 0); return g; } });
   bdef('vision-camera', { name: '비전 카메라', cat: 'sensor', code: 'CAM', params: { h: 1200 }, fields: [num('h', '설치 높이', 'mm', 10)],
-    io: P => [out(`${P}_TRIG`), inn(`${P}_OK`, 'bool', { kind: 'process', target: `${P}_TRIG` }), inn(`${P}_NG`)],
+    io: P => [out(`${P}_TRIG`), inn(`${P}_OK`, 'bool', { kind: 'process', target: `${P}_TRIG` }), inn(`${P}_NG`, 'bool', { kind: 'process', target: `${P}_TRIG` })],
     build: p => { const g = new T.Group(), h = mm(p.h); bx(g, 'frame', 0.04, h, 0.04, 0, 0, -0.25); bx(g, 'frame', 0.04, 0.04, 0.3, 0, h - 0.04, -0.1); bx(g, 'dark', 0.08, 0.1, 0.08, 0, h - 0.14, 0.02); flatRing(g, 'glowW', 0.035, 0.05, h - 0.145, 0, 0.02); return g; } });
 
   const workDef = (id, name, v, d) => bdef(id, { name, cat: 'work', code: 'W', onTop: true, params: d, work: true,

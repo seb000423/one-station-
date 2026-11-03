@@ -50,7 +50,7 @@
 | `set_param` | 블록 파라미터 변경 | `id`, `key`, `value` |
 | `add_joint` | 노드에 동작 축 추가 (vmax·amax 필수) | `id`, `node`, `type`, `axis`, `mode`, `min`, `max`, `home?`, `vmax`, `amax`, `jmax?`, `effort?`, `cushion_time?`, `verified?` |
 | `bind_tag` | 신호 태그 추가 또는 변경 (같은 tag면 덮어씀) | `tag`, `dir`, `type`, `binding?`, `default?` |
-| `delete` | 노드 삭제 (자식 노드와 그 축·태그 바인딩도 함께) | `id` |
+| `delete` | 노드 삭제 (자식 노드와 그 축, 그 블록 코드로 시작하는 태그도 함께. 동작 순서에서 지운 태그를 쓰던 조건·출력은 빠짐) | `id` |
 
 ## 이후 단계에서 추가
 

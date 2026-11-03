@@ -178,6 +178,19 @@ describe('machine edit API', () => {
     e.undo();
     expect(e.doc.io).toHaveLength(1);
   });
+  it('delete takes the block\'s unbound tags too, so the same code can be placed again', () => {
+    const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 'lamp', bbox: [1200, 800, 1600] } } as never, { newId: ids() });
+    const io = () => [{ tag: 'TL1_RED', dir: 'out' as const, type: 'bool' as const }, { tag: 'TL1_GRN', dir: 'out' as const, type: 'bool' as const }];
+    const tl = e.exec('add_block', { blockType: 'tower-lamp', params: { tag: 'TL1' }, position: [0, 0, 0], io: io() }) as string;
+    const cam = e.exec('add_block', { blockType: 'vision-camera', params: { tag: 'CAM1' }, position: [500, 0, 0], io: [{ tag: 'CAM1_TRIG', dir: 'out', type: 'bool' }, { tag: 'CAM1_OK', dir: 'in', type: 'bool', binding: { kind: 'process', target: 'CAM1_TRIG' } }] }) as string;
+    e.exec('set_sequence', { steps: [{ id: 's1', wait: [{ tag: 'CAM1_OK', value: true }], set: [{ tag: 'TL1_GRN', value: true }] }] });
+    e.exec('delete', { id: tl });
+    expect(e.doc.io.map(t => t.tag)).toEqual(['CAM1_TRIG', 'CAM1_OK']);
+    expect(e.doc.sequence.steps[0]!.set).toEqual([]);
+    expect(() => e.exec('add_block', { blockType: 'tower-lamp', params: { tag: 'TL1' }, position: [0, 0, 0], io: io() })).not.toThrow();
+    e.exec('delete', { id: cam });
+    expect(e.doc.io.map(t => t.tag)).toEqual(['TL1_RED', 'TL1_GRN']);
+  });
 });
 
 describe('machine builder commands', () => {
