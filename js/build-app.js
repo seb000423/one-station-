@@ -532,13 +532,58 @@
     if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
     if (on && !doc.nodes.some(n => nodeDef(n)?.work)) toast('워크 블록이 없어 센서가 켜지지 않습니다 · 편집에서 컨베이어 위에 워크를 놓아 주세요');
     AUTO.on = on; AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; $('bAuto').textContent = on ? '■ 자동 운전 멈춤' : '▶ 자동 운전'; $('bAuto').classList.toggle('pri', on); if (on) log('자동 운전 시작 · 동작 순서를 차례로 실행합니다'); drawSeq(); drawIo(); }
-  function drawSeq() { if (!$('seq')) return; const steps = ED.machine.doc.sequence.steps; $('seqN').textContent = steps.length ? `${steps.length}단계` : '';
+  // the list; a click on a step opens it for editing (조건 · 동작 · 시간 · 다음 단계), every change is one set_sequence
+  AUTO.open = -1;
+  const seqCopy = () => JSON.parse(JSON.stringify(ED.machine.doc.sequence.steps));
+  const saveSeq = steps => { exec('set_sequence', { steps }, true); drawSeq(); };
+  function valSel(t, v, kind) { if (!t || t.type === 'bool') return `<select data-f="value">${(kind === 'set' ? [[true, '켜기'], [false, '끄기']] : [[true, '켜짐'], [false, '꺼짐']]).map(([x, l]) => `<option value="${x}"${v === x ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+    return `<input data-f="value" type="number" step="any" value="${+v || 0}">`; }
+  const tagMean = t => { const n = ED.machine.doc.nodes.find(q => t.tag.startsWith(nodeCode(q) + '_')); return meaning(t, n ? nodeCode(n) : ''); };
+  function tagSel(cur, outsOnly) { const doc = ED.machine.doc; return `<select data-f="tag">${doc.io.filter(t => !outsOnly || t.dir === 'out').map(t => `<option value="${esc(t.tag)}"${t.tag === cur ? ' selected' : ''}>${esc(t.tag)} · ${esc(tagMean(t))}</option>`).join('')}</select>`; }
+  function drawSeq() { if (!$('seq')) return; const steps = ED.machine.doc.sequence.steps, io = new Map(ED.machine.doc.io.map(t => [t.tag, t])); $('seqN').textContent = steps.length ? `${steps.length}단계` : '';
     const set = x => `${esc(x.tag)} ${x.value === true ? '켜기' : x.value === false ? '끄기' : '= ' + x.value}`;
-    $('seq').innerHTML = steps.map((st, i) => `<div class="seqst${AUTO.on && i === AUTO.i ? ' on' : ''}"><b>${i + 1}</b><div><span>${esc(st.name || st.id)}</span>
-        <small>${[st.wait.length ? '조건 ' + st.wait.map(w => `${esc(w.tag)} ${(w.op || '==') === '==' ? '' : esc(w.op) + ' '}${valTxt(w.tag, w.value)}`).join(', ') + (st.set.length ? ' → ' : '') : '', st.set.map(set).join(', ')].join('')}${[st.delay ? `${st.delay} s 기다림` : '', st.next ? `↩ ${steps.findIndex(q => q.id === st.next[0]) + 1}단계로` : ''].filter(Boolean).map(x => (st.wait.length || st.set.length ? ' · ' : '') + x).join('')}</small></div></div>`).join('')
-      || '<p class="seqempty">아직 동작 순서가 없습니다. "자동 만들기"를 누르면 블록(컨베이어·스토퍼·센서·공정)에서 순서를 만듭니다.</p>'; }
+    const row = (st, i) => {
+      const sum = `<small>${[st.wait.length ? '조건 ' + st.wait.map(w => `${esc(w.tag)} ${(w.op || '==') === '==' ? '' : esc(w.op) + ' '}${valTxt(w.tag, w.value)}`).join(', ') + (st.set.length ? ' → ' : '') : '', st.set.map(set).join(', ')].join('')}${[st.delay ? `${st.delay} s 기다림` : '', st.next ? `↩ ${steps.findIndex(q => q.id === st.next[0]) + 1}단계로` : ''].filter(Boolean).map(x => (st.wait.length || st.set.length ? ' · ' : '') + x).join('')}</small>`;
+      if (AUTO.open !== i) return `<div class="seqst${AUTO.on && i === AUTO.i ? ' on' : ''}" data-si="${i}" title="눌러서 고치기"><b>${i + 1}</b><div><span>${esc(st.name || st.id)}</span>${sum}</div></div>`;
+      const ops = ['==', '!=', '>', '<', '>=', '<='];
+      return `<div class="seqst open${AUTO.on && i === AUTO.i ? ' on' : ''}" data-si="${i}"><b>${i + 1}</b><div class="seqed">
+        <input data-f="name" value="${esc(st.name || '')}" placeholder="단계 이름">
+        <h5>조건 <em>모두 맞으면 다음으로 (없으면 바로)</em></h5>
+        ${st.wait.map((w, k) => `<div class="seqline" data-k="wait" data-j="${k}">${tagSel(w.tag)}${io.get(w.tag)?.type === 'bool' ? '' : `<select data-f="op">${ops.map(o => `<option${(w.op || '==') === o ? ' selected' : ''}>${o}</option>`).join('')}</select>`}${valSel(io.get(w.tag), w.value, 'wait')}<button data-x="del">×</button></div>`).join('')}
+        <button class="add" data-x="add-wait">+ 조건</button>
+        <h5>동작 <em>조건이 맞으면 켜고/끄는 명령</em></h5>
+        ${st.set.map((x, k) => `<div class="seqline" data-k="set" data-j="${k}">${tagSel(x.tag, true)}${valSel(io.get(x.tag), x.value, 'set')}<button data-x="del">×</button></div>`).join('')}
+        <button class="add" data-x="add-set">+ 동작</button>
+        <div class="seqline"><label>그 뒤 기다림</label><input data-f="delay" type="number" min="0" step="0.1" value="${st.delay || 0}"><label>s · 다음</label>
+          <select data-f="next"><option value="">${i + 2 <= steps.length ? `${i + 2}단계` : '1단계 (처음)'}</option>${steps.map((q, k) => `<option value="${q.id}"${st.next?.[0] === q.id ? ' selected' : ''}>${k + 1}단계 ${esc(q.name || '')}</option>`).join('')}</select></div>
+        <div class="seqbtns"><button data-x="up">↑</button><button data-x="down">↓</button><button data-x="dup">복제</button><button data-x="rm">단계 삭제</button><button data-x="close" class="pri">닫기</button></div></div></div>`; };
+    $('seq').innerHTML = steps.map(row).join('') + (steps.length ? '<button class="seqadd" data-x="new">+ 단계 추가</button>' : '<p class="seqempty">아직 동작 순서가 없습니다. "블록으로 만들기"를 누르면 블록(컨베이어·스토퍼·센서·공정)에서 순서를 만들고, 각 단계를 눌러 직접 고칠 수 있습니다. <button class="seqadd" data-x="new">+ 빈 단계부터</button></p>'); }
+  $('seq').addEventListener('click', e => { const st = e.target.closest('[data-si]'), x = e.target.closest('[data-x]')?.dataset.x;
+    if (x === 'new') { const steps = seqCopy(); let n = steps.length + 1; while (steps.some(q => q.id === `s${n}`)) n++; steps.push({ id: `s${n}`, name: `${steps.length + 1}단계`, wait: [], set: [] }); AUTO.open = steps.length - 1; saveSeq(steps); return; }
+    if (!st) return; const i = +st.dataset.si;
+    if (!x) { if (AUTO.open !== i) { AUTO.open = i; drawSeq(); } return; }
+    const steps = seqCopy(), s0 = steps[i], line = e.target.closest('.seqline'), io = ED.machine.doc.io;
+    if (x === 'close') { AUTO.open = -1; drawSeq(); return; }
+    if (x === 'add-wait') { const t = io.find(q => q.dir === 'in') || io[0]; if (!t) return toast('신호가 없습니다'); s0.wait.push({ tag: t.tag, op: '==', value: t.type === 'bool' ? true : 0 }); }
+    else if (x === 'add-set') { const t = io.find(q => q.dir === 'out'); if (!t) return toast('켜고 끌 명령 신호가 없습니다'); s0.set.push({ tag: t.tag, value: t.type === 'bool' ? true : 0 }); }
+    else if (x === 'del' && line) s0[line.dataset.k].splice(+line.dataset.j, 1);
+    else if (x === 'up' && i > 0) { [steps[i - 1], steps[i]] = [steps[i], steps[i - 1]]; AUTO.open = i - 1; }
+    else if (x === 'down' && i < steps.length - 1) { [steps[i + 1], steps[i]] = [steps[i], steps[i + 1]]; AUTO.open = i + 1; }
+    else if (x === 'dup') { let n = steps.length + 1; while (steps.some(q => q.id === `s${n}`)) n++; steps.splice(i + 1, 0, Object.assign(JSON.parse(JSON.stringify(s0)), { id: `s${n}`, next: undefined })); AUTO.open = i + 1; }
+    else if (x === 'rm') { steps.splice(i, 1); for (const q of steps) if (q.next && q.next[0] === s0.id) delete q.next; AUTO.open = -1; if (AUTO.i >= steps.length) AUTO.i = 0; }
+    else return;
+    saveSeq(steps); });
+  $('seq').addEventListener('change', e => { const st = e.target.closest('[data-si]'), f = e.target.dataset.f; if (!st || !f) return; const steps = seqCopy(), s0 = steps[+st.dataset.si], line = e.target.closest('.seqline[data-k]'), v = e.target.value;
+    const io = new Map(ED.machine.doc.io.map(t => [t.tag, t]));
+    if (line) { const it = s0[line.dataset.k][+line.dataset.j];
+      if (f === 'tag') { it.tag = v; const t = io.get(v); it.value = t?.type === 'bool' ? true : 0; if (line.dataset.k === 'wait') it.op = '=='; }
+      else if (f === 'op') it.op = v; else if (f === 'value') it.value = v === 'true' ? true : v === 'false' ? false : +v; }
+    else if (f === 'name') s0.name = v; else if (f === 'delay') { const d = Math.max(0, +v || 0); if (d) s0.delay = d; else delete s0.delay; }
+    else if (f === 'next') { if (v) s0.next = [v]; else delete s0.next; }
+    saveSeq(steps); });
+  $('seq').addEventListener('keydown', e => e.stopPropagation());
   $('bAuto').onclick = () => setAuto(!AUTO.on);
-  $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 블록에서 다시 만들까요?')) return; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
+  $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 지우고 블록에서 다시 만들까요? (실행 취소로 되돌릴 수 있습니다)')) return; AUTO.open = -1; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
   $('bWorkBack').onclick = () => { const doc = ED.machine.doc; for (const n of doc.nodes) if (nodeDef(n)?.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]] }; log('워크를 처음 위치로 되돌렸습니다'); };
   $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
 
