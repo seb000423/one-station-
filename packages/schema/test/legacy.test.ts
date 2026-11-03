@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { importLegacy, factoryToLegacy, legacyToFactory, type LegacyDoc, type LegacyObject } from '@one-twin/schema';
 
-const example = JSON.parse(readFileSync(new URL('../../../assets/layouts/egr-module-asset.json', import.meta.url), 'utf8')) as LegacyDoc;
+const example = JSON.parse(readFileSync(new URL('./fixtures/legacy-layout.json', import.meta.url), 'utf8')) as LegacyDoc;
 
 const close = (a: unknown, b: unknown, path = ''): void => {
   if (typeof a === 'number' && typeof b === 'number') {
@@ -23,7 +23,7 @@ const close = (a: unknown, b: unknown, path = ''): void => {
 const byId = (o: LegacyObject[]) => [...o].sort((x, y) => x.id.localeCompare(y.id)).map(x => ({ ...x, rot: x.rot ?? 0 }));
 
 describe('old saves ⇄ factory.json', () => {
-  it('the example line converts into a valid factory.json', () => {
+  it('a saved layout converts into a valid factory.json', () => {
     const f = importLegacy(example, { id: 'example', name: '예시' });
     expect(f.building.walls).toHaveLength(6);
     expect(f.building.columns).toHaveLength(19);

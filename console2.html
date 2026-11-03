@@ -491,9 +491,8 @@ main{display:block;position:absolute;inset:0}
   $('#retry').addEventListener('click', load);
 
   /* ---------- saved stations ---------- */
-  // built-in entry: the BUILDER example line, recorded and bundled with the site (re-export it when the example changes); never deleted
-  const BUILTIN = [{ id: 'test1', name: '테스트1', note: '예시 공정 · 셀 5개 · 스테이션 35개 · 투입 → 도포 · 프레스 → 레이저 · 택 용접 → 검사 · 리크 테스트 → 마킹 · 출하', kind: 'factory', builtin: true, glb: new URL('realvirtual-models/test1.glb', location.href).href, timeline: new URL('realvirtual-models/test1-timeline.json', location.href).href,
-    summary: { objects: 57, cells: 0, layout: { factory: { width: 40, depth: 20 } } } }];
+  // no built-in entry: the old welding-module example line (테스트1) was removed; the list holds the server saves only
+  const BUILTIN = [];
   let saves = BUILTIN.slice();
   const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
   const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };

@@ -129,8 +129,8 @@ describe('factory edit API', () => {
     e.validate();
     expect(e.log()).toHaveLength(13);
   });
-  it('edits on the converted example line still save back to the old format', () => {
-    const ex = JSON.parse(readFileSync(new URL('../../../assets/layouts/egr-module-asset.json', import.meta.url), 'utf8')) as LegacyDoc;
+  it('edits on a converted saved layout still save back to the old format', () => {
+    const ex = JSON.parse(readFileSync(new URL('../../schema/test/fixtures/legacy-layout.json', import.meta.url), 'utf8')) as LegacyDoc;
     const e = new Editor('factory', importLegacy(ex), { newId: ids() });
     const first = e.doc.machines[0]!;
     e.exec('move', { id: first.id, by: [500, 0] });

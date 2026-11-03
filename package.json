@@ -20,8 +20,6 @@
     "typecheck": "tsc -p .",
     "check": "tsc -p . && vitest run",
     "gen:twin": "esbuild tools/one-twin/gen.ts --bundle --platform=node --format=esm --packages=external --outfile=.cache/one-twin-gen.mjs --log-level=warning && node .cache/one-twin-gen.mjs",
-    "bundle:twin": "esbuild tools/one-twin/bundle-entry.ts --bundle --format=iife --global-name=OneTwin --target=es2020 --minify --legal-comments=none --outfile=js/one-twin.js --log-level=warning && esbuild tools/one-twin/sim-entry.ts --bundle --format=iife --global-name=OneTwinSim --target=es2020 --minify --legal-comments=none --outfile=js/one-twin-sim.js --log-level=warning",
-    "gen:map": "node tools/one-twin/clip-map.mjs",
-    "audit:sim": "node tools/one-twin/audit-sim.cjs"
+    "bundle:twin": "esbuild tools/one-twin/bundle-entry.ts --bundle --format=iife --global-name=OneTwin --target=es2020 --minify --legal-comments=none --outfile=js/one-twin.js --log-level=warning"
   }
 }
