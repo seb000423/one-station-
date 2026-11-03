@@ -28,7 +28,7 @@
     ['동선 · 구역', [['walkway', '보행로'], ['zone', '구역']]],
     ['이동체', [['amr', 'AMR'], ['worker', '작업자'], ['route', 'AMR 경로'], ['walkroute', '작업자 경로']]]
   ];
-  const TYPE_LABEL = { station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델', kpi: 'KPI 패널' };
+  const TYPE_LABEL = { linax: '리니어 축', station: '원스테이션 셀', column: '기둥', wall: '벽', door: '출입문', stairs: '계단', walkway: '보행로', zone: '구역', conveyor: '컨베이어', robot: '로봇', rack: '랙 · 버퍼', tote: '부품 상자', bench: '작업대', fence: '안전 펜스', roof: '지붕 트러스', amr: 'AMR', charger: '충전소', route: '경로', worker: '작업자', walkroute: '작업자 경로', conveyor2: '2층 컨베이어', press: '프레스', injection: '사출기', machining: '가공기', washer: '세척기', transfer: '이재기', furnace: '진공 브레이징로', welder: '용접 셀', leaktest: '리크 테스터', palletloop: '팔레트 순환 컨베이어', asmstation: '조립 스테이션', flowrack: '경사 부품 선반', ufmodel: '설비 모델', kpi: 'KPI 패널' };
   const MACHINES = ['ufmodel', 'mine']; // js/factory-unity.js: Asset Store models; js/factory-equip.js: our own equipment assets (내 설비)
   // types a layout may hold; anything else (the retired home-made equipment: cells, conveyors, robots, racks,
   // chargers, process machines) is dropped when a saved layout is opened
@@ -619,6 +619,7 @@
       const pose = FR().poseOnHit(doc, c, hit); Object.assign(c, { x: pose.x, y: pose.y, z: pose.z, rot: pose.rot, snapped: pose.snapped, lift: pose.lift, liftOf: pose.target });
       return c;
     }
+    if (type === 'linax') { if (model) c.params.form = model; return c; }
     if (model && ['conveyor', 'tote', 'bench'].includes(type)) c.params.kind = model; if (variant && type === 'conveyor') c.params.shape = variant; else if (model) c.params.model = model; // kit presets: conveyor:belt, tote:carton
     if (type === 'conveyor') { const sn = FF().snap(doc, c); if (sn) Object.assign(c, { x: sn.x, z: sn.z, rot: sn.rot, snapped: sn.text }); }
     return c;
@@ -960,7 +961,7 @@
     amr: ICON.amr, agv: '<rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V5h12v6M6 8h12"/><circle cx="7" cy="18" r="1.4"/><circle cx="17" cy="18" r="1.4"/>',
     forklift: '<path d="M4 17V8h6l3 5v4M17 4v14M17 18h4M10 8V5"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/>', worker: ICON.worker, cart: '<path d="M4 6h3l2 9h10l2-7H8"/><circle cx="10" cy="19" r="1.5"/><circle cx="18" cy="19" r="1.5"/>'
   };
-  CI.mine = ICON.mine; CI.block = ICON.block; CI.model = ICON.model; CI.upload = ICON.upload;
+  CI.linax = ICON.linax = '<path d="M2 15h20v4H2zM8 11h6v4H8zM2 15l-0 0M20 13v2"/><path d="M4 11v4"/>'; CI.mine = ICON.mine; CI.block = ICON.block; CI.model = ICON.model; CI.upload = ICON.upload;
   // catalog model → [tab, category]
   const CATOF = k => {
     if (/^e3_(roller_|belt_|press_line|conveyor_stopper|ng_chute)/.test(k) || /^line0[123]$/.test(k)) return ['equip', 'conveyor'];
@@ -1000,6 +1001,9 @@
     ['model', '설비 모델 (장착)', []], ['upload', '내 파일 (GLB · STL)', []], ['mine', '내 설비', []]];
   // 설비 tab: saved equipment assets are placed as one object (it can be taken apart again for editing)
   PAL.equip.push(['mine', '내 설비 에셋', []]);
+  // 구성형 설비: placed, then configured step by step in the properties panel (js/factory-config.js)
+  if (window.FactoryConfig) { PAL.equip.splice(1, 0, ['linax', '리니어 축 · 갠트리 (구성 마법사)', [['linax:single', '리니어 축 (단일축)', 'type'], ['linax:gantry', '갠트리 (2축)', 'type']]]); FIELDS.linax = []; }
+  const cfgStep = new Map(); // object id → wizard step shown
   // 내 설비: assemblies saved from the assembly card, in this browser (parts relative to the assembly's floor centre)
   const MINE = 'one-station-frame-mine';
   const mineList = () => { try { return JSON.parse(localStorage.getItem(MINE) || '[]'); } catch (e) { return []; } };
@@ -1515,6 +1519,7 @@
       const sameCat = (k, mn) => (o.type === 'ufmodel' && k === 'model' && mc ? mn.filter(([key]) => (U.CATALOG[key] || {}).cat === mc.cat) : mn);
       html += `<div class="row">${FIELDS[o.type].filter(f => !f[5] || f[5](p)).map(([k, l, st, mn, mx]) => field('p.' + k, l, p[k] ?? SIMDEF[k], st, sameCat(k, mn), mx)).join('')}</div>`;
       if (o.type === 'conveyor') html += conveyorInfo(o);
+      if (o.type === 'linax') html += '<div id="fbCfg"></div>';
       if (o.type === 'mine') {
         const tmp = { objects: (p.parts || []).map((q, i) => Object.assign({}, q, { id: '__m' + i, name: TYPE_LABEL[q.type] })) }, rows = FR().bom(tmp), [fw, fd] = window.FactoryElements.footprint(o);
         html += `<p class="hint">내 설비 에셋 · 부품 ${(p.parts || []).length}개 · 바닥 ${Math.round(fw * 1000)} × ${Math.round(fd * 1000)} mm. 설비 하나로 옮기고 복제합니다. 모양을 고치려면 부품으로 풀어 편집한 뒤 조립품 카드의 "내 설비로 저장"으로 다시 저장하세요.</p>
@@ -1566,6 +1571,16 @@
     }
     html += `<div class="acts"><button type="button" data-a="look">이 객체 보기</button><button type="button" data-a="dup">복제</button><button type="button" data-a="del">삭제</button></div>`;
     propSec.innerHTML = html;
+    const cfgHost = propSec.querySelector('#fbCfg');
+    if (cfgHost) window.FactoryConfig.mount(cfgHost, o, {
+      step: cfgStep.get(o.id) || 0,
+      onStep: i => { cfgStep.set(o.id, i); renderProps(); },
+      onChange: patch => {
+        const next = clone(o); next.params = Object.assign(window.FactoryElements.defaults(o.type, doc.factory), o.params || {}, patch);
+        const why = blockedBy(next); if (why) { note(`바꿀 수 없습니다: ${why}`, true); return renderProps(); }
+        pushUndo(); o.params = next.params; buildView(o); placeObjectGroup(o); fitFloor(o); store(); select(o.id);
+      }
+    });
     propSec.querySelector('[data-n]').addEventListener('change', e => { pushUndo(); o.name = e.target.value.trim() || o.name; syncLabel(o); if (o.type !== 'station') { buildView(o); select(o.id); } store(); renderTree(); });
     propSec.querySelectorAll('[data-k]').forEach(i => i.addEventListener('change', () => {
       const k = i.dataset.k, raw = i.type === 'checkbox' ? i.checked : i.type === 'number' || (k === 'p.dir') ? parseFloat(i.value) : i.value;
@@ -1880,7 +1895,7 @@
       const M = motion(), t = clock;
       for (const o of doc.objects) {
         const g = views.get(o.id); if (!g) continue;
-        if (o.type === 'conveyor' || o.type === 'robot' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, o.type === 'ufmodel' ? gateTime(o, M, t) : t);
+        if (o.type === 'conveyor' || o.type === 'robot' || o.type === 'linax' || MACHINES.includes(o.type)) window.FactoryElements.animate(o, g, o.type === 'ufmodel' ? gateTime(o, M, t) : t);
         else if (o.type === 'bench') window.FactoryElements.animate(o, g, gateTime(o, M, t), { lamp: calling(o, M, t) });
         else if ((o.type === 'amr' || o.type === 'worker') && !(tc && tc.dragging && tc.object === g)) {
           const pl = (o.type === 'amr' ? M.amr : M.worker)[o.id];
