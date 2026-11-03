@@ -92,7 +92,7 @@
     }
     for (const v of objs.values()) root.remove(v.obj);
     objs = keep;
-    drawFloor(); if (sel && !objs.has(sel)) sel = null;
+    drawFloor(); if (sel && !objs.has(sel)) sel = null; if (xray) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work));
   }
   function placeObj(obj, pos, yawDeg = 0) { obj.position.copy(toS(pos)); obj.rotation.y = S.storedYawToScene(yawDeg); }
   function buildFactoryObj(it, doc) {
@@ -417,7 +417,9 @@
     if (tab === 'factory') { const r = slabRect(doc), a = toS([r.x0, r.y0, 0]), b = toS([r.x1, r.y1, 4000]); stage.fit(new T.Box3().setFromPoints([a, b]), 1.05); }
     else { const [W, D, H] = doc.meta.bbox.map(v => v / 1000), box = new T.Box3(new T.Vector3(-W / 2, 0, -D / 2), new T.Vector3(W / 2, H, D / 2)); for (const v of objs.values()) box.expandByObject(v.obj); stage.fit(box, 1.25); }
   }
-  $('views').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; if (b.dataset.v === 'fit') fitAll(); else focusSel(); });
+  $('views').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; if (b.dataset.v === 'fit') fitAll(); else if (b.dataset.v === 'xray') setXray(!xray); else focusSel(); });
+  let xray = false;
+  const setXray = on => { xray = on; if (on) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work)); stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
 
   /* ------------------------------------------------------------------ keys, toolbar, files */
   window.addEventListener('keydown', e => {
@@ -431,6 +433,7 @@
     else if (k === 'delete' || k === 'backspace') deleteSel();
     else if (k === 'escape') select(null);
     else if (k === 'f') sel ? focusSel() : fitAll();
+    else if (k === 'x' && !mod) setXray(!xray);
   });
   $('bUndo').onclick = () => mode === 'edit' && ed().undo();
   $('bRedo').onclick = () => mode === 'edit' && ed().redo();
