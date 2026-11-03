@@ -569,9 +569,12 @@
   }
   function setMode(m) {
     if (tab !== 'machine') m = 'edit'; mode = m; if (AUTO.on) setAuto(false); document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
-    if (m === 'run') { resetRun(); log('실행 시작 · 신호 표의 값을 눌러 태그를 켜고 끕니다'); }
+    if (m === 'run') { resetRun(); log('동작 시험 시작 · 명령 값을 눌러 켜고 끄거나 ▶ 자동 운전을 누릅니다');
+      // tall blocks that never move (cabinets, panels, guards) turn see-through so the work and stoppers stay in view
+      for (const n of ED.machine.doc.nodes) { const d = nodeDef(n), o = objs.get(n.id)?.obj; if (!d || !o || runState(n) || d.cat !== 'structure') continue;
+        o.traverse(x => { if (x.isMesh) { x.material = x.material.clone(); x.material.transparent = true; x.material.opacity = 0.18; x.material.depthWrite = false; } }); } }
     else { for (const v of objs.values()) root.remove(v.obj); objs = new Map(); syncScene(); }
-    $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); drawSeq(); updateHint();
+    portGrp.visible = m !== 'run'; $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); drawSeq(); updateHint();
   }
   $('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 
@@ -777,7 +780,7 @@
       for (const [oid, o] of P) { if (oid === id || !o) continue;
         for (const [fa, fb, A, B] of [[id, oid, me.outlet, o.inlet], [oid, id, o.outlet, me.inlet]]) if (Math.hypot(A[0] - B[0], A[1] - B[1]) <= 800 && !doc.flows.some(f => f.from === `${fa}.outlet` && f.to === `${fb}.inlet`) && !doc.flows.some(f => f.from === `${fa}.outlet`)) { if (exec('connect_flow', { from: `${fa}.outlet`, to: `${fb}.inlet`, via: 'conveyor' }, true)) n++; } } }
     if (n) setTimeout(() => toast(`맞닿은 설비 ${n}곳을 컨베이어 흐름으로 이었습니다`), 0); }
-  function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray) { el.style.display = 'none'; continue; }
+  function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height - 8) + 'px'; } }
   function refresh() { syncScene(); drawPorts(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
@@ -794,9 +797,18 @@
   // shown drops to its short code, and if even that overlaps it is hidden until you zoom in or point at it
   let hoverId = null; const lw = new Map(), meas = document.createElement('div'); meas.className = 'lbl'; meas.style.visibility = 'hidden'; meas.style.left = '-999px'; lblBox.appendChild(meas);
   const wOf = (el, html) => { let w = lw.get(html); if (w === undefined) { meas.innerHTML = html; w = meas.offsetWidth; if (w) lw.set(html, w); else w = 80; } return w; };
+  // 동작 시험: what each moving block is doing right now, always labelled so nothing hides behind a cabinet
+  function runState(n) { const d = nodeDef(n); if (!d) return null; const P = nodeCode(n), t = RUN.tags, has = k => k in t;
+    if (d.work) return { txt: '워크', on: true };
+    if (d.conveyor) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
+    if (d.stops) { const up = has(`${P}_IS_UP`) ? t[`${P}_IS_UP`] : t[`${P}_UP`]; return { txt: up ? '올림 · 워크 멈춤' : '내림', on: !!up }; }
+    if (d.sensor) return { txt: t[`${P}_ON`] ? '워크 감지' : '감지 없음', on: !!t[`${P}_ON`] };
+    const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) return { txt: pr?.busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: !!pr?.busy };
+    return null; }
   function drawLabels() {
     const r = renderer.domElement.getBoundingClientRect(), want = new Set(), sels = new Set(selIds());
-    if (tab === 'machine') for (const n of ED.machine.doc.nodes) { if (n.parent && !sels.has(n.id) && hoverId !== n.id) continue; want.add(n.id); }
+    const live = tab === 'machine' && mode === 'run' && !xray;
+    if (tab === 'machine') for (const n of ED.machine.doc.nodes) { if (live ? !runState(n) && n.parent : n.parent && !sels.has(n.id) && hoverId !== n.id) continue; want.add(n.id); }
     else for (const it of factoryItems(ED.factory.doc)) if (it.path === 'machines' || sels.has(it.id) || it.id === hoverId) want.add(it.id);
     for (const [id, el] of lbls) if (!want.has(id)) { el.remove(); lbls.delete(id); }
     const items = [];
@@ -805,18 +817,19 @@
       if (!el) { el = document.createElement('div'); el.className = 'lbl'; lblBox.appendChild(el); lbls.set(id, el); }
       tmpBox.setFromObject(o); if (tmpBox.isEmpty()) { el.style.display = 'none'; continue; } const size = tmpBox.getSize(v3).length(); tmpBox.getCenter(v3); v3.y = tmpBox.max.y + 0.05; v3.project(camera);
       if (Math.abs(v3.x) > 1.05 || Math.abs(v3.y) > 1.05) { el.style.display = 'none'; continue; }
-      let code, name; if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); code = nodeCode(n); name = n.name; } else { const it = factoryItems(ED.factory.doc).find(x => x.id === id); code = itemCode(it); name = itemName(it); }
-      items.push({ id, el, x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, size, code, name, pri: id === sel ? 3 : id === hoverId ? 2 : sels.has(id) ? 1 : 0 });
+      let code, name, rs = null; if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); code = nodeCode(n); name = n.name; if (live && (rs = runState(n))) name = rs.txt; } else { const it = factoryItems(ED.factory.doc).find(x => x.id === id); code = itemCode(it); name = itemName(it); }
+      items.push({ id, el, x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, size, code, name, rs, pri: id === sel ? 3 : id === hoverId || rs ? 2 : sels.has(id) ? 1 : 0 });
     }
     items.sort((a, b) => b.pri - a.pri || b.size - a.size);
     const placed = [], H = 22, hits = (x0, x1, y0, y1) => placed.some(p => x0 < p[1] + 4 && x1 > p[0] - 4 && y0 < p[3] + 2 && y1 > p[2] - 2);
     for (const it of items) {
       const full = `${it.code ? `<b>${esc(it.code)}</b>` : ''}${esc(it.name)}`, short = it.code ? `<b>${esc(it.code)}</b>` : full;
-      let html = full, w = wOf(it.el, full) ; const y0 = it.y - H, y1 = it.y;
+      let html = full, w = wOf(it.el, full) ; let y0 = it.y - H, y1 = it.y;
       if (it.pri < 2 && hits(it.x - w / 2, it.x + w / 2, y0, y1)) { html = short; w = wOf(it.el, short); if (hits(it.x - w / 2, it.x + w / 2, y0, y1)) { it.el.style.display = 'none'; continue; } }
-      placed.push([it.x - w / 2, it.x + w / 2, y0, y1]);
+      if (it.rs) for (let k = 0; k < 6 && hits(it.x - w / 2, it.x + w / 2, y0, y1); k++) { y0 -= H + 2; y1 -= H + 2; } // live states stack upward instead of hiding
+      it.y = y1; placed.push([it.x - w / 2, it.x + w / 2, y0, y1]);
       if (it.el.innerHTML !== html) it.el.innerHTML = html; it.el.style.display = ''; it.el.style.left = it.x + 'px'; it.el.style.top = it.y + 'px';
-      it.el.classList.toggle('on', sels.has(it.id)); it.el.classList.toggle('hov', it.pri === 2); it.el.style.zIndex = it.pri >= 2 ? 2 : 1;
+      it.el.classList.toggle('on', sels.has(it.id)); it.el.classList.toggle('hov', it.pri === 2 && !it.rs); it.el.classList.toggle('live', !!it.rs?.on); it.el.classList.toggle('idle', !!it.rs && !it.rs.on); it.el.style.zIndex = it.pri >= 2 ? 2 : 1;
     }
   }
   renderer.domElement.addEventListener('pointermove', e => { if (drag || placing || e.buttons) return; setNdc(e); const id = pickExact(); if (id !== hoverId) hoverId = id; });
