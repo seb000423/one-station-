@@ -45,7 +45,37 @@
     for (const n of doc.nodes) { const o = L.buildBlock(n.blockType, n.params); placeObj(o, n.transform.position, n.transform.rotation[2]); g.add(o); }
     return g;
   }
-    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS };
+    /* ---- machine ports (입구 · 출구): where parts come in and leave. Stored in card.inlet / card.outlet as
+       "<nodeId>/in", "<nodeId>/out" (a conveyor end) or "<nodeId>/top" (top centre of any other block); null = automatic:
+       the infeed end of the first conveyor of the chain → the outfeed end of its last one, else the bounding box sides
+       along X (X = 투입 → 배출). Positions are mm in the machine's frame, dir is the travel direction (unit, XY). */
+    const blockP = n => Object.assign({}, L.BLOCKS[n.blockType]?.params, n.params);
+    function portCandidates(doc) { const out = [];
+      for (const n of doc.nodes) { const d = L.BLOCKS[n.blockType]; if (!d) continue; const code = n.params.tag || '';
+        if (d.conveyor) { out.push({ key: `${n.id}/in`, label: `${code} 투입 끝`, kind: 'in' }, { key: `${n.id}/out`, label: `${code} 배출 끝`, kind: 'out' }); }
+        else if (d.work || d.sensor || d.stops) continue;
+        else if (d.top(blockP(n)) > 0.05 || d.cat === 'process' || d.cat === 'transport') out.push({ key: `${n.id}/top`, label: `${code} ${d.name.replace(/\s*\(.*\)$/, '')} 윗면`, kind: 'any' }); }
+      return out; }
+    function portAt(doc, key) { if (!key) return null; const [id, end] = key.split('/'), n = doc.nodes.find(x => x.id === id); if (!n) return null; const d = L.BLOCKS[n.blockType]; if (!d) return null;
+      const p = blockP(n), q = n.transform.position, r = n.transform.rotation[2] * Math.PI / 180, a = [Math.cos(r), Math.sin(r)], top = q[2] + d.top(p) * 1000;
+      if (end === 'in' || end === 'out') { const s = end === 'in' ? -1 : 1, L2 = (+p.length || 1000) / 2; return { key, pos: [q[0] + a[0] * s * L2, q[1] + a[1] * s * L2, top], dir: a }; }
+      return { key, pos: [q[0], q[1], top], dir: a }; }
+    function autoPorts(doc) { const convs = doc.nodes.filter(n => L.BLOCKS[n.blockType]?.conveyor && !n.parent);
+      if (convs.length) { const ends = convs.map(c => ({ c, i: portAt(doc, `${c.id}/in`), o: portAt(doc, `${c.id}/out`) })), near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 600;
+        const first = ends.find(e => !ends.some(f => f !== e && near(f.o.pos, e.i.pos))) || ends[0], last = ends.slice().reverse().find(e => !ends.some(f => f !== e && near(e.o.pos, f.i.pos))) || ends[ends.length - 1];
+        return { inlet: first.i, outlet: last.o }; }
+      const [W, , H] = doc.meta.bbox; return { inlet: { key: null, pos: [-W / 2, 0, Math.min(900, H)], dir: [1, 0] }, outlet: { key: null, pos: [W / 2, 0, Math.min(900, H)], dir: [1, 0] } }; }
+    function portsOf(doc) { const a = autoPorts(doc); return { inlet: portAt(doc, doc.card?.inlet) || a.inlet, outlet: portAt(doc, doc.card?.outlet) || a.outlet, auto: { inlet: !portAt(doc, doc.card?.inlet), outlet: !portAt(doc, doc.card?.outlet) } }; }
+    // a library (black box) machine of size [W, D, H]: in on the −X side, out on the +X side, at working height
+    const boxPorts = size => ({ inlet: { pos: [-size[0] / 2, 0, 900], dir: [1, 0] }, outlet: { pos: [size[0] / 2, 0, 900], dir: [1, 0] } });
+    // instance placement: machine-frame mm → factory mm
+    const toFactory = (pos, inst) => { const t = inst.transform, r = t.rotation[2] * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [t.position[0] + pos[0] * c - pos[1] * s, t.position[1] + pos[0] * s + pos[1] * c, (t.position[2] || 0) + pos[2]]; };
+    /** Ports of a placed machine in factory mm (null if unknown). */
+    function instancePorts(it) { let P = null;
+      if (it.local) { const m = opt.lib()[it.local.id], doc = m && (m.versions[it.local.v] || m.versions[Object.keys(m.versions).pop()]); if (doc) P = portsOf(doc); }
+      else if (it.def && L.FACTORY[it.def]?.size) P = boxPorts(L.FACTORY[it.def].size);
+      if (!P) return null; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item) }; }
+    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts };
   }
   window.OneScene = { create };
 })();
