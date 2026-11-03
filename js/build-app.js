@@ -169,6 +169,25 @@
     selGrp.position.set(c.x, 0.006, c.z); selGrp.scale.set(Math.max(0.1, sz.x + pad), 1, Math.max(0.1, sz.z + pad));
   }
 
+  /* ---- 내 설비 편집: 이름 바꾸기 · Machine Builder에서 열기 · 복제 · 삭제 (a built-in partner station is reset instead) */
+  function mineMenu(id, at) { document.querySelectorAll('.mine-menu').forEach(x => x.remove()); const m = lib()[id]; if (!m) return;
+    const placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${id}@`)).length, raw = LS.get(KEY.lib, {});
+    const box = document.createElement('div'); box.className = 'mine-menu';
+    box.innerHTML = `<b>${esc(m.name)}</b><small>버전 ${Object.keys(m.versions).join(', ')}${placed ? ` · 공장에 ${placed}대` : ''}</small>`
+      + [['open', 'Machine Builder에서 열기'], ['rename', '이름 바꾸기'], ['dup', '복제'], m.builtin ? (raw[id] ? ['reset', '원래대로 (저장한 버전 지우기)'] : null) : ['del', '삭제']].filter(Boolean).map(([k, t]) => `<button data-mineact="${k}" data-id="${esc(id)}"${k === 'del' || k === 'reset' ? ' class="warn"' : ''}>${t}</button>`).join('');
+    at.closest('.item').after(box); setTimeout(() => addEventListener('click', function off(ev) { if (!box.contains(ev.target)) { box.remove(); removeEventListener('click', off, true); } }, true), 0); }
+  function mineAct(k, id) { document.querySelectorAll('.mine-menu').forEach(x => x.remove()); const all = LS.get(KEY.lib, {}), m = lib()[id]; if (!m) return;
+    const latest = Math.max(...Object.keys(m.versions).map(Number)), placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${id}@`));
+    if (k === 'open') { if (dirty.machine && !confirm('Machine Builder에서 저장하지 않은 변경이 있습니다. 버리고 이 설비를 열까요?')) return;
+      openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(m.versions[latest])))); dirty.machine = false; switchTab('machine', true); toast(`${m.name} v${latest}를 열었습니다`); return; }
+    if (k === 'rename') { const n = (prompt('설비 이름', m.name) || '').trim(); if (!n || n === m.name) return;
+      const e_ = all[id] || { name: m.name, builtin: !!m.builtin, versions: {} }; e_.name = n; for (const d of Object.values(e_.versions)) d.meta.name = n; all[id] = e_; LS.set(KEY.lib, all);
+      if (ED.machine.doc.meta.id === id) exec('set_meta', { name: n }); toast(`이름을 '${n}'(으)로 바꿨습니다`); drawPalette(); refresh(); return; }
+    if (k === 'dup') { const nid = S.uuidv7(), d = JSON.parse(JSON.stringify(m.versions[latest])); d.meta.id = nid; d.meta.version = 1; d.meta.name = m.name + ' 복사본';
+      all[nid] = { name: d.meta.name, versions: { 1: d } }; LS.set(KEY.lib, all); toast(`'${d.meta.name}'을(를) 만들었습니다`); drawPalette(); return; }
+    if (k === 'del' || k === 'reset') { if (placed.length) { toast(`공장에 놓인 ${placed.length}대를 먼저 지워 주세요`); return; }
+      if (!confirm(k === 'reset' ? `${m.name}을(를) 원래 협력사 설비(v1)로 되돌릴까요? 저장한 버전은 지워집니다.` : `${m.name}을(를) 내 설비에서 지울까요? 되돌릴 수 없습니다.`)) return;
+      delete all[id]; LS.set(KEY.lib, all); toast(k === 'reset' ? '원래 설비로 되돌렸습니다' : '내 설비에서 지웠습니다'); drawPalette(); refresh(); return; } }
   /* ------------------------------------------------------------------ palette */
   let openCats = LS.get('one.build.cats', { building: true, structure: true, transport: true });
   function drawPalette() {
@@ -176,12 +195,12 @@
     const sec = (id, name, items) => {
       const list = items.filter(i => !q || i.name.includes(q) || (i.code || '').toLowerCase().includes(q.toLowerCase())); if (!list.length) return;
       html += `<div class="cat${openCats[id] || q ? ' open' : ''}" data-cat="${id}"><button><span>${esc(name)}</span><small>${list.length}</small></button><div class="items">`
-        + list.map(i => `<button class="item" draggable="true" data-add="${esc(i.key)}" title="${esc(i.why || i.name)}"><span class="code">${esc(i.code || '')}${i.grade ? `<i>${i.grade}차</i>` : ''}</span><b>${esc(i.name)}</b></button>`).join('') + '</div></div>';
+        + list.map(i => `<button class="item" draggable="true" data-add="${esc(i.key)}" title="${esc(i.why || i.name)}"><span class="code">${esc(i.code || '')}${i.grade ? `<i>${i.grade}차</i>` : ''}${i.mine ? `<i class="mine-ed" data-mine="${esc(i.mine)}" title="이름 바꾸기 · 열기 · 복제 · 삭제">⋯</i>` : ''}</span><b>${esc(i.name)}</b></button>`).join('') + '</div></div>';
     };
     if (tab === 'factory') {
       $('palTitle').innerHTML = '에셋 팔레트';
       for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id && !d.retired).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
-      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: m.builtin ? '협력사 설비 · 객체 하나하나의 크기·위치·속도를 Machine Builder에서 바꿀 수 있습니다' : 'Machine Builder에서 저장한 설비' }));
+      const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, mine: id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: m.builtin ? '협력사 설비 · 객체 하나하나의 크기·위치·속도를 Machine Builder에서 바꿀 수 있습니다' : 'Machine Builder에서 저장한 설비' }));
       sec('mine', '내 설비 (Machine Builder에서 저장)', mine.length ? mine : []);
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
@@ -193,6 +212,8 @@
   }
   $('pal').addEventListener('click', e => {
     const c = e.target.closest('.cat>button'); if (c) { const id = c.parentElement.dataset.cat; openCats[id] = !c.parentElement.classList.contains('open'); LS.set('one.build.cats', openCats); c.parentElement.classList.toggle('open'); return; }
+    const me = e.target.closest('[data-mine]'); if (me) { e.stopPropagation(); mineMenu(me.dataset.mine, me); return; }
+    const mm = e.target.closest('[data-mineact]'); if (mm) { mineAct(mm.dataset.mineact, mm.dataset.id); return; }
     const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit'); if (xray) setXray(false);
     const [k, id] = b.dataset.add.split(/:(.*)/s);
     if (k === 'f' && ['slab', 'add_roof'].includes(L.FACTORY[id]?.kind.cmd)) { addFactory(id); return; }
