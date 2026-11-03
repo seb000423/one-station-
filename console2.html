@@ -491,8 +491,11 @@ main{display:block;position:absolute;inset:0}
   $('#retry').addEventListener('click', load);
 
   /* ---------- saved stations ---------- */
-  // no built-in entry: the old welding-module example line (테스트1) was removed; the list holds the server saves only
-  const BUILTIN = [];
+  // built-in entry: the example process = ONE BUILDER's default factory (the partner plant line, js/plant-machines.js),
+  // exported as one GLB (realvirtual-models/example.glb, Draco) with its layout; shown when no save is asked for; never deleted
+  const BUILTIN = [{ id: 'example', name: '예시 공정 · 감마 라인', note: '1 감마 조립 → 2 수동 페이스트 도포 → 3 브레이징 투입 (진공로 4대) → 4 감마 검사', kind: 'factory', builtin: true,
+    glb: new URL('realvirtual-models/example.glb', location.href).href, timeline: new URL('realvirtual-models/example-timeline.json', location.href).href,
+    summary: { objects: 30, cells: 0, layout: { factory: { width: 64, depth: 28 } } } }];
   let saves = BUILTIN.slice();
   const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
   const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };
@@ -791,7 +794,7 @@ main{display:block;position:absolute;inset:0}
 
   setTarget(DEFAULT);
   const wanted = new URL(location.href).searchParams.get('save');
-  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else showNone(); });   // no save asked for: nothing loads; the list opens from 모니터링 목록 열기 / the top button
+  loadSaves().then(() => { renderList(); if (wanted && saves.some(s => s.id === wanted)) choose(wanted); else choose(BUILTIN[0].id); });   // no save asked for: the example process
 })();
 </script>
 </body>
