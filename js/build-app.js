@@ -135,11 +135,25 @@
       stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2, 0, c.z - d / 2), new T.Vector3(c.x + w / 2, 6, c.z + d / 2))); stage.setGrid(0.5, 5);
     } else {
       const [W, D, H] = doc.meta.bbox.map(v => v / 1000);
-      envelope = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(W, H, D)), dashMat); envelope.computeLineDistances(); envelope.position.set(0, H / 2, 0); ov.add(envelope);
+      envelope = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(1, 1, 1)), dashMat); envelope.computeLineDistances(); ov.add(envelope); updateEnvelope();
       originMark = new T.Group(); const ax = new T.ArrowHelper(new T.Vector3(1, 0, 0), new T.Vector3(0, 0.003, 0), Math.max(0.4, W * 0.18), 0xffae42, 0.08, 0.05); originMark.add(ax);
       const dot = new T.Mesh(new T.RingGeometry(0.03, 0.045, 24).rotateX(-Math.PI / 2), L.mat('glowA')); dot.position.y = 0.004; originMark.add(dot); ov.add(originMark);
       const R = Math.max(W, D) * 0.9 + 1; stage.setBounds(new T.Box3(new T.Vector3(-R, 0, -R), new T.Vector3(R, H, R))); stage.setGrid(0.1, 0.5);
     }
+  }
+
+  // the dashed envelope always wraps every block (it moves and grows with them); its size is the machine's outer size
+  const envBox = new T.Box3();
+  function contentBox() { envBox.makeEmpty(); for (const v of objs.values()) envBox.expandByObject(v.obj); return envBox; }
+  function contentSize() { const b = contentBox(); if (b.isEmpty()) return null; const a = fromS(b.min), c = fromS(b.max);
+    const up = v => Math.max(50, Math.ceil(Math.abs(v) / 50) * 50); return [up(c[0] - a[0]), up(a[1] - c[1]), up(c[2] - a[2])]; }
+  function updateEnvelope() {
+    if (!envelope) return; const b = contentBox(); envelope.visible = !b.isEmpty(); if (b.isEmpty()) return;
+    b.min.y = 0; const sz = b.getSize(new T.Vector3()), c = b.getCenter(new T.Vector3()), pad = 0.02;
+    const key = [sz.x, sz.y, sz.z].map(v => v.toFixed(3)).join();
+    if (envelope.userData.key !== key) { envelope.geometry.dispose(); envelope.geometry = new T.EdgesGeometry(new T.BoxGeometry(sz.x + pad, Math.max(0.05, sz.y), sz.z + pad)); envelope.computeLineDistances(); envelope.userData.key = key; }
+    envelope.position.copy(c);
+    const sz2 = contentSize(); if (sz2 && tab === 'machine') { [$('sW').value, $('sD').value, $('sH').value] = sz2; }
   }
 
   /* selection marker: an amber footprint on the floor (blooms), no outlines */
@@ -246,7 +260,7 @@
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
   const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 누르면 화면 가운데에 놓입니다.</li><li>3D에서 <b>끌면</b> 옮겨집니다 (500 mm 단위, Alt를 누르면 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>R</b> 90° 회전 · <b>Delete</b> 삭제 · <b>Ctrl+D</b> 복사 · <b>Ctrl+Z / Y</b> 되돌리기.</li><li><b>설비</b> 탭에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 누르면 바닥에 놓입니다. 컨베이어를 고른 상태면 센서·스토퍼·워크는 그 위에 놓입니다.</li><li>3D에서 블록을 <b>끌면</b> 옮겨집니다 (50 mm 단위, Alt를 누르면 5 mm).</li><li>블록을 고르면 여기에 길이·속도 같은 숫자가 나옵니다. 고치면 3D가 바로 바뀝니다.</li><li>위의 <b>실행</b>을 누르면 설비가 움직이고, 아래 신호 표에서 태그를 켜고 끌 수 있습니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 공장 탭의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 누르면 바닥에 놓입니다. 컨베이어를 고른 상태면 센서·스토퍼·워크는 그 위에 놓입니다.</li><li>3D에서 블록을 <b>끌면</b> 옮겨집니다 (50 mm 단위, Alt를 누르면 5 mm).</li><li>블록을 고르면 여기에 길이·속도 같은 숫자가 나옵니다. 고치면 3D가 바로 바뀝니다.</li><li>위의 <b>실행</b>을 누르면 아래에 조작 패널이 열립니다. 명령(예: 운전, 올리기)을 눌러 켜면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li><b>저장</b>하면 설비 카드가 만들어지고 공장 탭의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
     if (tab === 'factory') {
@@ -276,7 +290,7 @@
         html += `<div class="acts"><button class="btn" data-act="rot">R 회전</button><button class="btn" data-act="del">삭제</button></div></div>`;
       } else {
         const ct = doc.card;
-        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽</span><span class="v">${doc.meta.bbox.join(' × ')} mm</span>
+        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">외곽 (자동)</span><span class="v">${(contentSize() || doc.meta.bbox).join(' × ')} mm</span>
           ${field(num('cycle_time', '사이클', 's', 0.5), ct.cycle_time ?? '', 'card.cycle_time')}${field(num('ok_rate', '양품률', '0~1', 0.01), ct.ok_rate ?? '', 'card.ok_rate')}${field(num('operators', '작업자', '명', 1), ct.operators, 'card.operators')}
           <span class="k">카드</span><span class="v">사이클 ${ct.cycle_time ?? '–'} s · 양품률 ${ct.ok_rate != null ? (ct.ok_rate * 100).toFixed(1) + '%' : '–'}</span></div></div><div class="sec"><h2>이 화면 쓰는 법</h2>${howtoMachine}</div>`;
       }
@@ -312,20 +326,27 @@
     for (const t of doc.io) RUN.tags[t.tag] = t.type === 'bool' ? false : 0;
     for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { dx: 0 }; }
   }
-  const fmtVal = (t, v) => t.type === 'bool' ? (v ? '1' : '0') : (+v).toFixed(t.type === 'int' ? 0 : 1);
+  const fmtVal = (t, v) => t.type === 'bool' ? (v ? '켜짐' : '꺼짐') : (+v).toFixed(t.type === 'int' ? 0 : 1);
+  // plain meaning of a signal from its suffix (PLC view: 명령 = PLC → 설비, 상태 = 설비 → PLC)
+  const MEAN = { RUN: '운전', DIR: '역방향', SPEED: '속도 지정 (mm/s)', FAULT: '이상', UP: '올리기', IS_UP: '올라감', IS_DOWN: '내려감', ON: '감지됨 / 켜기', EXT: '전진', IS_EXT: '전진 끝', IS_RET: '후진 끝',
+    CLOSE: '잡기', IS_CLOSED: '잡음', IS_OPEN: '벌림', OK: '양품 / 정상', NG: '불량', START: '시작', BUSY: '작업 중', DONE: '완료', READY: '준비됨', TRIG: '촬영', SERVO_ON: '서보 켜기', POS: '위치 지정 (mm)',
+    INPOS: '위치 도착', ALARM: '알람', INDEX: '회전 각도 지정 (°)', PROG: '프로그램 번호', START_PB: '시작 버튼', STOP_PB: '정지 버튼', ESTOP: '비상정지 버튼', RED: '빨간 램프', YEL: '노란 램프', GRN: '초록 램프', NEXT: '다음 트레이', EMPTY: '비었음' };
+  const meaning = (t, P) => { const k = t.tag.slice(P.length + 1); return MEAN[k] || (k === 'ON' && t.dir === 'in' ? '감지됨' : k); };
   function drawIo() {
     const doc = ED.machine.doc, selP = sel && nodeCode(doc.nodes.find(n => n.id === sel) || { params: {} });
-    $('ioN').textContent = `전체 ${doc.io.length}개`;
-    $('io').innerHTML = doc.io.map(t => { const v = RUN.tags[t.tag], manual = mode === 'run' && (t.dir === 'out' || !t.binding);
-      return `<tr class="${selP && t.tag.startsWith(selP + '_') ? 'hl' : ''}"><td>${esc(t.tag)}</td><td>${t.dir.toUpperCase()}</td><td>${t.type.toUpperCase()}</td><td>${esc(t.binding ? t.binding.kind : '–')}</td><td class="val${manual ? ' click' : ''}${v === true ? ' on' : ''}" data-tag="${esc(t.tag)}">${mode === 'run' ? fmtVal(t, v) : '–'}</td></tr>`; }).join('')
+    $('ioN').textContent = `신호 ${doc.io.length}개`;
+    const owner = t => doc.nodes.find(n => t.tag.startsWith(nodeCode(n) + '_'));
+    $('io').innerHTML = doc.io.map(t => { const n = owner(t), P = n ? nodeCode(n) : '', v = RUN.tags[t.tag], manual = mode === 'run' && (t.dir === 'out' || !t.binding);
+      const kind = t.dir === 'out' ? '명령' : t.binding ? '상태 (자동)' : '상태 (직접 켜기)';
+      return `<tr class="${selP && P === selP ? 'hl' : ''}"><td class="ko">${esc(n ? n.name : '')}</td><td>${esc(t.tag)}</td><td class="ko">${esc(meaning(t, P))}</td><td><span class="kind">${kind}</span></td><td class="val${manual ? ' click' : ''}${v === true ? ' on' : ''}" data-tag="${esc(t.tag)}">${fmtVal(t, v)}</td></tr>`; }).join('')
       || '<tr><td colspan="5" style="color:var(--dim);font-family:var(--sans)">블록을 놓으면 그 블록의 신호가 여기에 생깁니다.</td></tr>';
   }
-  function drawLog() { if (tab !== 'machine') return; const hh = d => d.toTimeString().slice(0, 8); $('log').innerHTML = (mode === 'run' ? '' : '<span>위의 모드에서 "실행"을 누르면 태그를 켜고 끌 수 있습니다.</span>') + logLines.slice(-80).map(l => `<span>${hh(l.t)} <b>${esc(l.txt)}</b></span>`).join(''); $('log').scrollTop = 1e9; }
+  function drawLog() { if (tab !== 'machine' || !$('log')) return; const hh = d => d.toTimeString().slice(0, 8); $('log').innerHTML = (mode === 'run' ? '' : '<span>위의 모드에서 "실행"을 누르면 태그를 켜고 끌 수 있습니다.</span>') + logLines.slice(-80).map(l => `<span>${hh(l.t)} <b>${esc(l.txt)}</b></span>`).join(''); $('log').scrollTop = 1e9; }
   $('io').addEventListener('click', e => {
     const td = e.target.closest('td.click'); if (!td) return; const t = ED.machine.doc.io.find(x => x.tag === td.dataset.tag); if (!t) return;
     if (t.type === 'bool') RUN.tags[t.tag] = !RUN.tags[t.tag];
     else { const s = prompt(`${t.tag} 값`, String(RUN.tags[t.tag] ?? 0)); if (s === null || s.trim() === '' || isNaN(+s)) return; RUN.tags[t.tag] = +s; }
-    log(`${t.tag} = ${fmtVal(t, RUN.tags[t.tag])}`); drawIo();
+    drawIo();
   });
   $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
 
@@ -376,7 +397,7 @@
     if (tab !== 'machine') m = 'edit'; mode = m; document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
     if (m === 'run') { resetRun(); log('실행 시작 · 신호 표의 값을 눌러 태그를 켜고 끕니다'); }
     else { for (const v of objs.values()) root.remove(v.obj); objs = new Map(); syncScene(); }
-    drawIo(); drawLog(); updateHint();
+    $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); updateHint();
   }
   $('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 
@@ -397,7 +418,7 @@
     if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
-    drag.o.position.set(drag.start.x + d.x, drag.start.y, drag.start.z + d.z); drag.d = d; updateSelMark();
+    drag.o.position.set(drag.start.x + d.x, drag.start.y, drag.start.z + d.z); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
   });
   const endDrag = () => {
     if (!drag) return; const { id, d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
@@ -440,13 +461,14 @@
   for (const id of ['sW', 'sD', 'sH']) $(id).addEventListener('change', () => {
     const doc = ed().doc, w = +$('sW').value, d = +$('sD').value, h = +$('sH').value;
     if (tab === 'factory') { const r = slabRect(doc); if (w > 0 && d > 0) exec('set_slab', { polygon: [[r.x0, r.y0], [r.x0 + w * 1000, r.y0], [r.x0 + w * 1000, r.y0 + d * 1000], [r.x0, r.y0 + d * 1000]] }); }
-    else if (w > 0 && d > 0 && h > 0) exec('set_meta', { bbox: [w, d, h] });
+
   });
   $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.dataset.t !== tab) switchTab(b.dataset.t); });
   function save() {
     if (tab === 'machine') {
       const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
-      const snap = JSON.parse(JSON.stringify(doc)); snap.meta.version = v; snap.card.footprint = [doc.meta.bbox[0], doc.meta.bbox[1]];
+      const sz = contentSize(); if (sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
+      const snap = JSON.parse(JSON.stringify(cur)); snap.meta.version = v; snap.card.footprint = [cur.meta.bbox[0], cur.meta.bbox[1]];
       m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all);
       dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · 공장 탭의 '내 설비'에 나옵니다`); log(`저장 v${v}`);
     } else { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; toast('공장을 이 브라우저에 저장했습니다 · 파일로 받으려면 내보내기'); }
@@ -473,22 +495,19 @@
   }
   function drawBar() {
     const doc = ed().doc;
-    if (tab === 'factory') { const r = slabRect(doc); $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
-    else { $('sizeLab').textContent = '설비 크기'; [$('sW').value, $('sD').value, $('sH').value] = doc.meta.bbox; $('sH').hidden = $('sHx').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
+    if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
+    else { $('sizeLab').textContent = '설비 크기 (자동)'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = true; [$('sW').value, $('sD').value, $('sH').value] = contentSize() || doc.meta.bbox; $('sH').hidden = $('sHx').hidden = false; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').innerHTML = '원점 = 바닥 왼쪽 아래 · X 입고 → 출하'; }
-    else { const [W, D] = doc.meta.bbox, out = doc.nodes.filter(n => { const o = objs.get(n.id)?.obj; if (!o) return false; tmpBox.setFromObject(o); if (tmpBox.isEmpty()) return false; const a = fromS(tmpBox.min), b = fromS(tmpBox.max);
-      return Math.min(a[0], b[0]) < -W / 2 - 1 || Math.max(a[0], b[0]) > W / 2 + 1 || Math.min(a[1], b[1]) < -D / 2 - 1 || Math.max(a[1], b[1]) > D / 2 + 1; });
-      $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>` + (out.length ? ` · <b style="color:var(--amber)">외곽 밖 ${out.length}</b>` : '');
-      $('chipOrigin').innerHTML = '점선 = 설비 외곽 · 원점 = 바닥면 중심 · X 투입 → 배출'; }
+    else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').innerHTML = '점선 = 설비 외곽 (블록을 따라감) · 원점 = 바닥면 중심 · X 투입 → 배출'; }
   }
-  function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 신호 표에서 OUT 태그 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
-  function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') drawIo(); }
+  function updateHint() { $('hint').textContent = xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '블록을 누른 채 끌면 옮겨집니다 · 빈 곳을 끌면 화면 회전 · 휠 확대 · R 회전 · Delete 삭제'; }
+  function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
     tab = t; LS.set(KEY.tab, t); sel = null; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     for (const v of objs.values()) root.remove(v.obj); objs = new Map(); floorKey = '';
-    $('mode').hidden = t !== 'machine'; $('bottom').hidden = t !== 'machine'; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';
+    $('mode').hidden = t !== 'machine'; $('bottom').hidden = true; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';
     $('search').value = ''; drawPalette(); refresh(); updateHint(); drawLog(); setTimeout(() => { stage.resize(); fitAll(); }, 0);
   }
 
