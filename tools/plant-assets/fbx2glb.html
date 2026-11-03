@@ -1,0 +1,288 @@
+<!doctype html>
+<!--
+  FBX station → GLB for ONE BUILDER, done with three.js (r147) because its FBXLoader places skinned meshes correctly
+  (the Blender importer put the robots of these files 100 m away). Run with tools/plant-assets/run.js.
+
+  1. load the FBX (cm, Y up), keep the station root, drop the objects the config names (the inspection file holds its line twice)
+  2. every SkinnedMesh becomes rigid links: one node per bone (J1, J2 …) at the posed bone; each face goes to the bone that
+     weighs most on it, so the builder can turn the joints of robots / rotary tables
+  3. the station is cut into PARTS (config), scaled to metres, turned so its long side runs along +X, floor at 0, centre at 0
+  4. each part is one top-level node P_<name> at the part's bottom centre; static meshes in a part are merged into one mesh
+  5. materials → MeshStandardMaterial with the _n (normal) and _e (emissive) maps that sit next to the _d map
+  The result goes through pack.mjs (JPEG textures ≤ 1024 px, Draco), then gen-data.mjs writes js/plant-data.js.
+  Source FBX: the partner's station files (not in the repo); a/ p/ b/ i/ = 1 조립, 2 페이스트 도포, 3 브레이징 투입, 4 검사.
+-->
+<html><head><meta charset="utf-8"></head><body>
+<script src="../../node_modules/three/build/three.min.js"></script>
+<script src="../../node_modules/three/examples/js/libs/fflate.min.js"></script>
+<script src="../../node_modules/three/examples/js/loaders/FBXLoader.js"></script>
+<script src="../../node_modules/three/examples/js/utils/BufferGeometryUtils.js"></script>
+<script src="../../node_modules/three/examples/js/exporters/GLTFExporter.js"></script>
+<script>
+(async () => {
+const T = THREE, q = new URLSearchParams(location.search), SID = q.get('id');
+const CFG = {
+  assembly: { file: 'a/Export.fbx', fbm: 'a/Export.fbm/', root: 'C6_GAMMA2_TGDI__2_', open: /^(C6_line_JIG)$/, turn: 90 },
+  paste: { file: 'p/A00_check_desk.fbx', fbm: 'p/A00_check_desk.fbm/', root: 'A00_check_desk', open: /^$/, turn: 0 },
+  brazing: { file: 'b/Export.fbx', fbm: 'b/Export.fbm/', root: 'Export', open: /^$/, split: /vacuum_side/, turn: 0 },
+  inspection: { file: 'i/Export.fbx', fbm: 'i/Export.fbm/', root: 'Line02_GDI', open: /^(OP\d+_1|OP90_110|OP\d+_1)$/, drop: /^OP(80|90|100|110|120|130|140)$/, turn: 90 },
+}[SID];
+const log = []; const say = s => { log.push(s); };
+
+const fbx = await new Promise((ok, no) => new T.FBXLoader().load('../../fbx/' + CFG.file, ok, undefined, no));
+fbx.updateMatrixWorld(true);
+// FBXLoader hands back textures before their images arrive: wait for them
+{ const maps = new Set(); fbx.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => ['map', 'normalMap', 'emissiveMap', 'alphaMap', 'bumpMap', 'specularMap'].forEach(k => m[k] && maps.add(m[k]))); });
+  const t0 = performance.now();
+  while (performance.now() - t0 < 120000 && [...maps].some(t => !(t.image && (t.image.complete || t.image.width)))) await new Promise(r => setTimeout(r, 200));
+  say(`maps ${maps.size} missing ${[...maps].filter(t => !(t.image && t.image.width)).length}`); }
+// drop the duplicate simple set (siblings of the detailed set)
+if (CFG.drop) { const kill = []; fbx.traverse(o => { if (CFG.drop.test(o.name) && o.parent && o.parent.name === 'Line_02') kill.push(o); }); kill.forEach(o => o.parent.remove(o)); }
+const root = fbx.getObjectByName(CFG.root);
+if (!root) throw new Error('no root ' + CFG.root);
+// lights out
+{ const k = []; root.traverse(o => { if (o.isLight || o.isCamera) k.push(o); }); k.forEach(o => o.parent.remove(o)); }
+
+/* ---------------------------------------------------------------- materials */
+// the FBX embeds its diffuse maps (blob URLs, no file names): find each one's file in the .fbm folder by a 16 × 16 thumbnail,
+// so the _n (normal) and _e (emissive) maps next to it can be added
+const sig = img => { const c = document.createElement('canvas'); c.width = c.height = 16; const x = c.getContext('2d'); x.drawImage(img, 0, 0, 16, 16); return x.getImageData(0, 0, 16, 16).data; };
+const loadImg = url => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = url; });
+const FBM = '../../fbx/' + CFG.fbm, files = [];
+{ const html = await (await fetch(FBM)).text(); for (const m of html.matchAll(/href="([^"]+)"/g)) { const f = decodeURIComponent(m[1]); if (/\.(png|jpg|tga)$/i.test(f)) files.push(f); } }
+const diffuse = [];
+for (const f of files) if (/_d\.\w+$|BaseMap|_d_/i.test(f) || !/_(n|e)\.\w+$|Normal/i.test(f)) { const im = await loadImg(FBM + encodeURIComponent(f)); if (im) diffuse.push({ f, s: sig(im) }); }
+const fileOf = img => { const a = sig(img); let best = null, bd = Infinity; for (const d of diffuse) { let e = 0; for (let i = 0; i < a.length; i += 4) e += Math.abs(a[i] - d.s[i]) + Math.abs(a[i + 1] - d.s[i + 1]) + Math.abs(a[i + 2] - d.s[i + 2]); if (e < bd) { bd = e; best = d.f; } } return bd < 16 * 16 * 3 * 6 ? best : null; };
+const sibling = (f, kind) => { const cands = kind === 'n' ? [f.replace(/_d(\.\w+)$/i, '_n$1'), f.replace(/BaseMap/i, 'Normal')] : [f.replace(/_d(\.\w+)$/i, '_e$1')]; return cands.find(c => c !== f && files.includes(c)) || null; };
+say(`fbm files ${files.length}, diffuse ${diffuse.length}`);
+const texCache = new Map(), matCache = new Map(), TL = new T.TextureLoader();
+const sib = (src, suf) => src.replace(/_d(\.\w+)$/i, `_${suf}$1`);
+const exists = async url => { try { const r = await fetch(encodeURI(url), { method: 'HEAD' }); return r.ok; } catch (e) { return false; } };
+async function tex(url, color) {
+  if (texCache.has(url)) return texCache.get(url);
+  const p = new Promise(ok => TL.load(encodeURI(url), t => { t.flipY = false; if (color) t.encoding = T.sRGBEncoding; ok(t); }, undefined, () => ok(null)));
+  texCache.set(url, p); return p;
+}
+async function stdMat(m) {
+  if (matCache.has(m.uuid)) return matCache.get(m.uuid);
+  const p = (async () => {
+    const o = new T.MeshStandardMaterial({ name: m.name, color: m.color ? m.color.clone() : new T.Color(0xcccccc), metalness: 0.5, roughness: 0.4, side: T.DoubleSide });
+    if (m.map && m.map.image) {
+      o.map = m.map.clone(); o.map.offset.set(0, 0); o.map.repeat.set(1, 1); o.map.rotation = 0; o.map.wrapS = o.map.wrapT = T.RepeatWrapping; o.map.encoding = T.sRGBEncoding; o.color.set(0xffffff);
+      const f = fileOf(m.map.image);
+      if (f) {
+        const n = sibling(f, 'n') && FBM + sibling(f, 'n'), e = sibling(f, 'e') && FBM + sibling(f, 'e');
+        if (n) { o.normalMap = await tex(n, false); if (o.normalMap) { o.normalMap.flipY = m.map.flipY; o.normalMap.wrapS = o.normalMap.wrapT = T.RepeatWrapping; } }
+        if (e) { o.emissiveMap = await tex(e, true); if (o.emissiveMap) { o.emissiveMap.flipY = m.map.flipY; o.emissiveMap.wrapS = o.emissiveMap.wrapT = T.RepeatWrapping; o.emissive.set(0xffffff); } }
+      }
+    }
+    if (m.emissive && !o.emissiveMap && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.05) o.emissive.copy(m.emissive);
+    if (m.transparent || m.opacity < 1 || m.alphaMap) { o.transparent = true; o.opacity = m.opacity; o.depthWrite = m.opacity > 0.6; }
+    if (m.alphaTest) o.alphaTest = m.alphaTest;
+    if (/net/i.test(m.name) && o.map) { o.alphaTest = 0.4; o.transparent = false; }
+    if (/acryl|arcyl|glass|^trans/i.test(m.name)) { o.transparent = true; o.opacity = /black/i.test(m.name) ? 0.55 : 0.22; o.depthWrite = false; }
+    o.metalness = o.transparent ? 0 : 0.5; o.roughness = o.transparent ? 0.1 : 0.4;
+    return o;
+  })();
+  matCache.set(m.uuid, p); return p;
+}
+
+/* ---------------------------------------------------------------- skinned → rigid links */
+function rigidify(sm) {
+  const g = sm.geometry, sk = sm.skeleton, pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv;
+  const si = g.attributes.skinIndex, sw = g.attributes.skinWeight, idx = g.index;
+  sm.updateMatrixWorld(true); sk.bones.forEach(b => b.updateMatrixWorld(true));
+  const nv = pos.count, dom = new Int16Array(nv), wp = new Float32Array(nv * 3), wn = new Float32Array(nv * 3);
+  const v = new T.Vector3(), M = [], NM = [];
+  for (let b = 0; b < sk.bones.length; b++) {
+    const m = new T.Matrix4().multiplyMatrices(sm.matrixWorld, sm.bindMatrixInverse).multiply(sk.bones[b].matrixWorld).multiply(sk.boneInverses[b]).multiply(sm.bindMatrix);
+    M.push(m); NM.push(new T.Matrix3().getNormalMatrix(m));
+  }
+  for (let i = 0; i < nv; i++) {
+    let best = 0, bw = -1;
+    const W = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)], I = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)];
+    for (let k = 0; k < 4; k++) if (W[k] > bw) { bw = W[k]; best = I[k]; }
+    dom[i] = best;
+    v.fromBufferAttribute(pos, i); sm.boneTransform(i, v); v.applyMatrix4(sm.matrixWorld); wp.set([v.x, v.y, v.z], i * 3);
+    if (nor) { v.fromBufferAttribute(nor, i).applyMatrix3(NM[best]).normalize(); wn.set([v.x, v.y, v.z], i * 3); }
+  }
+  // joints: one Object3D per bone, same hierarchy, at the posed bone (world)
+  const J = sk.bones.map((b, i) => { const o = new T.Object3D(); o.name = `J${i + 1}`; o.userData.joint = i + 1; o.userData.bone = b.name; return o; });
+  const host = sm.parent;
+  sk.bones.forEach((b, i) => { const pi = sk.bones.indexOf(b.parent); const par = pi >= 0 ? J[pi] : null; (par || host).add(J[i]); });
+  // set world matrices top-down
+  const setW = (o, w) => { o.parent.updateMatrixWorld(true); const l = new T.Matrix4().copy(o.parent.matrixWorld).invert().multiply(w); l.decompose(o.position, o.quaternion, o.scale); o.updateMatrixWorld(true); };
+  const order = []; const visit = i => { order.push(i); sk.bones.forEach((b, k) => { if (b.parent === sk.bones[i]) visit(k); }); };
+  sk.bones.forEach((b, i) => { if (sk.bones.indexOf(b.parent) < 0) visit(i); });
+  order.forEach(i => setW(J[i], sk.bones[i].matrixWorld));
+  // faces → dominant bone
+  const tri = idx ? idx.count / 3 : nv / 3, groups = g.groups.length ? g.groups : [{ start: 0, count: idx ? idx.count : nv, materialIndex: 0 }];
+  const mats = Array.isArray(sm.material) ? sm.material : [sm.material];
+  const per = new Map();
+  for (const gr of groups) for (let t = gr.start / 3; t < (gr.start + gr.count) / 3; t++) {
+    const a = idx ? idx.getX(t * 3) : t * 3, b = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, c = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    const cnt = {}; for (const x of [a, b, c]) cnt[dom[x]] = (cnt[dom[x]] || 0) + 1;
+    const bone = +Object.keys(cnt).sort((p, r) => cnt[r] - cnt[p])[0];
+    const key = bone + ':' + gr.materialIndex;
+    if (!per.has(key)) per.set(key, { bone, mi: gr.materialIndex, v: [] });
+    per.get(key).v.push(a, b, c);
+  }
+  const inv = new T.Matrix4(), n3 = new T.Matrix3();
+  const byBone = new Map();
+  for (const { bone, mi, v: vs } of per.values()) {
+    const geo = new T.BufferGeometry(), P = new Float32Array(vs.length * 3), N = new Float32Array(vs.length * 3), U = uv ? new Float32Array(vs.length * 2) : null;
+    inv.copy(J[bone].matrixWorld).invert(); n3.getNormalMatrix(inv);
+    vs.forEach((x, k) => { v.set(wp[x * 3], wp[x * 3 + 1], wp[x * 3 + 2]).applyMatrix4(inv); P.set([v.x, v.y, v.z], k * 3);
+      v.set(wn[x * 3], wn[x * 3 + 1], wn[x * 3 + 2]).applyMatrix3(n3).normalize(); N.set([v.x, v.y, v.z], k * 3); if (U) U.set([uv.getX(x), uv.getY(x)], k * 2); });
+    geo.setAttribute('position', new T.BufferAttribute(P, 3)); geo.setAttribute('normal', new T.BufferAttribute(N, 3)); if (U) geo.setAttribute('uv', new T.BufferAttribute(U, 2));
+    if (!byBone.has(bone)) byBone.set(bone, []); byBone.get(bone).push({ geo, mat: mats[mi] || mats[0] });
+  }
+  for (const [bone, list] of byBone) for (const { geo, mat } of list) { const m = new T.Mesh(geo, mat); m.name = `${sm.name}_L${bone + 1}`; J[bone].add(m); }
+  // things hung on bones (tools, products) follow their joint
+  sk.bones.forEach((b, i) => { for (const c of [...b.children]) if (!c.isBone) J[i].attach(c); });
+  // remove bones and the skinned mesh
+  sk.bones.forEach(b => { if (b.parent && !b.parent.isBone) b.parent.remove(b); });
+  host.remove(sm);
+  return J;
+}
+const skinned = []; root.traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
+for (const sm of skinned) rigidify(sm);
+{ const k = []; root.traverse(o => { if (o.isBone) k.push(o); }); k.forEach(o => o.parent && o.parent.remove(o)); }
+root.updateMatrixWorld(true);
+say(`skinned ${skinned.length}`);
+
+/* ---------------------------------------------------------------- parts */
+const hasJoint = o => { let j = false; o.traverse(x => { if (x.userData.joint) j = true; }); return j; };
+const hasMesh = o => { let j = false; o.traverse(x => { if (x.isMesh) j = true; }); return j; };
+const isProduct = o => /GDI_P|product/i.test(o.name);
+let parts = [];
+function collect(r) {
+  const prod = [];
+  for (const c of [...r.children]) {
+    if (!hasMesh(c)) continue;
+    if (CFG.open.test(c.name) && !c.isMesh) { collect(c); continue; }
+    if (isProduct(c)) { prod.push(c); continue; }
+    parts.push({ objs: [c], name: c.name, parent: r.name });
+  }
+  if (prod.length) parts.push({ objs: prod, name: 'products', parent: r.name });
+}
+collect(root);
+// a mesh root keeps its own geometry as a part (the cell base), children were taken above
+if (root.isMesh) { const b = new T.Mesh(root.geometry, root.material); b.name = 'base'; b.matrix.copy(root.matrixWorld); b.matrixAutoUpdate = false; b.matrixWorld.copy(root.matrixWorld); parts.push({ objs: [b], name: 'base', parent: '', own: true }); }
+// brazing: the side unit hangs under each furnace but stands elsewhere → own part
+if (CFG.split) { const extra = []; for (const p of parts) for (const o of p.objs) for (const c of [...o.children]) if (CFG.split.test(c.name)) { extra.push({ objs: [c], name: c.name, parent: p.name, detach: true }); } parts.push(...extra); }
+
+// station box (source world) → output transform: cm → m, turn about Y, floor 0, centre 0
+const box = new T.Box3(), tmp = new T.Box3();
+const meshBox = (o, b, skip) => { o.traverse(x => { if (x.isMesh && !(skip && skip.has(x))) { x.geometry.computeBoundingBox(); tmp.copy(x.geometry.boundingBox).applyMatrix4(x.matrixWorld); b.union(tmp); } }); return b; };
+const splitSet = new Set(parts.filter(p => p.detach).flatMap(p => { const s = []; p.objs[0].traverse(x => s.push(x)); return s; }));
+for (const p of parts) for (const o of p.objs) { if (p.own) { o.geometry.computeBoundingBox(); tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); box.union(tmp); } else meshBox(o, box, p.detach ? null : splitSet); }
+const ctr = box.getCenter(new T.Vector3());
+const OUT = new T.Matrix4().makeRotationY(CFG.turn * Math.PI / 180).multiply(new T.Matrix4().makeScale(0.01, 0.01, 0.01)).multiply(new T.Matrix4().makeTranslation(-ctr.x, -box.min.y, -ctr.z));
+
+const KO = [[/robot|fanuc|otc/i, '로봇'], [/round/i, '회전 테이블'], [/shelf|S0\d_obj/i, '선반'], [/control_?box|controler/i, '제어함'], [/^sign/i, '경광등'], [/tray_table/i, '트레이 테이블'],
+  [/DP_tray/i, '배출 트레이'], [/tray/i, '트레이'], [/frame/i, '프레임'], [/monitor/i, '모니터'], [/sensor/i, '센서'], [/rail/i, '레일'], [/jig|^EX$|Object192/i, '지그'], [/chair/i, '의자'],
+  [/desk/i, '작업대'], [/진공로|titan/i, '진공 브레이징로'], [/vacuum_side/i, '진공로 부대설비'], [/cmt/i, '용접 전원'], [/moho|dispen/i, '디스펜서'], [/air ?filter/i, '에어 필터'],
+  [/back_object|side_equip|back_panel/i, '부대 장치'], [/prop/i, '부속'], [/fct|t04/i, '검사 지그'], [/^cube/i, '가림판'], [/products/i, '제품'], [/^base$/i, '셀 베이스'], [/arcylic|acryl/i, '아크릴 커버']];
+const label = n => { for (const [re, ko] of KO) if (re.test(n)) return ko; return n; };
+const used = {};
+const out = new T.Group(); out.name = SID;
+const info = [];
+const vtmp = new T.Vector3();
+for (const p of parts) {
+  // box of the part in output space
+  const pb = new T.Box3();
+  for (const o of p.objs) { if (p.own) { tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); pb.union(tmp); } else meshBox(o, pb, p.detach ? null : splitSet); }
+  if (pb.isEmpty()) continue;
+  pb.applyMatrix4(OUT);
+  const origin = new T.Vector3((pb.min.x + pb.max.x) / 2, pb.min.y, (pb.min.z + pb.max.z) / 2);
+  const op = (p.parent.match(/^(OP\d+)/) || p.name.match(/^(OP\d+)/) || [])[1];
+  let nm = p.name.replace(/(__\d+_|_\d+)+$/, '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'part';
+  if (op && !nm.startsWith(op)) nm = `${op}_${nm}`;
+  if (/titan|진공로/i.test(p.name)) nm = 'furnace_' + (+((p.name.match(/A(\d+)/) || [0, 15])[1]) - 14); // no furnace maker / model names in the asset
+  used[nm] = (used[nm] || 0) + 1; if (used[nm] > 1) nm += '_' + used[nm];
+  const P = new T.Group(); P.name = 'P_' + nm; P.position.copy(origin); out.add(P); P.updateMatrixWorld(true);
+  const toP = new T.Matrix4().copy(P.matrixWorld).invert().multiply(OUT); // source world → part local
+  // static meshes (not under a joint) are merged; joint subtrees are copied with their hierarchy
+  const statics = [], jointRoots = [];
+  const walk = (o, top) => {
+    if (o.userData.joint) { jointRoots.push(o); return; }
+    if (!top && !p.detach && splitSet.has(o)) return;
+    if (o.isMesh) statics.push(o);
+    for (const c of o.children) walk(c, false);
+  };
+  for (const o of p.objs) walk(o, true);
+  const merged = await mergeMeshes(statics, toP, 'mesh');
+  if (merged) P.add(merged);
+  let nj = 0;
+  const copyJ = async (j, parentOut, parentSrcWorld) => {
+    const n = new T.Object3D(); n.name = j.name; n.userData = { joint: ++nj, bone: j.userData.bone };
+    const w = new T.Matrix4().copy(toP).multiply(j.matrixWorld); // joint in part space
+    const l = new T.Matrix4().copy(parentSrcWorld).invert().multiply(w); l.decompose(n.position, n.quaternion, n.scale);
+    n.name = `J${nj}`; parentOut.add(n);
+    const own = [], kids = [];
+    for (const c of j.children) { if (c.userData.joint) kids.push(c); else c.traverse(x => { if (x.isMesh) own.push(x); }); }
+    const toJ = new T.Matrix4().copy(w).invert().multiply(toP);
+    const m = await mergeMeshes(own, toJ, 'link'); if (m) n.add(m);
+    for (const k of kids) await copyJ(k, n, w);
+  };
+  for (const j of jointRoots) await copyJ(j, P, new T.Matrix4());
+  const kind = /robot|fanuc|otc/i.test(p.name) ? 'robot' : /round/i.test(p.name) ? 'rotary' : nj ? 'mech' : 'static';
+  const size = pb.getSize(new T.Vector3());
+  // stored coordinates (mm, Z up): stored X = scene x, stored Y = −scene z, stored Z = scene y
+  info.push({ node: P.name, label: (op ? op + ' ' : '') + label(p.name), src: p.name, kind, joints: nj,
+    size: [Math.round(size.x * 1000), Math.round(size.z * 1000), Math.round(size.y * 1000)],
+    pos: [Math.round(origin.x * 1000), Math.round(-origin.z * 1000), Math.round(origin.y * 1000)] });
+}
+async function mergeMeshes(list, M, name) {
+  if (!list.length) return null;
+  const geos = [], mats = [];
+  for (const m of list) {
+    const ms = Array.isArray(m.material) ? m.material : [m.material];
+    let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.uv) g.setAttribute('uv', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const wm = new T.Matrix4().copy(M).multiply(m.matrixWorld); g.applyMatrix4(wm);
+    if (wm.determinant() < 0) { // mirrored: flip winding
+      const p = g.attributes.position.array, n = g.attributes.normal.array, u = g.attributes.uv.array;
+      for (let i = 0; i < p.length; i += 9) for (let k = 0; k < 3; k++) { [p[i + 3 + k], p[i + 6 + k]] = [p[i + 6 + k], p[i + 3 + k]]; [n[i + 3 + k], n[i + 6 + k]] = [n[i + 6 + k], n[i + 3 + k]]; }
+      for (let i = 0; i < u.length; i += 6) for (let k = 0; k < 2; k++) [u[i + 2 + k], u[i + 4 + k]] = [u[i + 4 + k], u[i + 2 + k]];
+    }
+    const grs = m.geometry.groups.length ? m.geometry.groups : [{ start: 0, count: g.attributes.position.count, materialIndex: 0 }];
+    for (const gr of grs) {
+      const sub = new T.BufferGeometry();
+      for (const k of ['position', 'normal', 'uv']) { const a = g.attributes[k]; sub.setAttribute(k, new T.BufferAttribute(a.array.slice(gr.start * a.itemSize, (gr.start + gr.count) * a.itemSize), a.itemSize)); }
+      const sm = ms[gr.materialIndex] || ms[0];
+      // bake the FBX texture offset / repeat into the UVs (the exporter would flip the image but not the offset)
+      const mp = sm && sm.map;
+      if (mp && (mp.offset.x || mp.offset.y || mp.repeat.x !== 1 || mp.repeat.y !== 1 || mp.rotation)) {
+        mp.updateMatrix(); const u = sub.attributes.uv, t = new T.Vector2();
+        for (let i = 0; i < u.count; i++) { t.fromBufferAttribute(u, i).applyMatrix3(mp.matrix); u.setXY(i, t.x, t.y); }
+      }
+      geos.push(sub); mats.push(await stdMat(sm));
+    }
+  }
+  // same material → one group
+  const byMat = new Map(); geos.forEach((g, i) => { if (!byMat.has(mats[i])) byMat.set(mats[i], []); byMat.get(mats[i]).push(g); });
+  // one single-material mesh per material (the r147 exporter mixes up multi-material groups)
+  const grp = new T.Group(); grp.name = name; let k = 0;
+  for (const [m, l] of byMat) { const mesh = new T.Mesh(l.length > 1 ? T.BufferGeometryUtils.mergeBufferGeometries(l, false) : l[0], m); mesh.name = `${name}_${k++}`; grp.add(mesh); }
+  return grp;
+}
+let faces = 0; out.traverse(o => { if (o.isMesh) faces += o.geometry.attributes.position.count / 3; });
+const sbox = new T.Box3().setFromObject(out), ss = sbox.getSize(new T.Vector3());
+// ?shot=out|src: render the result (or the FBX as loaded) instead of exporting — for checking
+if (q.get('shot')) {
+  const cv = document.createElement('canvas'); cv.width = 1400; cv.height = 900; document.body.appendChild(cv);
+  const r = new T.WebGLRenderer({ canvas: cv, preserveDrawingBuffer: true }); r.outputEncoding = T.sRGBEncoding; const sc = new T.Scene(); sc.background = new T.Color('#2a2b2f');
+  sc.add(new T.AmbientLight(0xffffff, 0.6), new T.HemisphereLight(0xffffff, 0x444444, 0.5)); const dl = new T.DirectionalLight(0xffffff, 1.2); dl.position.set(10, 20, 8); sc.add(dl);
+  const src = q.get('shot') === 'src'; const obj = src ? fbx : out; sc.add(obj); const bb = new T.Box3().setFromObject(obj), sz = bb.getSize(new T.Vector3()), ct = bb.getCenter(new T.Vector3());
+  const R = Math.max(sz.x, sz.z) * 0.42, cam = new T.OrthographicCamera(-R * 1.55, R * 1.55, R, -R, -1e5, 1e5); cam.position.copy(ct).add(new T.Vector3(1, 1.1, 1).multiplyScalar(src ? 3000 : 30)); cam.lookAt(ct); r.render(sc, cam);
+  window.DONE = { shot: cv.toDataURL('image/png'), log }; return;
+}
+const glb = await new Promise((ok, no) => new T.GLTFExporter().parse(out, ok, no, { binary: true, onlyVisible: false }));
+window.GLB = new Uint8Array(glb); const b64 = null;
+window.DONE = { b64, json: { id: SID, size: [Math.round(ss.x * 1000), Math.round(ss.z * 1000), Math.round(ss.y * 1000)], faces: Math.round(faces), parts: info }, log };
+})().catch(e => { window.DONE = { err: String(e.stack || e) }; });
+</script></body></html>

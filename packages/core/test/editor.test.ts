@@ -26,6 +26,15 @@ describe('factory edit API', () => {
     expect(e.doc.machines[0]!.name).toBe('프레스');
     e.validate();
   });
+  it('set_machine_ref points a placed machine at another version, undoable', () => {
+    const e = new Editor('factory', blank(), { newId: ids() });
+    const m = e.exec('place_machine', { ref: 'local:cell@1', position: [2000, 4000] }) as string;
+    e.exec('set_machine_ref', { id: m, ref: 'local:cell@2' });
+    expect(e.doc.machines[0]!.ref).toBe('local:cell@2');
+    expect(() => e.exec('set_machine_ref', { id: 'nope', ref: 'local:cell@3' })).toThrow(CommandError);
+    e.undo();
+    expect(e.doc.machines[0]!.ref).toBe('local:cell@1');
+  });
   it('batch: several commands are one undo step and roll back together on error', () => {
     const e = new Editor('factory', blank(), { newId: ids() });
     const a = e.exec('place_machine', { ref: 'press-station@1', position: [2000, 4000] }) as string;

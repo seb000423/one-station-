@@ -51,6 +51,11 @@ export const factoryCommands = {
       return id;
     },
   }),
+  set_machine_ref: def({
+    scope: 'factory', description: '배치한 설비가 가리키는 설비 버전 바꾸기 (machine@version 참조)',
+    args: z.object({ id: z.string(), ref: z.string().min(1) }),
+    run: (d: Factory, a) => { const m = d.machines.find(x => x.id === a.id); if (!m) throw new CommandError(`no machine ${a.id}`); m.ref = a.ref; },
+  }),
   add_block: def({
     scope: 'factory', description: '공장 블록(펜스·계단·안돈·용기 …) 배치. 반환: 새 id',
     args: z.object({ type: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/), name: z.string().optional(), position: z.union([Vec2, Vec3]), yaw: Yaw.optional(), params: Params.optional() }),

@@ -10,6 +10,7 @@
 | 명령 | 설명 | 인자 (?는 생략 가능) |
 |---|---|---|
 | `place_machine` | 설비 인스턴스를 공장에 배치 (machine@version 참조). 반환: 새 id | `ref`, `name?`, `position`, `yaw?`, `tagPrefix?`, `params?` |
+| `set_machine_ref` | 배치한 설비가 가리키는 설비 버전 바꾸기 (machine@version 참조) | `id`, `ref` |
 | `add_block` | 공장 블록(펜스·계단·안돈·용기 …) 배치. 반환: 새 id | `type`, `name?`, `position`, `yaw?`, `params?` |
 | `draw_wall` | 벽을 선으로 그림 (from → to, mm). 반환: 새 id | `from`, `to`, `thickness?`, `height?`, `name?` |
 | `add_column` | 기둥 배치 | `position`, `size?`, `height?`, `name?` |
