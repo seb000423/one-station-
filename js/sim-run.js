@@ -19,30 +19,19 @@
   const clipT = (k, tau) => (((tau + lap(k)) % T) + T) % T;
 
   /* ---------------------------------------------------------------- three.js scene */
-  const canvas = $('c'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0c0c0e);
+  const canvas = $('c');
+  const stage = window.OneStage.create(canvas), { renderer, scene, camera, controls } = stage;
   const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
-  scene.add(new THREE.HemisphereLight(0xdfe6ee, 0x202024, 0.55));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(10, 18, 12); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 10, bottom: -10, near: 1, far: 60 }); sun.target.position.set(14, 0, 1.3);
-  scene.add(sun, sun.target);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(38, 12), new THREE.MeshStandardMaterial({ color: 0x1e1e24, roughness: 0.62, metalness: 0.0 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.set(14.2, 0, 1.55); floor.receiveShadow = true; scene.add(floor);
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
-  const controls = new THREE.OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
-  const VIEWS = {
-    '전체': [[14.2, 11, 17.5], [14.2, 0.6, 1.3]],
-    A: [[2.4, 3.4, 5.4], [2.6, 0.9, 1.3]], B: [[9.2, 3.4, 5.6], [9.2, 0.9, 1.3]], C: [[15.3, 3.6, 6.0], [15.3, 0.9, 1.3]],
-    D: [[20.4, 3.2, 5.2], [20.4, 0.9, 1.3]], E: [[25.8, 3.6, 6.0], [25.8, 0.9, 1.3]],
+  let LINE_BOX = new THREE.Box3(new THREE.Vector3(-1.6, 0, -0.6), new THREE.Vector3(29.6, 2.4, 3.6)); // the module line, metres (measured again on load)
+  stage.setBounds(LINE_BOX);
+  const VIEWS = { // cell → [target, half of the visible height in m]; 전체 fits the whole line
+    '전체': null,
+    A: [[2.2, 0.9, 1.3], 3.4], B: [[9.2, 0.9, 1.3], 3.6], C: [[15.3, 0.9, 1.3], 3.8], D: [[20.4, 0.9, 1.3], 3.3], E: [[25.8, 0.9, 1.3], 3.8],
   };
-  const setView = k => { const [p, t] = VIEWS[k]; camera.position.set(...p); controls.target.set(...t); controls.update(); document.querySelectorAll('#views .chip').forEach(b => b.classList.toggle('on', b.dataset.v === k)); };
+  const setView = k => { if (!VIEWS[k]) stage.fit(LINE_BOX, 1.02); else stage.look(new THREE.Vector3(...VIEWS[k][0]), VIEWS[k][1]);
+    document.querySelectorAll('#views .chip[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === k)); };
   for (const k of Object.keys(VIEWS)) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.v = k; b.textContent = k === '전체' ? '전체' : k + ' 셀'; b.onclick = () => setView(k); $('views').appendChild(b); }
   setView('전체');
-  const resize = () => { const r = canvas.parentElement.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix(); };
-  window.addEventListener('resize', resize); resize();
 
   /* ---------------------------------------------------------------- the line model and its clip */
   let root = null, TR = null; // TR: node name → { position, quaternion, scale } interpolants
@@ -298,7 +287,7 @@
       box.appendChild(r); ROWS[s.id] = r;
     }
   }
-  function focusStation(id) { const x = STATION_X[id]; camera.position.set(x + 0.4, 2.6, 4.2); controls.target.set(x, 0.95, 1.3); controls.update(); document.querySelectorAll('#views .chip').forEach(b => b.classList.remove('on')); }
+  function focusStation(id) { stage.look(new THREE.Vector3(STATION_X[id], 0.95, 1.3), 2.2); document.querySelectorAll('#views .chip[data-v]').forEach(b => b.classList.remove('on')); }
   function updatePanel() {
     const r = sim.result(); lastResult = r; const h = Math.max(1e-6, simT / 3600);
     $('kOut').textContent = r.produced; $('kRate').textContent = simT > 600 ? (r.produced / h).toFixed(1) : '–';
@@ -328,7 +317,7 @@
     const r = canvas.getBoundingClientRect(), s = sim.snapshot(), bn = lastResult && simT > 300 ? lastResult.bottleneck : null;
     for (const [id, d] of Object.entries(TAGS)) {
       const x = STATION_X[id]; v3.set(x, 1.75, id === 'A0' ? 1.3 : 1.3).project(camera);
-      const vis = v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; d.style.display = vis ? '' : 'none'; if (!vis) continue;
+      const vis = !stage.ghosting && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; d.style.display = vis ? '' : 'none'; if (!vis) continue;
       d.style.left = ((v3.x + 1) / 2 * r.width) + 'px'; d.style.top = ((1 - v3.y) / 2 * r.height) + 'px';
       d.querySelector('i').className = 'st-' + (s.states[id] || 'idle'); d.classList.toggle('bn', id === bn);
       d.title = `${id} ${NAME(id)} · ${STATE_KO[s.states[id]] || ''}`;
@@ -352,13 +341,72 @@
   }
   const bindRange = (id, out, fmt, set) => { const el = $(id); const f = () => { $(out).textContent = fmt(+el.value); }; el.oninput = f; f(); return () => set(+el.value); };
   const getPal = bindRange('pal', 'palO', v => v, v => (cfg.pallets = v)), getSeed = bindRange('seed', 'seedO', v => v, v => (cfg.seed = v)), getHor = bindRange('hor', 'horO', v => v + ' h', v => (cfg.horizon = v * 3600));
-  $('apply').onclick = () => { $('scn').hidden = true; cfg.stations = undefined; getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true); };
+  $('apply').onclick = () => { $('scn').hidden = true; cfg.stations = undefined; getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; startFlow(); };
   // run a scenario from the compare / optimisation pages (pallets + per-station overrides) in 3D
   function load(params, label) {
     cfg.pallets = params.pallets ?? 8; cfg.stations = params.stations && Object.keys(params.stations).length ? params.stations : undefined; cfg.deterministic = !!params.deterministic;
     $('pal').value = cfg.pallets; $('pal').oninput(); $('det').checked = cfg.deterministic;
     $('scn').textContent = label || ''; $('scn').hidden = !label;
-    if (!root) return; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true);
+    if (!root) return; startFlow(label);
+  }
+
+
+  /* ---------------------------------------------------------------- run flow: 권한 판정 → 가상 검증 → 실물 실행 */
+  // 권한 판정: the run conditions are checked. 가상 검증: the whole horizon is simulated first (result on the card) while the
+  // line replays as a point cloud at high speed. 실물 실행: the solid line runs from 0 at the chosen speed.
+  // The card and the bottleneck label are HTML placed at projected 3D points.
+  let flow = null, studioOn = true, keepSpeed = speed;
+  const FLOW_STEPS = ['권한 판정', '가상 검증', '실물 실행'];
+  { const box = $('flow'); box.innerHTML = '<ol>' + FLOW_STEPS.map((t, i) => `<li data-s="${i}"><i></i><span>${t}</span></li>`).join('') + '</ol><p id="flowMsg"></p>'; }
+  { const b = document.createElement('button'); b.className = 'chip on'; b.id = 'studioChip'; b.textContent = '단색'; b.title = '단색 (차콜 · 회색 · 아이보리) / 원래 색';
+    b.onclick = () => { studioOn = !studioOn; b.classList.toggle('on', studioOn); if (root) stage.studio(stage.world, studioOn); }; $('views').appendChild(b); }
+  const flowMsg = t => { $('flowMsg').textContent = t; };
+  const flowStep = i => { document.querySelectorAll('#flow li').forEach(li => { const k = +li.dataset.s; li.className = k < i ? 'done' : k === i ? 'on' : ''; }); };
+  function startFlow(label) {
+    if (!root) return;
+    setPlaying(false); if (flow && flow.step === 1) speed = keepSpeed;
+    const problems = [];
+    if (!(cfg.pallets >= 1 && cfg.pallets <= 40)) problems.push('팔레트 수');
+    if (!(cfg.horizon > 0)) problems.push('시뮬레이션 시간');
+    flow = { step: 0, at: performance.now(), label, ok: !problems.length };
+    $('flow').hidden = false; $('flow').classList.remove('out'); flowStep(0);
+    flowMsg(problems.length ? '조건 확인 실패: ' + problems.join(', ') : `조건 확인 · 팔레트 ${cfg.pallets}개 · ${(cfg.horizon / 3600).toFixed(0)}시간 · 난수 ${cfg.seed}${cfg.deterministic ? ' · 고장 없음' : ''}${label ? ' · ' + label : ''}`);
+  }
+  function runFlow(now) {
+    placeFlow(); placeBn(now);
+    if (!flow) return;
+    const el = now - flow.at;
+    if (flow.step === 0 && el > 900) {
+      if (!flow.ok) { flow = null; return; }
+      const l = E.buildDemoLine({ pallets: cfg.pallets, deterministic: cfg.deterministic, stations: cfg.stations });
+      const ahead = new E.LineSim(l.model, { seed: cfg.seed }); ahead.run(cfg.horizon); const r = ahead.result();
+      flow = { ...flow, step: 1, at: now };
+      flowStep(1); flowMsg(`${(cfg.horizon / 3600).toFixed(0)}시간 앞서 계산 · 예상 생산 ${r.produced}개 · 병목 ${r.bottleneck || '–'}`);
+      newSim(); buildTags(); frame(31); updatePanel();
+      stage.ghost(true); keepSpeed = speed; speed = 40; setPlaying(true);
+    } else if (flow.step === 1 && el > 3400) {
+      setPlaying(false); speed = keepSpeed; newSim(); buildTags(); frame(31); updatePanel();
+      stage.ghost(false); flow = { ...flow, step: 2, at: now }; flowStep(2); flowMsg('검증된 조건으로 실제 라인을 처음부터 실행합니다'); setPlaying(true);
+    } else if (flow.step === 2 && el > 2600) {
+      flowStep(3); $('flow').classList.add('out'); flow = null; setTimeout(() => { if (!flow) $('flow').hidden = true; }, 600);
+    }
+  }
+  const fv = new THREE.Vector3();
+  function placeFlow() { // the card hangs over the middle of the line
+    const box = $('flow'); if (box.hidden) return; const r = canvas.getBoundingClientRect();
+    LINE_BOX.getCenter(fv); fv.y = LINE_BOX.max.y + 0.4; fv.project(camera);
+    const x = Math.min(r.width - box.offsetWidth / 2 - 12, Math.max(box.offsetWidth / 2 + 12, (fv.x + 1) / 2 * r.width));
+    const y = Math.min(r.height - 60, Math.max(box.offsetHeight + 56, (1 - fv.y) / 2 * r.height));
+    box.style.left = x + 'px'; box.style.top = y + 'px';
+  }
+  let bnRing = null;
+  function placeBn(now) { // amber ring on the floor under the bottleneck station, with a projected label
+    const bn = lastResult && simT > 300 && !stage.ghosting ? lastResult.bottleneck : null, lab = $('bnLabel');
+    if (!bnRing) bnRing = stage.ring(0.95);
+    bnRing.visible = !!bn && STATION_X[bn] !== undefined; lab.hidden = !bnRing.visible; if (!bnRing.visible) return;
+    bnRing.position.x = STATION_X[bn]; bnRing.position.z = 1.3; bnRing.material.emissiveIntensity = 2.4 + 0.9 * Math.sin(now / 420);
+    fv.set(STATION_X[bn] + 0.95 * 0.7, 0.02, 1.3 + 0.95 * 0.7).project(camera); const r = canvas.getBoundingClientRect();
+    lab.style.left = ((fv.x + 1) / 2 * r.width) + 'px'; lab.style.top = ((1 - fv.y) / 2 * r.height) + 'px'; lab.textContent = '병목 · ' + bn;
   }
 
   /* ---------------------------------------------------------------- load and run */
@@ -366,7 +414,9 @@
   loader.load(GLB, gltf => {
     const sceneRoot = gltf.scene; root = sceneRoot.getObjectByName('EGR_Module_Line') || sceneRoot;
     sceneRoot.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    scene.add(sceneRoot);
+    stage.world.add(sceneRoot);
+    LINE_BOX = new THREE.Box3().setFromObject(root); stage.setBounds(LINE_BOX); setView('전체');
+    stage.addTwin(sceneRoot); stage.studio(sceneRoot, studioOn);
     TR = {};
     for (const tr of gltf.animations[0].tracks) { const { nodeName, propertyName } = THREE.PropertyBinding.parseTrackName(tr.name); (TR[nodeName] || (TR[nodeName] = {}))[propertyName] = tr.createInterpolant(); }
     partTpl = root.getObjectByName('Part_1_X').clone(true); palTpl = root.getObjectByName('Pal_1_X').clone(true);
@@ -381,14 +431,14 @@
     lampNG = root.getObjectByName('E_OKNG_NG');
     { const tr = TR.A_Tote?.scale; if (tr) for (let c = MAP.tote.a; c < MAP.tote.back; c += 0.05) if (tr.evaluate(c)[0] < 0.5) { toteUp = c; break; } }
     newSim(); buildTags(); frame(31); updatePanel();
-    $('loading').hidden = true; setPlaying(true);
+    $('loading').hidden = true; startFlow();
     let last = performance.now(), panelAt = 0;
     const loop = now => {
       const dtw = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
       if (playing && !seeking && simT < cfg.horizon) { const dt = dtw * speed; advance(simT + dt); frame(dt); if (simT >= cfg.horizon) setPlaying(false); }
       if (now - panelAt > 400) { updatePanel(); panelAt = now; if (!seeking) $('seek').value = simT; }
       if (!seeking) $('clock').textContent = hhmmss(simT);
-      controls.update(); renderer.render(scene, camera); updateTags();
+      stage.render(); updateTags(); runFlow(now);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -425,5 +475,5 @@
     for (const [id, v] of views) out.parts.push({ id, at: v.p.at, empty: v.p.empty, carrier: v.p.carrier, dom: v.dom, k: v.k, tau: +(v.tau ?? 0).toFixed(2), target: +(v.pose?.tau ?? 0).toFixed(2), st: s.stations[v.p.at] ? { state: s.stations[v.p.at].state, arr: +s.stations[v.p.at].arriveAt.toFixed(2), f: +s.stations[v.p.at].progress.toFixed(2) } : (s.buffers[v.p.at] || null) });
     out.pals = [...palViews].map(([id, v]) => { const wp = new THREE.Vector3(); v.body.getWorldPosition(wp); return { id, dom: v.dom, x: +wp.x.toFixed(3), y: +wp.y.toFixed(2), tau: v.tau && +v.tau.toFixed(2) }; });
     return out; }
-  window.ONE_SIM = { audit, debug, load, get TR() { return TR; }, clipT, get sim() { return sim; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance };
+  window.ONE_SIM = { audit, debug, load, stage, startFlow, get TR() { return TR; }, clipT, get sim() { return sim; }, get t() { return simT; }, cfg, seekTo, setPlaying, frame: dt => frame(dt), advance };
 })();
