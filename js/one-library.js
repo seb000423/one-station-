@@ -115,7 +115,8 @@
       else if (p.variant === 'sprinkler') { cy(g, 'accent', 0.08, 6); bx(g, 'body', 0.3, 0.3, 0.2, 0, 1.2, 0.1); }
       else { bx(g, 'frame', 0.4, 0.05, 0.3); cy(g, 'accent', 0.08, 0.55, 0, 0.05); cy(g, 'dark', 0.025, 0.08, 0, 0.6); bx(g, 'body', 0.04, 1.6, 0.04, 0, 0, -0.14); bx(g, 'light', 0.25, 0.25, 0.01, 0, 1.6, -0.11); }
       return g; } });
-  fdef('assembly-point', { name: '대피 동선·집결지', group: 'fire', grade: 2, kind: { cmd: 'add_block', type: 'assembly-point' }, why: '비상시 대피 경로와 모이는 곳',
+  fdef('assembly-point', { name: '대피 동선·집결지', group: 'fire', retired: true, // off the palette (user 2026-11-03); kept so saved layouts still draw
+    grade: 2, kind: { cmd: 'add_block', type: 'assembly-point' }, why: '비상시 대피 경로와 모이는 곳',
     params: { d: 4000 }, fields: [num('d', '지름')],
     build: p => { const g = new T.Group(), r = mm(p.d) / 2; flatRing(g, 'markw', r - 0.12, r); flatRing(g, 'markw', r * 0.3, r * 0.3 + 0.08); bx(g, 'frame', 0.05, 2.2, 0.05, r * 0.8, 0, 0); bx(g, 'light', 0.6, 0.4, 0.03, r * 0.8, 1.8, 0); return g; } });
   fdef('safety-guard', { name: '안전 펜스·볼라드·가드레일', group: 'fire', grade: 1, kind: { cmd: 'add_block', type: 'safety-guard' }, why: '로봇 셀 구획, 통로·설비 보호',

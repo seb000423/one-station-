@@ -152,6 +152,10 @@
   const tmpBox = new T.Box3(), multiMarks = [];
   // everything selected: the primary first, then the Shift-added ones
   const selIds = () => sel ? [sel, ...[...multi].filter(x => x !== sel && objs.has(x))] : [];
+  // the conveyor pieces whose flow the ⇄ button reverses: the picked ones and every piece joined to them (a line flows one way)
+  const flowIds = () => { if (tab !== 'machine') return []; const doc = ED.machine.doc, ok = n => n && !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.curve || nodeDef(n)?.corner);
+    const picked = selIds().filter(id => ok(doc.nodes.find(n => n.id === id))); if (!picked.length) return [];
+    return [...joinedConveyors(doc, picked)].filter(id => { const d = nodeDef(doc.nodes.find(n => n.id === id)); return !d.corner && !d.lift; }); };
   const isSlab = id => tab === 'factory' && ED.factory.doc.building.slabs.some(s => s.id === id);
   function updateSelMark() {
     const extra = selIds().slice(1);
@@ -175,7 +179,7 @@
     };
     if (tab === 'factory') {
       $('palTitle').innerHTML = '에셋 팔레트';
-      for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
+      for (const g of L.FACTORY_GROUPS) sec(g.id, g.name, Object.values(L.FACTORY).filter(d => d.group === g.id && !d.retired).map(d => ({ key: 'f:' + d.id, name: d.name, code: d.process ? d.process.split(' ')[0] : '', grade: d.grade, why: d.why })));
       const mine = Object.entries(lib()).map(([id, m]) => ({ key: 'l:' + id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: 'Machine Builder에서 저장한 설비' }));
       sec('mine', '내 설비 (Machine Builder에서 저장)', mine.length ? mine : []);
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
@@ -408,7 +412,7 @@
       <div class="seg2">${t.presets.map(v => `<button data-preset="${v}" class="${v === t.step ? 'on' : ''}">${v}</button>`).join('')}</div>
       <label class="tin"><span>회전</span><input type="number" data-tang min="1" max="180" step="1" value="${t.ang}"><small>°</small></label>
       <div class="rotr"><button data-rot="-1">⟲ ${t.ang}°</button><button data-rot="1">${t.ang}° ⟳</button></div>
-      ${tab === 'machine' && nodeDef(ED.machine.doc.nodes.find(n => n.id === sel) || {})?.conveyor ? `<div class="rotr"><button data-flip="1" title="투입과 배출을 바꿉니다 (180° 돌림) · 워크는 화살표 방향으로 흐릅니다">⇄ 흐름 방향 뒤집기</button></div>` : ''}
+      ${tab === 'machine' && flowIds().length ? `<div class="rotr"><button data-flip="1" title="투입과 배출을 바꿉니다 · 제자리에서 돌고, 이어진 라인은 전체가 같이 바뀝니다 · 바닥의 화살표 방향으로 흐릅니다">⇄ 흐름 방향 뒤집기${flowIds().length > 1 ? ` (${flowIds().length}개)` : ''}</button></div>` : ''}
       ${tab === 'machine' ? `<div class="rotr"><button data-z="1" title="위에 올린 블록은 올라가고, 바닥에 선 컨베이어·단상은 다리가 늘어납니다">높이 ▲</button><button data-z="-1">높이 ▼</button></div>` : ''}</div></div>
       <div class="acts">${canDup ? '<button class="btn" data-act="dup">복사</button>' : ''}<button class="btn" data-act="del">삭제</button></div></div>`; };
   // screen direction → the stored axis (±X / ±Y) it points along most, so ▲ always moves "up the screen"
@@ -422,9 +426,9 @@
   // the open ends of a conveyor piece if it stood at position c: point, outward heading, top, width (stored mm)
   function pieceEnds(n, c) { const d = nodeDef(n); if (!d || n.parent) return []; const p = Object.assign({}, d.params, n.params), r = n.transform.rotation[2] * Math.PI / 180, a = [Math.cos(r), Math.sin(r)], z = n.transform.position[2], top = z + (+p.h || 900);
     if (d.curve) { const g = L.curveGeom({ params: n.params, transform: { position: [c[0], c[1], z], rotation: n.transform.rotation } }), h0 = g.heading(0);
-      return [{ pt: g.point(0), hd: [-h0[0], -h0[1]], top, w: +p.w }, { pt: g.point(1), hd: g.heading(1), top, w: +p.w }]; }
+      return [{ pt: g.point(0), hd: [-h0[0], -h0[1]], top, w: +p.w, role: 'in' }, { pt: g.point(1), hd: g.heading(1), top, w: +p.w, role: 'out' }]; }
     const half = d.corner ? (+p.w || 500) / 2 : (+p.length || 3000) / 2, sides = d.corner ? [a, [-a[0], -a[1]], [-a[1], a[0]], [a[1], -a[0]]] : d.conveyor ? [a, [-a[0], -a[1]]] : [];
-    return sides.map(h => ({ pt: [c[0] + h[0] * half, c[1] + h[1] * half], hd: h, top, w: +p.w || 500 })); }
+    return sides.map((h, i) => ({ pt: [c[0] + h[0] * half, c[1] + h[1] * half], hd: h, top, w: +p.w || 500, role: d.corner || d.lift ? 'any' : i ? 'in' : 'out' })); }
   // end to end: an open end of the moved piece meets an open end of another one, facing it (straight, curve, turn module, lift)
   function endSnap(n, c, skip) { const mine = pieceEnds(n, c); if (!mine.length) return null; let best = null;
     for (const b of ED.machine.doc.nodes) { if (b.id === n.id || skip.has(b.id)) continue; const bd = nodeDef(b); if (!bd || !(bd.conveyor || bd.curve || bd.corner)) continue;
@@ -457,7 +461,10 @@
         for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); }
         if (ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]), p = n.transform.position, sn = conveyorSnap(n, p, new Set());
           if (sn) { moveNode(n.id, [sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); const hk = nodeDef(n).heightKey; if (+(n.params[hk] ?? nodeDef(n).params[hk]) !== sn.h) setParamKeepKids(n.id, hk, sn.h);
-            setTimeout(() => toast(`${nodeCode(n)}을(를) ${nodeCode(sn.other)}에 붙였습니다 · 높이 ${sn.h} mm`), 0); }
+            // the snapped piece takes the flow of the line it joins (turned in place if its ends faced the wrong way)
+            let turned = false; if (flowClashes(ED.machine.doc, n.id).length) { const m = ED.machine.doc.nodes.find(x => x.id === n.id); if (reversePiece(m)) { turned = true;
+              if (flowClashes(ED.machine.doc, n.id).length) { reversePiece(ED.machine.doc.nodes.find(x => x.id === n.id)); turned = false; } } }
+            setTimeout(() => toast(`${nodeCode(n)}을(를) ${nodeCode(sn.other)}에 붙였습니다 · 높이 ${sn.h} mm${turned ? ' · 흐름 방향도 라인에 맞춰 돌렸습니다' : ''}`), 0); }
           else if (snapRefused) { const r = snapRefused, id = n.id; setTimeout(() => toast(`폭이 달라 ${nodeCode(r.other)}에 붙이지 않았습니다 (${r.w} / ${r.ow} mm)`, true,
             { label: `폭 맞추기 (→ ${r.ow})`, run: () => { setParamKeepKids(id, 'w', r.ow); select(id); moveSelBy([0, 0, 0]); refresh(); } }), 0); } }
         settle(ids); } }); showSnap(null); }
@@ -488,7 +495,7 @@
   /* conveyors that are really joined: an open end meets an open end face to face (gap ≤ 10 mm), or an end sits on the side
      of another (90° transfer), with the same width and the same top (a lift also at its upper stop). Pieces that only lie
      near each other, or that the snap refused (different width), are not a line and move on their own. */
-  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner || nodeDef(n)?.curve)), P = n => Object.assign({}, nodeDef(n).params, n.params);
+  function joinedConveyors(doc, start, stop) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.corner || nodeDef(n)?.curve)), P = n => Object.assign({}, nodeDef(n).params, n.params);
     const E = new Map(cv.map(n => [n.id, pieceEnds(n, n.transform.position)])), tops = n => { const t = nodeTop(n); return nodeDef(n).lift ? [t, t + +P(n).stroke] : [t]; };
     const level = (a, b) => tops(a).some(x => tops(b).some(y => Math.abs(x - y) < 5));
     const side = (e, b) => { const d = nodeDef(b); if (!d.conveyor || d.curve) return false; const r = b.transform.rotation[2] * Math.PI / 180, ax = [Math.cos(r), Math.sin(r)];
@@ -496,7 +503,24 @@
       return Math.abs(a) <= +P(b).length / 2 + 1 && Math.abs(Math.abs(l) - +P(b).w / 2) <= 10 && Math.abs(e.w - +P(b).w) <= 1; };
     const meets = (a, b) => level(a, b) && (E.get(a.id).some(m => E.get(b.id).some(o => m.hd[0] * o.hd[0] + m.hd[1] * o.hd[1] < -0.98 && Math.hypot(o.pt[0] - m.pt[0], o.pt[1] - m.pt[1]) <= 10 && Math.abs(m.w - o.w) <= 1))
       || E.get(a.id).some(m => side(m, b)) || E.get(b.id).some(o => side(o, a)));
-    const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
+    const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && !(stop && stop.has(b.id)) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
+    return out; }
+  /* flow direction (진행 방향): a straight piece (and a lift) carries along its +X, a curve from its 'in' end to its 'out' end.
+     Reversing a piece keeps it where it is: a straight one turns 180° in place, a curve swaps left/right and turns ∓90°, which
+     is the same arc run the other way. A line flows one way, so reversing a piece of a joined line reverses the whole line. */
+  const yawN = a => ((Math.round(a) % 360) + 360) % 360;
+  function reversePiece(n) { const d = nodeDef(n); if (!d || d.corner || d.lift) return false; /* a lift rolls both ways (DIR) */ const yaw = n.transform.rotation[2];
+    if (d.curve) { const right = (n.params.turn ?? d.params.turn) === 'right'; exec('set_param', { id: n.id, key: 'turn', value: right ? 'left' : 'right' }, true); exec('move', { id: n.id, rotation: [0, 0, yawN(yaw + (right ? 90 : -90))] }, true); }
+    else exec('move', { id: n.id, rotation: [0, 0, yawN(yaw + 180)] }, true); return true; }
+  function reverseLine(ids, why) { const doc0 = ED.machine.doc; let lift = [...joinedConveyors(doc0, ids)].some(id => nodeDef(doc0.nodes.find(n => n.id === id))?.lift);
+    ed().batch('flow', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id); if (n) reversePiece(n); }
+      if (lift && doc0.sequence.steps.length) exec('set_sequence', { steps: genSequence(ED.machine.doc) }, true); });
+    refresh(); toast(`${why || '흐름 방향을 뒤집었습니다'}${ids.length > 1 ? ` · 이어진 ${ids.length}개 전체` : ''}${lift ? ' · 리프트 동작 순서도 다시 만들었습니다' : ''}`); }
+  // two joined ends that both push out (or both take in): the work would meet head-on there
+  function flowClashes(doc, onlyId) { const cv = doc.nodes.filter(n => !n.parent && (nodeDef(n)?.conveyor || nodeDef(n)?.curve || nodeDef(n)?.corner)), out = [];
+    const E = cv.map(n => pieceEnds(n, n.transform.position).map(e => Object.assign(e, { n })));
+    for (let i = 0; i < cv.length; i++) for (let j = i + 1; j < cv.length; j++) { if (onlyId && cv[i].id !== onlyId && cv[j].id !== onlyId) continue;
+      for (const a of E[i]) for (const b of E[j]) if (a.role !== 'any' && a.role === b.role && a.hd[0] * b.hd[0] + a.hd[1] * b.hd[1] < -0.98 && Math.hypot(a.pt[0] - b.pt[0], a.pt[1] - b.pt[1]) < 60) out.push({ a, b }); }
     return out; }
   /* 설계 검사 (design check): what a real line would not run with. Joints = two open ends facing each other within 60 mm.
      Width or height that differ at a joint, a gap, a work wider than the conveyor or too short for the rollers, a work that
@@ -509,6 +533,9 @@
       const A = a.n, B = b.n, at = [(a.pt[0] + b.pt[0]) / 2, (a.pt[1] + b.pt[1]) / 2, Math.max(a.top, b.top)], ca = nodeCode(A), cb = nodeCode(B);
       if (Math.abs(a.w - b.w) > 1) out.push({ lv: 'err', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 폭이 다릅니다 (${a.w} / ${b.w} mm) · 워크가 레일에 걸립니다`,
         fix: { label: `폭 맞추기 (${cb} → ${a.w})`, run: () => setParamKeepKids(B.id, 'w', a.w) } });
+      if (a.role !== 'any' && a.role === b.role) { const side = [...joinedConveyors(doc, [B.id], new Set([A.id]))];
+        out.push({ lv: 'err', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 흐름이 이음에서 맞섭니다 (${a.role === 'out' ? '배출끼리' : '투입끼리'}) · 워크가 지나갈 수 없습니다`,
+          fix: { label: `흐름 맞추기 (${cb}${side.length > 1 ? ` 쪽 ${side.length}개` : ''} 뒤집기)`, run: () => side.forEach(id => { const x = ED.machine.doc.nodes.find(y => y.id === id); if (x) reversePiece(x); }) } }); }
       const lift = nodeDef(A).lift ? A : nodeDef(B).lift ? B : null, dt = b.top - a.top;
       if (Math.abs(dt) > 5 && !(lift && Math.abs(Math.abs(dt) - +P(lift).stroke) <= 5)) { const hk = nodeDef(B).heightKey;
         out.push({ lv: 'err', ids: [A.id, B.id], at, txt: `${ca} · ${cb} 반송 높이가 ${Math.abs(Math.round(dt))} mm 다릅니다 · 이음에 턱이 생깁니다`,
@@ -583,7 +610,7 @@
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
     if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
-    else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.flip) { turnSel(180); toast('흐름 방향을 뒤집었습니다 · 투입 ↔ 배출'); } else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
+    else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.flip) { if (mode !== 'run' && !xray) reverseLine(flowIds()); } else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
 
   function rotateSel() { turnSel(90); }
@@ -1107,8 +1134,15 @@
   function addPortArrow(pos, dir, kind, scale, lift) { const g = new T.Group(), m = new T.Mesh(arrowGeo, portMat[kind]); m.scale.setScalar(scale); m.renderOrder = 3; g.add(m);
     const p = toS([pos[0], pos[1], lift ? pos[2] + 15 : 20]); g.position.copy(p);
     g.rotation.y = S.storedYawToScene(Math.atan2(dir[1], dir[0]) * 180 / Math.PI); portGrp.add(g); return p; }
+  // small arrows on every conveyor deck pointing the way the work goes, so the flow of each piece can be read at a glance
+  const deckArrowMat = new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.75, depthWrite: false });
+  function flowMarks() { for (const n of ED.machine.doc.nodes) { const d = nodeDef(n); if (n.parent || !d || d.corner || !(d.conveyor || d.curve)) continue; const p = Object.assign({}, d.params, n.params), top = nodeTop(n) + 12;
+      const at = (pt, hd) => { const m = new T.Mesh(arrowGeo, deckArrowMat); m.scale.setScalar(0.55); m.renderOrder = 4; const s = toS([pt[0], pt[1], top]); m.position.copy(s); m.rotation.y = S.storedYawToScene(Math.atan2(hd[1], hd[0]) * 180 / Math.PI); portGrp.add(m); };
+      if (d.curve) { const g = L.curveGeom(n); for (const u of [0.25, 0.75]) at(g.point(u), g.heading(u)); continue; }
+      const r = n.transform.rotation[2] * Math.PI / 180, a = [Math.cos(r), Math.sin(r)], Ln = +p.length, k = Math.max(1, Math.min(5, Math.round(Ln / 900))), q = n.transform.position;
+      for (let i = 0; i < k; i++) { const t = (i + 0.5) / k - 0.5; at([q[0] + a[0] * Ln * t, q[1] + a[1] * Ln * t], a); } } }
   function drawPorts() { portGrp.clear(); portAnchors = [];
-    if (tab === 'machine') { const P = SCN.portsOf(ED.machine.doc); if (!ED.machine.doc.nodes.length) return;
+    if (tab === 'machine') { const P = SCN.portsOf(ED.machine.doc); if (!ED.machine.doc.nodes.length) return; flowMarks();
       // only where a part really comes in / goes out: a conveyor end or a chosen block; without one there is nothing to mark
       if (!P.inlet.key && !P.outlet.key) return;
       // a flat arrow at belt height just past each end (not on the rollers): where parts come in and go out
