@@ -870,7 +870,13 @@
   renderer.domElement.addEventListener('pointerdown', e => {
     if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
     if (e.button === 0 && !xray && tab === 'factory' && mode === 'edit') { const port = pickPort(e); if (port && port.kind === 'outlet' && startLink(e, port)) return; }
-    if (e.button !== 0 || xray) return; const id = pick(e); // X-ray is a view-only mode: dragging only turns the view
+    if (e.button !== 0 || xray) return; let id = pick(e); // X-ray is a view-only mode: dragging only turns the view
+    // with several objects selected, pressing anywhere inside their dashed box (on the floor or on one of them) drags them all
+    if (!e.shiftKey && mode === 'edit' && selIds().length > 1 && (!id || isSlab(id))) { const ids = selIds().filter(x => !isSlab(x)); plane.constant = 0;
+      if (ids.length > 1) { const bb = new T.Box3(); for (const x of ids) { const o = objs.get(x)?.obj; if (o) bb.expandByObject(o); }
+        if (!bb.isEmpty()) { const r = renderer.domElement.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+          for (let i = 0; i < 8; i++) { pc.set(i & 1 ? bb.max.x : bb.min.x, i & 2 ? bb.max.y : bb.min.y, i & 4 ? bb.max.z : bb.min.z).project(camera); const sx = (pc.x + 1) / 2 * r.width, sy = (1 - pc.y) / 2 * r.height; x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); }
+          if (mx >= x0 - 8 && mx <= x1 + 8 && my >= y0 - 8 && my <= y1 + 8) id = ids[0]; } } }
     if (!id) { if (e.shiftKey && mode === 'edit') { startBox(e); return; } select(null); return; }
     if (e.shiftKey && mode === 'edit') { toggleSel(id); return; }
     const group = selIds().includes(id) && selIds().length > 1; if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
@@ -1026,6 +1032,8 @@
     g.rotation.y = S.storedYawToScene(Math.atan2(dir[1], dir[0]) * 180 / Math.PI); portGrp.add(g); return p; }
   function drawPorts() { portGrp.clear(); portAnchors = [];
     if (tab === 'machine') { const P = SCN.portsOf(ED.machine.doc); if (!ED.machine.doc.nodes.length) return;
+      // only where a part really comes in / goes out: a conveyor end or a chosen block; without one there is nothing to mark
+      if (!P.inlet.key && !P.outlet.key) return;
       // a flat arrow at belt height just past each end (not on the rollers): where parts come in and go out
       const off = (q, d, k) => [q.pos[0] + d[0] * k, q.pos[1] + d[1] * k, q.pos[2]];
       portAnchors.push(['in', addPortArrow(off(P.inlet, P.inlet.dir, -280), P.inlet.dir, 'in', 0.9, true)], ['out', addPortArrow(off(P.outlet, P.outlet.dir, 280), P.outlet.dir, 'out', 0.9, true)]); }
