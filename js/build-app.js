@@ -48,26 +48,15 @@
   function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, err ? 4200 : 2200); }
 
   /* ------------------------------------------------------------------ factory: what each placed object is */
-  const OPEN = { door: 'door', shutter: 'shutter', dock: 'dock', exit: 'emergency-exit' };
-  const STOR = { rack: 'rack', floor: 'floor-storage', buffer: 'floor-storage' };
-  const MOV = { worker: 'worker', amr: 'amr', forklift: 'forklift' };
-  function factoryItems(doc) {
-    const out = [], push = (item, path, def, extra = {}) => out.push(Object.assign({ id: item.id, item, path, def }, extra));
-    for (const w of doc.building.walls) push(w, 'building.walls', 'outer-wall');
-    for (const c of doc.building.columns) push(c, 'building.columns', 'column');
-    for (const r of doc.building.roofs) push(r, 'building.roofs', 'roof');
-    for (const o of doc.building.openings) push(o, 'building.openings', OPEN[o.kind] || 'door');
-    for (const m of doc.markings) push(m, 'markings', 'floor-marking');
-    for (const m of doc.machines) { const lr = /^lib:([a-z0-9-]+)@/.exec(m.ref), loc = /^local:([^@]+)@(\d+)/.exec(m.ref); push(m, 'machines', lr ? lr[1] : null, { local: loc ? { id: loc[1], v: +loc[2] } : null }); }
-    for (const s of doc.storage) push(s, 'storage', STOR[s.kind]);
-    for (const m of doc.movers) push(m, 'movers', MOV[m.kind]);
-    for (const d of doc.utilities.drops) push(d, 'utilities.drops', d.kind === 'air' ? 'air-drop' : 'power-drop');
-    for (const b of doc.blocks) push(b, 'blocks', b.type);
-    return out;
-  }
-  const slabRect = doc => { const p = doc.building.slabs[0]?.polygon || [[0, 0], [30000, 0], [30000, 20000], [0, 20000]]; const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
-    return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }; };
-  const itemName = it => { if (it.local) { const m = lib()[it.local.id]; return it.item.name || (m ? m.name : '내 설비'); } const d = L.FACTORY[it.def]; return it.item.name || (d ? d.name : it.item.type || '객체'); };
+  const { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine } = window.OneScene.create({ lib: () => lib() });
+  // every object has its own name: a new one gets "<종류> N" (N = next free number); unnamed old ones are numbered on screen
+  const baseName = it => { if (it.local) { const m = lib()[it.local.id]; return m ? m.name : '내 설비'; } const d = L.FACTORY[it.def]; return (d ? d.name : it.item.type || '객체').replace(/\s*\(.*\)\s*$/, ''); };
+  let nameCache = { doc: null, map: null };
+  const itemName = it => { if (it.item.name) return it.item.name; const doc = ED.factory.doc;
+    if (nameCache.doc !== doc) { const map = new Map(), n = {}; for (const x of factoryItems(doc)) { if (x.item.name) continue; const b = baseName(x); n[b] = (n[b] || 0) + 1; map.set(x.id, `${b} ${n[b]}`); } nameCache = { doc, map }; }
+    return nameCache.map.get(it.id) || baseName(it); };
+  const nextName = (doc, base) => { let max = 0; const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' (\\d+)$');
+    for (const x of factoryItems(doc)) { const m = re.exec(x.item.name || itemName(x)); if (m) max = Math.max(max, +m[1]); } return `${base} ${max + 1}`; };
   const itemCode = it => it.path === 'machines' ? it.item.tagPrefix.split('.').pop() : '';
 
   /* ------------------------------------------------------------------ machine: block prefixes and placement */
@@ -93,26 +82,6 @@
     for (const v of objs.values()) root.remove(v.obj);
     objs = keep;
     drawFloor(); for (const x of [...multi]) if (!objs.has(x)) multi.delete(x); if (sel && !objs.has(sel)) sel = multi.size ? [...multi][0] : null; if (xray) stage.addTwin(root, o => !!(o.userData.node && nodeDef(o.userData.node)?.work));
-  }
-  function placeObj(obj, pos, yawDeg = 0) { obj.position.copy(toS(pos)); obj.rotation.y = S.storedYawToScene(yawDeg); }
-  function buildFactoryObj(it, doc) {
-    const x = it.item, lvH = (doc.meta.levels[0]?.height || 7000) / 1000;
-    if (it.path === 'building.walls') {
-      const dx = x.to[0] - x.from[0], dy = x.to[1] - x.from[1], len = Math.hypot(dx, dy) / 1000, H = x.height ? x.height / 1000 : lvH;
-      const o = L.special.wall(len, H, x.thickness / 1000); placeObj(o, [(x.from[0] + x.to[0]) / 2, (x.from[1] + x.to[1]) / 2, 0]); o.rotation.y = Math.atan2(dy, dx); return o;
-    }
-    if (it.path === 'building.roofs') { const r = slabRect(doc), w = (x.params.w || r.x1 - r.x0) / 1000, d = (x.params.d || r.y1 - r.y0) / 1000; const o = L.special.roof(x.params, w, d, (x.params.eave || lvH * 1000) / 1000); placeObj(o, x.transform.position, x.transform.rotation[2]); o.userData.roof = true; return o; }
-    if (it.path === 'building.columns') { const o = L.special.column({ size: x.size[0], h: x.height ? x.height / 1000 : lvH }); placeObj(o, x.transform.position); return o; }
-    if (it.path === 'markings') { const o = L.special.marking(x.kind, x.params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
-    if (it.local) { const o = buildLocalMachine(it.local); placeObj(o, x.transform.position, x.transform.rotation[2]); return o; }
-    const params = Object.assign({}, x.params, it.path === 'storage' || it.path === 'movers' ? {} : {});
-    const o = L.buildFactory(it.def, params); placeObj(o, x.transform.position, x.transform.rotation[2]); return o;
-  }
-  function buildLocalMachine({ id, v }) {
-    const m = lib()[id], doc = m && (m.versions[v] || m.versions[Object.keys(m.versions).pop()]), g = new T.Group();
-    if (!doc) { const b = L.buildFactory('control-cabinet'); g.add(b); return g; }
-    for (const n of doc.nodes) { const o = L.buildBlock(n.blockType, n.params); placeObj(o, n.transform.position, n.transform.rotation[2]); g.add(o); }
-    return g;
   }
   function buildMachineObj(n) { const o = L.buildBlock(n.blockType, n.params); placeObj(o, n.transform.position, n.transform.rotation[2]); o.userData.node = n; return o; }
 
@@ -225,13 +194,14 @@
       case 'add_storage': nid = exec('add_storage', { kind: k.kind, position: [x, y], params }); break;
       case 'add_mover': nid = exec('add_mover', { kind: k.kind, position: [x, y], params }); break;
       case 'add_block': nid = exec('add_block', { type: k.type, position: [x, y], params }); break;
-      case 'place_machine': nid = exec('place_machine', { ref: k.ref, name: d.name, position: [x, y], params }); break;
+      case 'place_machine': nid = exec('place_machine', { ref: k.ref, name: nextName(doc, d.name.replace(/\s*\(.*\)\s*$/, '')), position: [x, y], params }); break;
     }
     if (nid && yaw) exec('move', { id: nid, yaw }, true);
+    if (nid) { const it = factoryItems(ed().doc).find(x => x.id === nid); if (it && !it.item.name) exec('rename', { id: nid, name: nextName(ed().doc, baseName(it)) }, true); }
     if (nid) { select(nid); toast(`${d.name} 배치 · 오른쪽 조작 패드나 방향키로 맞춥니다`); }
   }
   function addLocal(id, at, yaw = 0) { const m = lib()[id]; if (!m) return; const v = Math.max(...Object.keys(m.versions).map(Number)); const [x, y] = at || viewPoint(500);
-    const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: m.name, position: [x, y] }); if (nid && yaw) exec('move', { id: nid, yaw }, true); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
+    const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: nextName(ed().doc, m.name), position: [x, y] }); if (nid && yaw) exec('move', { id: nid, yaw }, true); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
   function addBlock(id, at, onto, yaw = 0) {
     const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
     const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
@@ -274,7 +244,7 @@
     placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
   function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
     if (!keep) endPlace();
-    if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); }
+    ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); }); }
   // drag straight from the palette onto the canvas works too
   $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
   $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
@@ -351,30 +321,55 @@
     box.innerHTML = html;
   }
   // the "teleop" pad: nudge, turn, raise, copy and delete the selected object without dragging
-  const STEPS = { factory: [100, 500, 1000], machine: [5, 50, 100] }; let stepI = { factory: 1, machine: 1 };
-  const teleop = canDup => { const st = STEPS[tab], i = stepI[tab];
-    return `<div class="sec tele"><h2>조작 <small>방향키로도 움직입니다 · Shift = 크게</small></h2>
-      <div class="tgrid"><div class="dpad"><span></span><button data-mv="up" title="화면 위쪽으로">▲</button><span></span><button data-mv="left" title="화면 왼쪽으로">◀</button><b>${st[i]}<small>mm</small></b><button data-mv="right" title="화면 오른쪽으로">▶</button><span></span><button data-mv="down" title="화면 아래쪽으로">▼</button><span></span></div>
-      <div class="tcol"><div class="seg2">${st.map((v, k) => `<button data-step="${k}" class="${k === i ? 'on' : ''}">${v}</button>`).join('')}</div>
-      <div class="rotr"><button data-rot="-90">⟲ 90°</button><button data-rot="-15">⟲ 15°</button><button data-rot="15">15° ⟳</button><button data-rot="90">90° ⟳</button></div>
-      ${tab === 'machine' ? `<div class="rotr"><button data-z="1">높이 ▲</button><button data-z="-1">높이 ▼</button></div>` : ''}</div></div>
+  // how far one press moves / turns: typed in, with sensible defaults per builder (factory 500 mm · 90°, machine 50 mm · 90°)
+  const TELE = { factory: { step: 500, ang: 90, presets: [100, 500, 1000] }, machine: { step: 50, ang: 90, presets: [5, 50, 100] } };
+  const teleop = canDup => { const t = TELE[tab];
+    return `<div class="sec tele"><h2>조작 <small>방향키로도 움직입니다 · Shift = 5배</small></h2>
+      <div class="tgrid"><div class="dpad"><span></span><button data-mv="up" title="화면 위쪽으로">▲</button><span></span><button data-mv="left" title="화면 왼쪽으로">◀</button><b>${t.step}<small>mm</small></b><button data-mv="right" title="화면 오른쪽으로">▶</button><span></span><button data-mv="down" title="화면 아래쪽으로">▼</button><span></span></div>
+      <div class="tcol"><label class="tin"><span>한 번에</span><input type="number" data-tstep min="1" step="1" value="${t.step}"><small>mm</small></label>
+      <div class="seg2">${t.presets.map(v => `<button data-preset="${v}" class="${v === t.step ? 'on' : ''}">${v}</button>`).join('')}</div>
+      <label class="tin"><span>회전</span><input type="number" data-tang min="1" max="180" step="1" value="${t.ang}"><small>°</small></label>
+      <div class="rotr"><button data-rot="-1">⟲ ${t.ang}°</button><button data-rot="1">${t.ang}° ⟳</button></div>
+      ${tab === 'machine' ? `<div class="rotr"><button data-z="1" title="위에 올린 블록은 올라가고, 바닥에 선 컨베이어·단상은 다리가 늘어납니다">높이 ▲</button><button data-z="-1">높이 ▼</button></div>` : ''}</div></div>
       <div class="acts">${canDup ? '<button class="btn" data-act="dup">복사</button>' : ''}<button class="btn" data-act="del">삭제</button></div></div>`; };
   // screen direction → the stored axis (±X / ±Y) it points along most, so ▲ always moves "up the screen"
   function screenAxis(dir) { const f = new T.Vector3(); camera.getWorldDirection(f); f.y = 0; f.normalize(); const r = new T.Vector3(-f.z, 0, f.x);
     const v = dir === 'up' ? f : dir === 'down' ? f.clone().negate() : dir === 'right' ? r : r.clone().negate();
     const st = S.sceneToStored([v.x, 0, v.z]); return Math.abs(st[0]) >= Math.abs(st[1]) ? [Math.sign(st[0]), 0] : [0, Math.sign(st[1])]; }
-  function nudge(dir, big) { if (!sel || mode === 'run' || xray) return; const st = STEPS[tab][big ? 2 : stepI[tab]], [ax, ay] = screenAxis(dir);
+  function nudge(dir, big) { if (!sel || mode === 'run' || xray) return; const st = TELE[tab].step * (big ? 5 : 1), [ax, ay] = screenAxis(dir);
     moveSelBy([ax * st, ay * st, 0]); }
   // move every selected object by the same amount, as one undo step (children ride along with their parent)
   function moveSelBy(by) { const ids = selIds().filter(x => !isSlab(x)); if (!ids.length) return;
     ed().batch(ids.length > 1 ? `move ${ids.length}` : 'move', () => {
       if (tab === 'factory') for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true);
       else { const doc = ED.machine.doc, set = new Set(ids), up = n => { for (let p = n.parent; p; p = doc.nodes.find(x => x.id === p)?.parent) if (set.has(p)) return true; return false; };
-        for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); } } }); }
+        for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); } settle(ids); } }); }
   function moveNode(id, by) { by = by.slice(); const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return; const p = n.transform.position;
     if (p[2] + by[2] < 0) by[2] = -p[2]; if (!by[0] && !by[1] && !by[2]) return;
     const kids = []; const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { kids.push(k); walk(k.id); } }; walk(id);
     exec('move', { id, position: [p[0] + by[0], p[1] + by[1], p[2] + by[2]] }); for (const k of kids) { const q = k.transform.position; exec('move', { id: k.id, position: [q[0] + by[0], q[1] + by[1], q[2] + by[2]] }, true); } }
+  /* machine: blocks rest on something. An onTop block (robot, sensor, stopper, cylinder…) moved over a conveyor, frame or pedestal
+     lands on its top and becomes its child; moved off, it goes back to the floor. Changing a base's height carries what sits on it. */
+  function descendants(doc, id) { const out = []; const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { out.push(k); walk(k.id); } }; walk(id); return out; }
+  function baseUnder(doc, n, skip) { const p = n.transform.position, s = toS([p[0], p[1], 0]); let best = null, bestTop = -1;
+    for (const b of doc.nodes) { if (skip.has(b.id)) continue; const top = nodeTop(b); if (top <= b.transform.position[2] + 1) continue;
+      const o = objs.get(b.id)?.obj; if (!o) continue; tmpBox.setFromObject(o); const m = 0.06;
+      if (s.x < tmpBox.min.x - m || s.x > tmpBox.max.x + m || s.z < tmpBox.min.z - m || s.z > tmpBox.max.z + m) continue; if (top > bestTop) { best = b; bestTop = top; } }
+    return best; }
+  function settle(ids) { const doc0 = ED.machine.doc, moved = new Set(); for (const id of ids) { moved.add(id); descendants(doc0, id).forEach(k => moved.add(k.id)); }
+    for (const id of ids) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!d || !d.onTop || (n.parent && moved.has(n.parent))) continue;
+      const base = baseUnder(doc, n, moved), z = base ? nodeTop(base) : 0, par = base ? base.id : null;
+      if ((n.parent || null) !== par) exec('set_parent', { id, parent: par }, true);
+      const dz = z - n.transform.position[2]; if (Math.abs(dz) > 0.5) moveNode(id, [0, 0, dz]); } }
+  function setParamKeepKids(id, key, value) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return;
+    ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
+      if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
+  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, ids = selIds(), set = new Set(ids); let msg = '';
+    ed().batch('height', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!n || (n.parent && set.has(n.parent))) continue;
+      if (d.heightKey && !n.parent) { const cur = +(n.params[d.heightKey] ?? d.params[d.heightKey]); setParamKeepKids(id, d.heightKey, Math.max(100, cur + dz)); }
+      else if (n.parent) msg = '받침 위에 붙은 블록은 받침 높이를 따라갑니다. 받침(컨베이어·프레임·단상)을 골라 높이를 바꾸세요';
+      else msg = `${d.name}은(는) 바닥에 서는 블록입니다. 단상·프레임 위로 옮기면 그 높이에 올라갑니다`; } });
+    if (msg) toast(msg); }
   function turnSel(deg) { if (!sel || mode === 'run' || xray) return; const doc = ed().doc, norm = a => ((Math.round(a) % 360) + 360) % 360;
     const ids = selIds().filter(x => !isSlab(x));
     if (ids.length > 1) { // turn the whole selection about its centre
@@ -390,6 +385,7 @@
     else { const n = doc.nodes.find(x => x.id === sel); if (n) exec('move', { id: sel, rotation: [0, 0, norm(n.transform.rotation[2] + deg)] }); } }
   const num = (key, label, unit, step) => ({ key, label, type: 'num', unit, step });
   $('props').addEventListener('change', e => {
+    if ('tstep' in e.target.dataset || 'tang' in e.target.dataset) { const v = Math.abs(+e.target.value); if (v > 0) TELE[tab]['tstep' in e.target.dataset ? 'step' : 'ang'] = Math.min('tang' in e.target.dataset ? 180 : 100000, v); drawProps(); return; }
     const k = e.target.dataset.k; if (!k || !sel && !k.startsWith('meta.') && !k.startsWith('card.')) return;
     const raw = e.target.value, v = e.target.type === 'number' ? (raw === '' ? null : +raw) : raw, doc = ed().doc;
     if (k === 'meta.name') { exec('set_meta', { name: raw || (tab === 'factory' ? '공장' : '설비') }); return; }
@@ -399,19 +395,19 @@
     if (k === 'wall.length') { const w = doc.building.walls.find(x => x.id === sel); if (!w || !(v > 0)) return; const cx = (w.from[0] + w.to[0]) / 2, cy = (w.from[1] + w.to[1]) / 2, a = Math.atan2(w.to[1] - w.from[1], w.to[0] - w.from[0]), h = v * 500;
       const nid = exec('draw_wall', { from: [cx - Math.cos(a) * h, cy - Math.sin(a) * h], to: [cx + Math.cos(a) * h, cy + Math.sin(a) * h], thickness: w.thickness, height: w.height }); if (nid) { exec('delete', { id: sel }); select(nid); } return; }
     if (k.startsWith('pos.')) { const n = doc.nodes.find(x => x.id === sel); if (!n) return; const p = [...n.transform.position]; p[+k.slice(4)] = v ?? 0; exec('move', { id: sel, position: p }); return; }
-    if (k.startsWith('p.')) exec('set_param', { id: sel, key: k.slice(2), value: v });
+    if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
     if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel();
-    else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot); else if (D.z) moveNode(sel, [0, 0, +D.z * STEPS.machine[stepI.machine]]);
-    else if (D.step) { stepI[tab] = +D.step; drawProps(); } });
+    else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
+    else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
 
   function rotateSel() { turnSel(90); }
   function deleteSel() { if (!sel || mode === 'run' || xray) return; if (isSlab(sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; }
     const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
     if (ids.length > 1) toast(`${ids.length}개 삭제 · Ctrl+Z로 되돌립니다`); select(null); }
   function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [];
-    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const nid = exec('duplicate', { id }, true); if (nid) out.push(nid); } }); selectMany(out); }
+    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } } }); selectMany(out); }
   function selectAll() { const doc = ed().doc; selectMany(tab === 'factory' ? factoryItems(doc).map(x => x.id) : doc.nodes.filter(n => !n.parent).map(n => n.id)); }
 
   /* ------------------------------------------------------------------ signals table and run mode (machine) */
@@ -601,6 +597,7 @@
     drawCrumb();
   }
   $('bSave').onclick = save;
+  $('bSim').onclick = e => { e.preventDefault(); if (tab === 'machine') save(); LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; location.href = '/sim?src=build'; };
   $('bExport').onclick = () => { const doc = ed().doc, a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
     a.download = `${(doc.meta.name || tab).replace(/[\\/:*?"<>|\s]+/g, '_')}.${tab}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
   $('bOpen').onclick = () => $('file').click();
@@ -639,7 +636,7 @@
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
   }
-  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : '끌어서 옮기기 · Shift+클릭 / Shift+드래그 = 여러 개 선택 · Ctrl+A 전체 · 빈 곳 끌기 = 화면 회전 · 휠 확대'; }
+  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '실행 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : ''; }
   function refresh() { syncScene(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
@@ -717,5 +714,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, switchTab, setMode, RUN, get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, get sel() { return sel; } };
 })();

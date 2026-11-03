@@ -123,6 +123,16 @@ describe('factory edit API', () => {
 });
 
 describe('machine edit API', () => {
+  it('set_parent attaches a node on top of another, detaches with null, and refuses cycles', () => {
+    const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 't', bbox: [1000, 1000, 1000] } } as never, { newId: ids() });
+    const cv = e.exec('add_block', { blockType: 'roller-conveyor', position: [0, 0, 0] }) as string;
+    const rb = e.exec('add_block', { blockType: 'robot-6axis', position: [0, 0, 0] }) as string;
+    e.exec('set_parent', { id: rb, parent: cv });
+    expect(e.doc.nodes.find(n => n.id === rb)!.parent).toBe(cv);
+    expect(() => e.exec('set_parent', { id: cv, parent: rb })).toThrow(/itself or its own child/);
+    e.exec('set_parent', { id: rb, parent: null });
+    expect(e.doc.nodes.find(n => n.id === rb)!.parent).toBeNull();
+  });
   it('blocks, joints, tags, cascading delete', () => {
     const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 'Pick & place', bbox: [1200, 800, 1600] } } as never, { newId: ids() });
     const frame = e.exec('add_block', { blockType: 'frame-table', position: [0, 0, 0] }) as string;

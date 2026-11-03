@@ -311,7 +311,9 @@
   const inn = (tag, type = 'bool', binding) => ({ tag, dir: 'in', type, ...(binding ? { binding } : {}) });
 
   bdef('frame', { name: '프레임 (테이블)', cat: 'structure', code: 'FR', params: { w: 1200, d: 800, h: 850 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)],
-    top: p => mm(p.h), build: p => { const g = new T.Group(); legs(g, mm(p.w), mm(p.d), mm(p.h) - 0.03); bx(g, 'body', mm(p.w), 0.03, mm(p.d), 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.04, mm(p.d) - 0.1, 0, 0.12); return g; } });
+    top: p => mm(p.h), heightKey: 'h', build: p => { const g = new T.Group(); legs(g, mm(p.w), mm(p.d), mm(p.h) - 0.03); bx(g, 'body', mm(p.w), 0.03, mm(p.d), 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.04, mm(p.d) - 0.1, 0, 0.12); return g; } });
+  bdef('pedestal', { name: '로봇 단상 (받침대)', cat: 'structure', code: 'PD', params: { w: 700, d: 700, h: 600 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)], heightKey: 'h',
+    top: p => mm(p.h), build: p => { const g = new T.Group(), w = mm(p.w), d = mm(p.d), h = mm(p.h); bx(g, 'frame', w, 0.03, d); bx(g, 'body', w * 0.7, Math.max(0.02, h - 0.06), d * 0.7, 0, 0.03); bx(g, 'light', w * 0.85, 0.03, d * 0.85, 0, h - 0.03); return g; } });
   bdef('base-plate', { name: '베이스 플레이트', cat: 'structure', code: 'BP', params: { w: 800, d: 600, t: 25 }, fields: [num('w', '가로'), num('d', '세로'), num('t', '두께', 'mm', 5)], onTop: true,
     top: p => mm(p.t), build: p => { const g = new T.Group(); bx(g, 'steel', mm(p.w), mm(p.t), mm(p.d)); return g; } });
   bdef('post', { name: '기둥 프로파일', cat: 'structure', code: 'PT', params: { h: 1200, s: 60 }, fields: [num('h', '높이', 'mm', 10), num('s', '단면', 'mm', 5)], onTop: true,
@@ -329,7 +331,7 @@
   const convIo = (P, p) => [out(`${P}_RUN`, 'bool', { kind: 'joint', target: `${P}_BELT` }), out(`${P}_DIR`), out(`${P}_SPEED`, 'real'), inn(`${P}_FAULT`)];
   for (const [id, name, v] of [['belt-conveyor', '벨트 컨베이어', 'belt'], ['roller-conveyor', '롤러 컨베이어', 'roller']]) bdef(id, { name, cat: 'transport', code: 'CV',
     params: { length: 3000, w: 500, h: 900, speed: 300 }, fields: [num('length', '길이'), num('w', '폭', 'mm', 10), num('h', '반송 높이', 'mm', 10), num('speed', '속도', 'mm/s', 10)],
-    top: p => mm(p.h), conveyor: true,
+    top: p => mm(p.h), conveyor: true, heightKey: 'h',
     joints: (P, p) => [J(`${P}_BELT`, 'lin', [1, 0, 0], 'continuous', 0, p.length, p.speed, 1000)], io: convIo,
     build: p => conveyorShape(v, mm(p.length), mm(p.w), mm(p.h)) });
   bdef('stopper', { name: '스토퍼', cat: 'transport', code: 'STP', onTop: true, params: { stroke: 30 }, fields: [num('stroke', '스트로크', 'mm', 5)],

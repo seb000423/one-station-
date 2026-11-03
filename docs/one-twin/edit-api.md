@@ -41,6 +41,7 @@
 |---|---|---|
 | `add_block` | 블록 배치 (blockType = 라이브러리 블록 id, mm 좌표). 반환: 새 노드 id | `blockType`, `name?`, `parent?`, `position`, `rotation?`, `params?`, `sockets?`, `joints?`, `io?` |
 | `move` | 노드 이동·회전 (position mm, 5 mm 스냅 / rotation deg) | `id`, `position?`, `rotation?` |
+| `set_parent` | 노드를 다른 노드 위에 붙이거나 (parent id) 떼어 바닥으로 (null). 자기 자신·자손 아래로는 붙일 수 없음 | `id`, `parent` |
 | `rename` | 노드 이름 변경 | `id`, `name` |
 | `set_meta` | 설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경 | `name?`, `bbox?`, `fidelity?` |
 | `set_card` | 설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓) | `cycle_time?`, `ok_rate?`, `operators?`, `inlet?`, `outlet?` |

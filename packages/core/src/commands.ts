@@ -305,6 +305,18 @@ export const machineCommands = {
       if (a.rotation) n.transform.rotation = [a.rotation[0], a.rotation[1], ((a.rotation[2] % 360) + 360) % 360];
     },
   }),
+  set_parent: def({
+    scope: 'machine', description: '노드를 다른 노드 위에 붙이거나 (parent id) 떼어 바닥으로 (null). 자기 자신·자손 아래로는 붙일 수 없음',
+    args: z.object({ id: z.string(), parent: z.string().nullable() }),
+    run: (m: Machine, a) => {
+      const n = needNode(m, a.id);
+      if (a.parent !== null) {
+        needNode(m, a.parent);
+        for (let p: string | null = a.parent; p; p = m.nodes.find(x => x.id === p)?.parent ?? null) if (p === a.id) throw new CommandError(`${a.id} cannot sit on itself or its own child`);
+      }
+      n.parent = a.parent;
+    },
+  }),
   rename: def({
     scope: 'machine', description: '노드 이름 변경',
     args: z.object({ id: z.string(), name: z.string() }),

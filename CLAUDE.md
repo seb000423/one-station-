@@ -1,7 +1,7 @@
 # ONE_STATION — 작업 규칙
 
 ONE_STATION은 웹에서 설비·생산 라인을 꾸미고 시뮬레이션하는 사이트입니다 (https://one-station-beta.vercel.app).
-ONE BUILDER = `/console.html` (`/builder`), ONE MONITOR = `/console2.html` (`/monitor`). 사용자는 한국어로 씁니다.
+ONE BUILDER = `/build.html` (`/build`, `/builder`), ONE MONITOR = `/console2.html` (`/monitor`). 사용자는 한국어로 씁니다.
 지금 **ONE Twin 개발 기준서 R1**의 V1으로 단계 이행 중입니다 (현재 사이트를 살린 채 바닥부터 교체).
 
 ## 구조
