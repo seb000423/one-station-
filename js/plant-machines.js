@@ -41,7 +41,7 @@
      edit API like any user edit. */
   function defaultFactory() {
     const { schema: S, core: C } = window.OneTwin;
-    const e = new C.Editor('factory', S.Factory.parse({ schema: S.FACTORY_SCHEMA, meta: { id: S.uuidv7(), name: '감마 라인 (협력사 설비)', levels: [{ id: 'L1', name: '1F', height: 7000 }] },
+    const e = new C.Editor('factory', S.Factory.parse({ schema: S.FACTORY_SCHEMA, meta: { id: S.uuidv7(), name: '예시 공정 · 감마 라인', levels: [{ id: 'L1', name: '1F', height: 7000 }] },
       building: { slabs: [{ id: S.uuidv7(), polygon: [[0, 0], [64000, 0], [64000, 28000], [0, 28000]] }] } }));
     e.exec('draw_wall', { from: [0, 28000], to: [64000, 28000], thickness: 200 }); e.exec('draw_wall', { from: [0, 0], to: [0, 28000], thickness: 200 });
     e.exec('add_column_grid', { origin: [0, 0], nx: 9, ny: 2, dx: 8000, dy: 28000 });

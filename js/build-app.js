@@ -370,7 +370,8 @@
         if (it.path === 'machines') { html += `<span class="k">태그 접두어</span><span class="v">${esc(x.tagPrefix)}</span><span class="k">참조</span><span class="v">${esc(x.ref)}</span>`;
           if (d.size) html += `<span class="k">외곽</span><span class="v">${d.size.join(' × ')} mm</span>`; if (d.process) html += `<span class="k">공정 분류</span><span class="v" style="font-family:var(--sans)">${esc(d.process)}</span>`; }
         html += `</div>${it.local ? `<p class="why" style="margin-top:10px">객체 하나하나의 크기·위치·속도는 Machine Builder에서 바꿉니다. 저장하면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts"><button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'building.slabs' ? '' : teleop(true)}`;
-      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div></div>`;
+      } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
+        ${window.OnePlant ? `<p class="why" style="margin-top:10px">예시 공정: 감마 라인 (1 조립 → 2 페이스트 도포 → 3 브레이징 → 4 검사)</p><div class="acts"><button class="btn" data-act="example">예시 공정 불러오기</button></div>` : ''}</div>`;
     } else {
       const n = sel && doc.nodes.find(x => x.id === sel);
       if (n) { const d = nodeDef(n) || { fields: [], params: {} }, P = nodeCode(n), p = n.transform.position;
@@ -505,7 +506,7 @@
     if (k.startsWith('p.')) { if (tab === 'machine') setParamKeepKids(sel, k.slice(2), v); else exec('set_param', { id: sel, key: k.slice(2), value: v }); }
   });
   $('props').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const D = b.dataset;
-    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal();
+    if (D.act === 'rot') rotateSel(); else if (D.act === 'del') deleteSel(); else if (D.act === 'dup') dupSel(); else if (D.act === 'editLocal') editLocal(); else if (D.act === 'example') loadExample();
     else if (D.mv) nudge(D.mv, e.shiftKey); else if (D.rot) turnSel(+D.rot * TELE[tab].ang); else if (D.z) raiseSel(+D.z * TELE.machine.step * (e.shiftKey ? 5 : 1));
     else if (D.preset) { TELE[tab].step = +D.preset; drawProps(); } });
 
@@ -852,6 +853,11 @@
     if (dirty.machine && ED.machine.doc.meta.id !== doc.meta.id && !confirm('Machine Builder에서 저장하지 않은 변경이 있습니다. 버리고 이 설비를 열까요?')) return;
     openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(doc)))); dirty.machine = false; switchTab('machine', true);
     toast(`${m.name} v${v} · 객체를 골라 오른쪽에서 크기·위치·동작 시간을 바꾸고 '설비 카드 저장'을 누릅니다`); }
+  // the example process (감마 라인) back in Factory Builder; the factory on screen is kept under one.build.factory.before-plant
+  function loadExample() { const doc = ED.factory.doc;
+    if ((doc.machines.length || doc.building.walls.length) && !confirm('지금 공장 대신 예시 공정을 엽니다. 지금 공장은 이 브라우저에 따로 보관됩니다. 계속할까요?')) return;
+    if (doc.machines.length || doc.building.walls.length) LS.set(KEY.factory + '.before-plant', doc);
+    openDoc('factory', window.OnePlant.defaultFactory()); dirty.factory = false; switchTab('factory', true); toast('예시 공정 · 감마 라인을 열었습니다'); }
   function save() {
     if (tab === 'machine') {
       const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
