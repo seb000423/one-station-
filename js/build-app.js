@@ -879,10 +879,16 @@
           if (mx >= x0 - 8 && mx <= x1 + 8 && my >= y0 - 8 && my <= y1 + 8) id = ids[0]; } } }
     if (!id) { if (e.shiftKey && mode === 'edit') { startBox(e); return; } select(null); return; }
     if (e.shiftKey && mode === 'edit') { toggleSel(id); return; }
+    // joined conveyors (a layout, or pieces snapped end to end) are picked as one line; pressing a piece of the
+    // already picked line again (without dragging) picks just that piece, and a single picked piece stays single
+    let drill = null; if (tab === 'machine' && mode === 'edit') { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n);
+      if (d && !n.parent && (d.conveyor || d.curve || d.corner)) { const chain = [...joinedConveyors(doc, [id])], cur = selIds();
+        if (chain.length > 1 && !(cur.length === 1 && cur[0] === id)) { if (cur.length === chain.length && chain.every(x => cur.includes(x))) drill = id;
+          else { selectMany([id, ...chain.filter(x => x !== id)]); toast(`이어진 컨베이어 ${chain.length}개를 한 덩어리로 골랐습니다 · 한 번 더 누르면 그 조각만`); } } } }
     const group = selIds().includes(id) && selIds().length > 1; if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
     plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
     const ids = group ? selIds().filter(x => !isSlab(x)) : [id], os = ids.map(x => objs.get(x)?.obj).filter(Boolean);
-    drag = { id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
+    drag = { drill, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', e => {
     if (placing && !drag) { trackPlace(e); return; }
@@ -896,7 +902,7 @@
   });
   const endDrag = e => {
     if (link) { endLink(e); return; }
-    if (!drag) return; showSnap(null); const { d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
+    if (!drag) return; showSnap(null); const { d, moved, drill } = drag; drag = null; controls.enabled = true; if (!moved || !d) { if (drill) { select(drill); toast('조각 하나만 골랐습니다 · 빈 곳을 눌렀다가 다시 누르면 라인 전체'); } return; }
     const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
   // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
