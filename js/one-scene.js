@@ -76,7 +76,25 @@
       else if (it.def && L.FACTORY[it.def]?.size) P = boxPorts(L.FACTORY[it.def].size);
       else if (it.path === 'storage') P = boxPorts([2400, 1200, 0]);
       if (!P) return null; const r = (it.item.transform.rotation[2] || 0) * Math.PI / 180; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item), dir: [Math.cos(r), Math.sin(r)] }; }
-    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts };
+    /** The route a part takes through a machine, inlet → outlet (machine frame mm): along its conveyor chain when it has one
+       (each conveyor's outfeed end, then the point where the part lands on the next conveyor), else straight across. */
+    function machinePath(doc) { const P = portsOf(doc), convs = doc.nodes.filter(n => L.BLOCKS[n.blockType]?.conveyor && !n.parent);
+      const pts = [P.inlet.pos]; if (!convs.length) { pts.push(P.outlet.pos); return pts; }
+      const axis = c => { const i = portAt(doc, `${c.id}/in`).pos, o = portAt(doc, `${c.id}/out`).pos; return { c, i, o, w: (+blockP(c).w || 500) }; }, A = convs.map(axis);
+      const onto = (p, a) => { const dx = a.o[0] - a.i[0], dy = a.o[1] - a.i[1], L2 = dx * dx + dy * dy || 1, t = ((p[0] - a.i[0]) * dx + (p[1] - a.i[1]) * dy) / L2, q = [a.i[0] + dx * t, a.i[1] + dy * t, a.i[2]];
+        return { t, q, d: Math.hypot(p[0] - q[0], p[1] - q[1]) }; };
+      const owner = k => k && A.find(a => k.startsWith(a.c.id + '/'));
+      let cur = owner(P.inlet.key) || A.map(a => ({ a, d: Math.hypot(a.i[0] - P.inlet.pos[0], a.i[1] - P.inlet.pos[1]) })).sort((x, y) => x.d - y.d)[0].a;
+      const last = owner(P.outlet.key), seen = new Set();
+      for (let k = 0; cur && k < 30; k++) { seen.add(cur); const e = onto(pts[pts.length - 1], cur); if (e.d > 1) pts.push(e.q);
+        if (cur === last) break; pts.push(cur.o);
+        let nx = null; for (const a of A) { if (seen.has(a)) continue; const h = onto(cur.o, a); if (h.t > -0.05 && h.t < 1.0 && h.d < a.w / 2 + 300) { nx = a; break; } } cur = nx; }
+      pts.push(P.outlet.pos); return pts.filter((p, i) => !i || Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1], p[2] - pts[i - 1][2]) > 1); }
+    const localDoc = l => { const m = l && opt.lib()[l.id]; return m && (m.versions[l.v] || m.versions[Object.keys(m.versions).pop()]); };
+    /** The machine route in factory mm (inlet → outlet), or null. */
+    function instancePath(it) { const doc = it.local && localDoc(it.local); if (doc) return machinePath(doc).map(p => toFactory(p, it.item));
+      const P = instancePorts(it); return P ? [P.inlet, P.outlet] : null; }
+    return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts, machinePath, instancePath, localDoc };
   }
   window.OneScene = { create };
 })();
