@@ -142,6 +142,20 @@ describe('machine edit API', () => {
     e.exec('set_parent', { id: rb, parent: null });
     expect(e.doc.nodes.find(n => n.id === rb)!.parent).toBeNull();
   });
+  it('set_sequence stores the steps and checks tags, outputs and next ids', () => {
+    const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 't', bbox: [1000, 1000, 1000] } } as never, { newId: ids() });
+    e.exec('bind_tag', { tag: 'CV1_RUN', dir: 'out', type: 'bool' });
+    e.exec('bind_tag', { tag: 'PS1_ON', dir: 'in', type: 'bool' });
+    const steps = [{ id: 's1', name: '투입', set: [{ tag: 'CV1_RUN', value: true }] }, { id: 's2', wait: [{ tag: 'PS1_ON', value: true }], set: [{ tag: 'CV1_RUN', value: false }], delay: 2, next: ['s1'] }];
+    e.exec('set_sequence', { steps });
+    expect(e.doc.sequence.steps).toHaveLength(2);
+    expect(e.doc.sequence.steps[1]!.wait[0]!.op).toBe('==');
+    expect(() => e.exec('set_sequence', { steps: [{ id: 'a', set: [{ tag: 'PS1_ON', value: true }] }] })).toThrow(/only outputs/);
+    expect(() => e.exec('set_sequence', { steps: [{ id: 'a', wait: [{ tag: 'NOPE', value: true }] }] })).toThrow(/unknown tag/);
+    expect(() => e.exec('set_sequence', { steps: [{ id: 'a', next: ['b'] }] })).toThrow(/not a step/);
+    e.undo();
+    expect(e.doc.sequence.steps).toEqual([]);
+  });
   it('blocks, joints, tags, cascading delete', () => {
     const e = new Editor('machine', { schema: MACHINE_SCHEMA, meta: { id: 'm', name: 'Pick & place', bbox: [1200, 800, 1600] } } as never, { newId: ids() });
     const frame = e.exec('add_block', { blockType: 'frame-table', position: [0, 0, 0] }) as string;

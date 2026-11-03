@@ -46,6 +46,7 @@
 | `rename` | 노드 이름 변경 | `id`, `name` |
 | `set_meta` | 설비 이름 · 외곽 크기(W × D × H mm) · fidelity 변경 | `name?`, `bbox?`, `fidelity?` |
 | `set_card` | 설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓) | `cycle_time?`, `ok_rate?`, `operators?`, `inlet?`, `outlet?` |
+| `set_sequence` | 동작 순서 전체 바꾸기: 단계마다 조건을 기다린 뒤 출력을 켜고/끄고, 지연 후 다음 단계 (마지막 단계 다음은 next, 없으면 첫 단계) | `steps` |
 | `set_param` | 블록 파라미터 변경 | `id`, `key`, `value` |
 | `add_joint` | 노드에 동작 축 추가 (vmax·amax 필수) | `id`, `node`, `type`, `axis`, `mode`, `min`, `max`, `home?`, `vmax`, `amax`, `jmax?`, `effort?`, `cushion_time?`, `verified?` |
 | `bind_tag` | 신호 태그 추가 또는 변경 (같은 tag면 덮어씀) | `tag`, `dir`, `type`, `binding?`, `default?` |

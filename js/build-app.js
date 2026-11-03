@@ -476,6 +476,46 @@
     else { const s = prompt(`${t.tag} 값`, String(RUN.tags[t.tag] ?? 0)); if (s === null || s.trim() === '' || isNaN(+s)) return; RUN.tags[t.tag] = +s; }
     drawIo();
   });
+  /* ---- 동작 순서 (sequence): made from the blocks (conveyors run, stoppers hold the work, the sensor sees it arrive,
+     each process/robot does its job, the stopper lets it go); 자동 운전 steps through it on the signal table. */
+  function genSequence(doc) {
+    const io = new Map(doc.io.map(t => [t.tag, t])), out = t => io.get(t)?.dir === 'out';
+    const B = doc.nodes.map(n => ({ n, P: nodeCode(n), d: nodeDef(n) })).filter(x => x.d);
+    const convs = B.filter(x => x.d.conveyor && out(`${x.P}_RUN`)), stops = B.filter(x => x.d.stops && out(`${x.P}_UP`)), sens = B.filter(x => x.d.sensor && io.has(`${x.P}_ON`));
+    const procs = B.filter(x => !x.d.conveyor).map(x => ({ ...x, go: out(`${x.P}_START`) ? `${x.P}_START` : out(`${x.P}_TRIG`) ? `${x.P}_TRIG` : null, done: io.has(`${x.P}_DONE`) ? `${x.P}_DONE` : io.has(`${x.P}_OK`) ? `${x.P}_OK` : null })).filter(x => x.go && x.done);
+    const near = (a, b) => Math.hypot(a.n.transform.position[0] - b.n.transform.position[0], a.n.transform.position[1] - b.n.transform.position[1]);
+    const sensor = stops.length && sens.length ? sens.slice().sort((a, b) => near(a, stops[0]) - near(b, stops[0]))[0] : sens[0];
+    const steps = []; let k = 0; const S = (name, o = {}) => { const st = Object.assign({ id: `s${++k}`, name, wait: [], set: [] }, o); steps.push(st); return st; };
+    const up = v => stops.map(x => ({ tag: `${x.P}_UP`, value: v }));
+    S('준비 · 컨베이어 운전, 스토퍼 올림', { set: [...convs.map(x => ({ tag: `${x.P}_RUN`, value: true })), ...up(true)] });
+    const arrive = sensor ? S(`워크 도착 대기 (${sensor.P})`, { wait: [{ tag: `${sensor.P}_ON`, op: '==', value: true }], delay: 0.3 }) : S('워크 도착 (센서 없음 · 시간으로)', { delay: 3 });
+    for (const p of procs) { S(`${p.P} 작업 시작`, { set: [{ tag: p.go, value: true }] }); S(`${p.P} 완료 대기`, { wait: [{ tag: p.done, op: '==', value: true }], set: [{ tag: p.go, value: false }] }); }
+    if (!procs.length) S('공정 (카드 사이클)', { delay: +doc.card.cycle_time || 5 });
+    if (stops.length) { S('배출 · 스토퍼 내림', { set: up(false) }); S('워크 빠짐 대기 · 스토퍼 올림', sensor ? { wait: [{ tag: `${sensor.P}_ON`, op: '==', value: false }], set: up(true), delay: 0.5 } : { delay: 3, set: up(true) }); }
+    steps[steps.length - 1].next = [arrive.id]; return steps; }
+  const AUTO = { on: false, i: 0, phase: 'wait', t: 0, waited: 0 };
+  const cmp = (v, op, x) => { v = typeof x === 'boolean' ? !!v : +v; return op === '!=' ? v !== x : op === '>' ? v > x : op === '<' ? v < x : op === '>=' ? v >= x : op === '<=' ? v <= x : v === x; };
+  const valTxt = (tag, v) => typeof v === 'boolean' ? (v ? '켜짐' : '꺼짐') : String(v);
+  function stepAuto(dt) { const steps = ED.machine.doc.sequence.steps; if (!AUTO.on || !steps.length) return;
+    for (let g = 0; g < 12; g++) { const st = steps[AUTO.i]; if (!st) { AUTO.i = 0; continue; }
+      if (AUTO.phase === 'wait') { if (!st.wait.every(w => cmp(RUN.tags[w.tag], w.op || '==', w.value))) { AUTO.waited += dt;
+          if (/^워크 빠짐/.test(st.name || '') && AUTO.waited > 4 && !AUTO.warned) { AUTO.warned = true; log('워크가 컨베이어 끝(출구)에 섰습니다. 공장에서는 다음 설비가 가져갑니다 · ↺ 워크로 다시 투입하세요'); }
+          if (AUTO.waited > 20 && !AUTO.warned) { AUTO.warned = true; log(`${st.name}: 20초째 조건을 기다립니다 (${st.wait.map(w => `${w.tag} ${valTxt(w.tag, w.value)}`).join(', ')})`); } return; }
+        for (const x of st.set) RUN.tags[x.tag] = x.value; log(`▶ ${st.name}`); AUTO.phase = 'delay'; AUTO.t = 0; AUTO.waited = 0; AUTO.warned = false; }
+      AUTO.t += dt; dt = 0; if (AUTO.t < (st.delay || 0)) return;
+      const nx = st.next?.[0]; AUTO.i = nx ? Math.max(0, steps.findIndex(q => q.id === nx)) : (AUTO.i + 1) % steps.length; AUTO.phase = 'wait'; drawSeq(); } }
+  function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;
+    if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
+    if (on && !doc.nodes.some(n => nodeDef(n)?.work)) toast('워크 블록이 없어 센서가 켜지지 않습니다 · 편집에서 컨베이어 위에 워크를 놓아 주세요');
+    AUTO.on = on; AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; $('bAuto').textContent = on ? '■ 자동 운전 멈춤' : '▶ 자동 운전'; $('bAuto').classList.toggle('pri', on); if (on) log('자동 운전 시작 · 동작 순서를 차례로 실행합니다'); drawSeq(); drawIo(); }
+  function drawSeq() { if (!$('seq')) return; const steps = ED.machine.doc.sequence.steps; $('seqN').textContent = steps.length ? `${steps.length}단계` : '';
+    const set = x => `${esc(x.tag)} ${x.value === true ? '켜기' : x.value === false ? '끄기' : '= ' + x.value}`;
+    $('seq').innerHTML = steps.map((st, i) => `<div class="seqst${AUTO.on && i === AUTO.i ? ' on' : ''}"><b>${i + 1}</b><div><span>${esc(st.name || st.id)}</span>
+        <small>${[st.wait.length ? '조건 ' + st.wait.map(w => `${esc(w.tag)} ${(w.op || '==') === '==' ? '' : esc(w.op) + ' '}${valTxt(w.tag, w.value)}`).join(', ') + (st.set.length ? ' → ' : '') : '', st.set.map(set).join(', ')].join('')}${[st.delay ? `${st.delay} s 기다림` : '', st.next ? `↩ ${steps.findIndex(q => q.id === st.next[0]) + 1}단계로` : ''].filter(Boolean).map(x => (st.wait.length || st.set.length ? ' · ' : '') + x).join('')}</small></div></div>`).join('')
+      || '<p class="seqempty">아직 동작 순서가 없습니다. "자동 만들기"를 누르면 블록(컨베이어·스토퍼·센서·공정)에서 순서를 만듭니다.</p>'; }
+  $('bAuto').onclick = () => setAuto(!AUTO.on);
+  $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 블록에서 다시 만들까요?')) return; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
+  $('bWorkBack').onclick = () => { const doc = ED.machine.doc; for (const n of doc.nodes) if (nodeDef(n)?.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]] }; log('워크를 처음 위치로 되돌렸습니다'); };
   $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
 
   function stepRun(dt) {
@@ -509,7 +549,7 @@
       if (t.dir !== 'in' || !t.binding) continue; const b = t.binding;
       if (b.kind === 'sensor' && b.target === 'work') { const sn = doc.nodes.find(n => t.tag.startsWith(nodeCode(n) + '_')); if (!sn) continue; const sp = sn.transform.position, range = sn.params.range || 500;
         tags[t.tag] = doc.nodes.some(n => { const w = RUN.works[n.id]; if (!w) return false; const p = n.transform.position, hw = (n.params.w || 300) / 2; const pc = convs.find(c => c.id === sn.parent), f = pc ? frame(pc) : { q: [0, 0], a: [1, 0], nrm: [0, 1] }, [sx, sy] = loc(f, sp), [wx, wy] = loc(f, w.p);
-          return Math.abs(wx - sx) < hw && Math.abs(wy - sy) < range + (n.params.d || 200) / 2; }); }
+          return Math.abs(wx - sx) <= hw + 25 && Math.abs(wy - sy) < range + (n.params.d || 200) / 2; }); }
       else if (b.kind === 'sensor') { const [jid, end] = b.target.split(':'), j = doc.joints.find(x => x.id === jid); if (!j) continue; const v = RUN.v[jid];
         tags[t.tag] = end === 'max' ? Math.abs(v - j.max) < 0.5 : end === 'min' ? Math.abs(v - j.min) < 0.5 : Math.abs(v - (RUN.v[jid + ':target'] ?? v)) < 0.5; }
     }
@@ -528,10 +568,10 @@
       if (RUN.works[n.id]) placeObj(o, [RUN.works[n.id].p[0], RUN.works[n.id].p[1], n.transform.position[2]], n.transform.rotation[2]); }
   }
   function setMode(m) {
-    if (tab !== 'machine') m = 'edit'; mode = m; document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+    if (tab !== 'machine') m = 'edit'; mode = m; if (AUTO.on) setAuto(false); document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
     if (m === 'run') { resetRun(); log('실행 시작 · 신호 표의 값을 눌러 태그를 켜고 끕니다'); }
     else { for (const v of objs.values()) root.remove(v.obj); objs = new Map(); syncScene(); }
-    $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); updateHint();
+    $('bottom').hidden = !(tab === 'machine' && m === 'run'); setTimeout(stage.resize, 0); drawIo(); drawSeq(); updateHint();
   }
   $('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.m); });
 
@@ -687,7 +727,7 @@
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
   }
-  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '동작 시험 중: 아래 조작 패널에서 명령 값을 눌러 켜고 끕니다 · 편집으로 돌아가면 처음 자세로' : ''; }
+  function updateHint() { $('hint').textContent = placing ? `${placing.name}: 놓을 곳을 누르세요 · Shift+클릭 = 계속 놓기 · R 회전 · Esc/우클릭 취소` : xray ? 'X-RAY 보기 전용: 끌면 화면이 돌고, 휠은 확대입니다 · X를 다시 누르면 편집' : tab === 'machine' && mode === 'run' ? '동작 시험 중: 명령 값을 눌러 켜고 끄거나, 오른쪽 아래 ▶ 자동 운전으로 동작 순서를 돌립니다 · 편집으로 돌아가면 처음 자세로' : ''; }
   /* ports (입구 · 출구): an ivory arrow where parts come in, an amber one where they leave; labelled in Machine Builder */
   const portGrp = new T.Group(); ov.add(portGrp);
   const arrowGeo = (() => { const sh = new T.Shape(); sh.moveTo(0.22, 0); sh.lineTo(-0.12, 0.14); sh.lineTo(-0.05, 0); sh.lineTo(-0.12, -0.14); sh.lineTo(0.22, 0); return new T.ShapeGeometry(sh).rotateX(-Math.PI / 2); })();
@@ -786,7 +826,7 @@
   let last = performance.now();
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (mode === 'run' && tab === 'machine') { stepRun(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
+    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
     stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 

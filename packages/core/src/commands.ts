@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 import {
-  Vec2, Vec3, Params, Transform, GRID_FACTORY_MM, GRID_MACHINE_MM, snap, roundMm, Joint, Io, Socket, isTagPath,
+  Vec2, Vec3, Params, Transform, GRID_FACTORY_MM, GRID_MACHINE_MM, snap, roundMm, Joint, Io, Socket, isTagPath, SequenceStep,
   type Factory, type Machine,
 } from '@one-twin/schema';
 import { locate } from './locate';
@@ -346,6 +346,20 @@ export const machineCommands = {
     scope: 'machine', description: '설비 카드 값 변경 (사이클 s · 양품률 · 작업자 수 · 투입/배출 소켓)',
     args: z.object({ cycle_time: z.number().nonnegative().nullable(), ok_rate: z.number().min(0).max(1).nullable(), operators: z.number().nonnegative(), inlet: z.string().nullable(), outlet: z.string().nullable() }).partial(),
     run: (m: Machine, a) => { Object.assign(m.card, a); },
+  }),
+  set_sequence: def({
+    scope: 'machine', description: '동작 순서 전체 바꾸기: 단계마다 조건을 기다린 뒤 출력을 켜고/끄고, 지연 후 다음 단계 (마지막 단계 다음은 next, 없으면 첫 단계)',
+    args: z.object({ steps: z.array(SequenceStep) }),
+    run: (m: Machine, a) => {
+      const ids = new Set<string>(), tags = new Map(m.io.map(t => [t.tag, t]));
+      for (const st of a.steps) { if (ids.has(st.id)) throw new CommandError(`duplicate step id ${st.id}`); ids.add(st.id); }
+      for (const st of a.steps) {
+        for (const w of st.wait) if (!tags.has(w.tag)) throw new CommandError(`step ${st.id}: unknown tag ${w.tag}`);
+        for (const x of st.set) { const t = tags.get(x.tag); if (!t) throw new CommandError(`step ${st.id}: unknown tag ${x.tag}`); if (t.dir !== 'out') throw new CommandError(`step ${st.id}: ${x.tag} is a PLC input; only outputs can be set`); }
+        for (const n of st.next ?? []) if (!ids.has(n)) throw new CommandError(`step ${st.id}: next ${n} is not a step`);
+      }
+      m.sequence.steps = a.steps;
+    },
   }),
   set_param: def({
     scope: 'machine', description: '블록 파라미터 변경',
