@@ -147,17 +147,26 @@
     const ACCENT = /yellow|amber|orange|hazard/i;
     const tint = c => { const L = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b, t = Math.min(1, Math.max(0, (L - 0.01) / 0.85));
       return t < 0.5 ? C.ch.clone().lerp(C.gr, t * 2) : C.gr.clone().lerp(C.iv, (t - 0.5) * 2); };
-    const studioMats = new Map();
+    const studioMats = new Map(), texAvg = new Map();
+    // average colour of a texture (textured models have a white base colour; their look is in the map)
+    const avgOf = tex => { if (texAvg.has(tex.uuid)) return texAvg.get(tex.uuid); let c = new T.Color(0.6, 0.6, 0.6);
+      try { const img = tex.image, cv = document.createElement('canvas'); cv.width = cv.height = 8; const x = cv.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
+        const d = x.getImageData(0, 0, 8, 8).data; let r = 0, g = 0, b = 0; for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+        c = new T.Color().setRGB(r / 64 / 255, g / 64 / 255, b / 64 / 255).convertSRGBToLinear(); } catch (e) { /* image not ready */ }
+      texAvg.set(tex.uuid, c); return c; };
     const studio = (root, on) => {
       root.traverse(o => { if (!o.isMesh || o.isPoints) return;
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          if (!m || !m.color) continue;
-          if (!studioMats.has(m)) studioMats.set(m, { color: m.color.clone(), metalness: m.metalness, roughness: m.roughness, env: m.envMapIntensity, ei: m.emissiveIntensity });
-          const s = studioMats.get(m), glowing = m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.25;
-          if (!on) { m.color.copy(s.color); m.metalness = s.metalness; m.roughness = s.roughness; m.envMapIntensity = s.env; if (glowing) m.emissiveIntensity = s.ei; continue; }
+          if (!m || !m.color || m.userData.noStudio) continue;
+          if (!studioMats.has(m)) studioMats.set(m, { color: m.color.clone(), metalness: m.metalness, roughness: m.roughness, env: m.envMapIntensity, ei: m.emissiveIntensity, map: m.map });
+          const s = studioMats.get(m), glowing = m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.25 && !m.emissiveMap;
+          if (!on) { m.color.copy(s.color); m.metalness = s.metalness; m.roughness = s.roughness; m.envMapIntensity = s.env; if (glowing) m.emissiveIntensity = s.ei;
+            if (m.map !== s.map) { m.map = s.map; m.needsUpdate = true; } continue; }
           if (glowing) { m.emissiveIntensity = Math.max(s.ei || 1, 3); continue; }
-          if (m.map) { m.envMapIntensity = 0.4; continue; }
-          m.color.copy(ACCENT.test(m.name) ? C.am.clone().multiplyScalar(0.8) : tint(s.color));
+          // a textured part: the map comes off and its average colour is tinted like any other
+          const base = s.map && s.map.image ? avgOf(s.map).clone().multiply(s.color) : s.color;
+          if (m.map) { m.map = null; m.needsUpdate = true; }
+          m.color.copy(ACCENT.test(m.name) ? C.am.clone().multiplyScalar(0.8) : tint(base));
           m.metalness = Math.min(s.metalness ?? 0, 0.25); m.roughness = Math.max(s.roughness ?? 0.5, 0.5); m.envMapIntensity = 0.35;
         } });
     };

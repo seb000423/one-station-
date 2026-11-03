@@ -472,7 +472,7 @@
     if (GLB[src]) return GLB[src];
     if (!T.GLTFLoader) return (GLB[src] = Promise.reject(new Error('GLTFLoader missing')));
     if (!gltfLoader) { gltfLoader = new T.GLTFLoader(); if (T.DRACOLoader) { const dl = new T.DRACOLoader(); dl.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/draco/gltf/'); gltfLoader.setDRACOLoader(dl); } }
-    return (GLB[src] = new Promise((ok, bad) => gltfLoader.load(`assets/models/plant/${src}.glb`, g => { g.scene.updateMatrixWorld(true); GLB_READY[src] = g.scene; ok(g.scene); }, undefined, bad)));
+    return (GLB[src] = new Promise((ok, bad) => gltfLoader.load(`assets/models/plant/${src}.glb`, g => { g.scene.updateMatrixWorld(true); flatGlowOff(g.scene); GLB_READY[src] = g.scene; ok(g.scene); }, undefined, bad)));
   }
   const modelListeners = new Set(); // called when a station GLB has arrived (the builder redraws its selection box)
   // joint chain of a rig: J1 and its first J child, then that one's, … (fingers and side bones stay as they are)
@@ -494,13 +494,70 @@
   const qa = new T.Quaternion();
   function poseRig(rig, kind, k) { if (!rig) return; const s = Math.sin(Math.PI * k), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     for (const r of rig) { const deg = kind === 'rotary' ? 90 * e : SWING[r.i] * s * (r.i === 0 ? Math.sin(Math.PI * k * 2) : 1); r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, deg * Math.PI / 180)); } }
+  // the converter left a flat emissive colour on some materials (whole control boxes glowed green): only emissive maps
+  // (sensor LEDs, buttons) keep glowing; tower lamps get their own lenses below
+  function flatGlowOff(scene) { scene.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if (m && m.emissive && !m.emissiveMap) m.emissive.setRGB(0, 0, 0); }); }
+
+  /* ---- status effects of model parts, driven by the state of their cell (SIMULATION) or 동작 시험 (Machine Builder):
+     경광등 = tower lamp, its three lenses lit by state (green 가동, amber 대기, red blinking 막힘 / 불량);
+     센서 = its indicator lights while a part is in front of it; 모니터 = an operator screen with the cell state. */
+  const SCREENS = { // screen rectangle in the monitor mesh's own space: outward normal, centre, width, height (m)
+    P_monitor03: { n: [-1, 0, 0], c: [-0.0075, 0.429, 0], w: 0.69, h: 0.408 },
+    P_black_monitor: { n: [-1, 0, 0], c: [-0.0245, 0.2515, 0], w: 0.646, h: 0.455 },
+    P_OP110_monitor: { n: [-0.983, 0, 0.181], c: [-0.053, 0.272, 0.007], w: 0.57, h: 0.408 } };
+  const fxKind = node => /(^|_)sign/i.test(node) ? 'lamp' : SCREENS[node] ? 'screen' : /sensor/i.test(node) ? 'sensor' : null;
+  // lens bands of the tower lamp mesh along its height (fraction of the mesh height, bottom = 0): green, amber, red
+  function towerMat(src, y0, len) {
+    const m = src.clone(); m.emissive = new T.Color(0); m.userData.on = new T.Vector3(1, 0, 0); const band = new T.Vector2(y0, len);
+    m.onBeforeCompile = sh => { sh.uniforms.uOn = { value: m.userData.on }; sh.uniforms.uBand = { value: band };
+      sh.vertexShader = 'uniform vec2 uBand;\nvarying float vT;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vT = (position.y - uBand.x) / uBand.y;');
+      sh.fragmentShader = 'uniform vec3 uOn;\nvarying float vT;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  vec3 lens = vec3(0.0); float lit = 0.0;
+  if (vT > 0.575 && vT < 0.675) { lens = vec3(0.10, 0.85, 0.22); lit = uOn.x; }
+  else if (vT > 0.72 && vT < 0.80) { lens = vec3(1.0, 0.62, 0.08); lit = uOn.y; }
+  else if (vT > 0.84 && vT < 0.925) { lens = vec3(1.0, 0.16, 0.12); lit = uOn.z; }
+  if (lens.r + lens.g > 0.0) { diffuseColor.rgb = lens * 0.22; totalEmissiveRadiance += lens * lit * 3.2; }`); };
+    m.customProgramCacheKey = () => 'tower-lamp-3'; m.userData.noStudio = true; return m; }
+  function screenOf(mesh, S) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w); const tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding;
+    const mat = new T.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1, roughness: 0.35, metalness: 0 }); mat.userData.noStudio = true;
+    const pl = new T.Mesh(new T.PlaneGeometry(S.w * 0.96, S.h * 0.94), mat), n = new T.Vector3(...S.n).normalize();
+    pl.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), n); pl.position.set(...S.c).addScaledVector(n, 0.002); pl.userData.noTwin = true; pl.castShadow = false; mesh.add(pl);
+    return { cv, tex, key: '' };
+  }
+  const STATE_TXT = { busy: ['가동', '#3ddc63'], idle: ['대기', '#ffae42'], blocked: ['막힘', '#ff4a3d'], ready: ['준비', '#8d8b86'] };
+  function drawScreen(sc, f) {
+    const k = Math.round((f.k || 0) * 20), key = [f.title, f.state, f.made, f.ng, k].join('|'); if (key === sc.key) return; sc.key = key;
+    const x = sc.cv.getContext('2d'), W = sc.cv.width, H = sc.cv.height, [txt, col] = STATE_TXT[f.state] || STATE_TXT.ready;
+    x.fillStyle = '#0c1014'; x.fillRect(0, 0, W, H); x.fillStyle = '#1b222b'; x.fillRect(0, 0, W, 30);
+    x.font = '600 16px sans-serif'; x.fillStyle = '#e9e3d5'; x.textBaseline = 'middle'; x.fillText(String(f.title || 'ONE').slice(0, 18), 10, 15);
+    x.fillStyle = col; x.fillRect(10, 42, 12, 12); x.font = '700 26px sans-serif'; x.fillText(txt, 30, 49);
+    x.font = '500 15px sans-serif'; x.fillStyle = '#c8c3b8'; x.fillText(`생산 ${f.made || 0}   불량 ${f.ng || 0}`, 10, H - 42);
+    x.fillStyle = '#2a2f36'; x.fillRect(10, H - 22, W - 20, 10); x.fillStyle = col; x.fillRect(10, H - 22, (W - 20) * k / 20, 10);
+    sc.tex.needsUpdate = true; }
+  function setupFx(g, c, kind, node) {
+    const fx = { kind, list: [] };
+    c.traverse(m => { if (!m.isMesh) return;
+      if (kind === 'lamp') { m.geometry.computeBoundingBox(); const b = m.geometry.boundingBox; m.material = towerMat(m.material, b.min.y, Math.max(1e-6, b.max.y - b.min.y)); fx.list.push(m.material); }
+      else if (kind === 'sensor') { const mats = [].concat(m.material).map(x => x.emissiveMap ? Object.assign(x.clone(), { emissiveIntensity: 0.25 }) : x); m.material = Array.isArray(m.material) ? mats : mats[0]; fx.list.push(...mats.filter(x => x.emissiveMap)); } });
+    if (kind === 'screen') { let mesh = null; c.traverse(m => { if (!mesh && m.isMesh) mesh = m; }); if (mesh) fx.screen = screenOf(mesh, SCREENS[node]); }
+    g.userData.fx = fx; setFx(g, { state: 'ready' });
+  }
+  /** Show the state of a model part's cell: { state: busy | idle | blocked | ready, hit (a part in front of a sensor),
+      alarm (just made a reject), title, made, ng, k (0…1 of the current cycle) }. Parts without an effect ignore it. */
+  function setFx(g, f) { const fx = g.userData.fx; if (!fx) return;
+    if (fx.kind === 'lamp') { const blink = Math.floor(performance.now() / 450) % 2 === 0 ? 1 : 0.08;
+      for (const m of fx.list) m.userData.on.set(f.state === 'busy' || f.state === 'ready' ? 1 : 0, f.state === 'idle' ? 1 : 0, f.state === 'blocked' || f.alarm ? blink : 0); }
+    else if (fx.kind === 'sensor') { for (const m of fx.list) m.emissiveIntensity = f.hit ? 3.5 : 0.25; }
+    else if (fx.screen) drawScreen(fx.screen, f); }
   function attachModel(g, p, scene) {
     const src = scene.getObjectByName(p.node); if (!src) return;
     const c = src.clone(true); c.position.set(0, 0, 0); c.updateMatrix();
     const fit = new T.Group(); fit.name = 'fit'; fit.scale.set(+p.w / (+p.w0 || +p.w), +p.h / (+p.h0 || +p.h), +p.d / (+p.d0 || +p.d)); fit.add(c);
     c.traverse(m => { m.userData.pick = g.userData.pick; if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
     const ph = g.getObjectByName('placeholder'); if (ph) g.remove(ph);
-    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null;
+    const fk = fxKind(p.node); if (fk) setupFx(g, c, fk, p.node);
+    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
     for (const f of modelListeners) f(g);
   }
   bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,
@@ -513,7 +570,12 @@
       if (!p.src || !p.node) return g;
       if (GLB_READY[p.src]) attachModel(g, p, GLB_READY[p.src]); else plantGlb(p.src).then(sc => attachModel(g, p, sc)).catch(() => {});
       return g; },
-    pose: (g, p, v) => poseRig(g.userData.rig, p.kind, v.RUN || 0) });
+    pose: (g, p, v) => { poseRig(g.userData.rig, p.kind, v.RUN || 0); if (g.userData.fx) setFx(g, { state: v.RUN ? 'busy' : 'ready', k: v.RUN || 0, hit: (v.RUN || 0) > 0.05 && (v.RUN || 0) < 0.3 }); } });
+  // the same part placed on its own in Factory Builder (a factory block): a cell split into its objects
+  fdef('model-part', { name: '모델 객체', group: 'model', kind: { cmd: 'add_block', type: 'model-part' }, params: B['model-part'].params, fields: B['model-part'].fields, build: p => B['model-part'].build(p),
+    why: '셀을 이루는 객체 하나 · 크기와 위치를 따로 바꿉니다' });
+  /** Motion of a placed model part at k = 0…1 of its cycle (robots swing their arm, index tables turn). */
+  const poseModel = (g, k) => poseRig(g.userData.rig, g.userData.kind, k);
 
   /** 90° curve in stored mm, about its node: point(u) and heading(u) for u = 0 (entry) … 1 (exit). */
   function curveGeom(n) { const p = Object.assign({}, B['curve-conveyor'].params, n.params), sg = p.turn === 'right' ? -1 : 1, q = n.transform.position, yaw = n.transform.rotation[2] * Math.PI / 180;
@@ -525,5 +587,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { plantGlb, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, poseModel, setFx, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

@@ -256,6 +256,12 @@ main{display:block;position:absolute;inset:0}
 #motionList .st{color:var(--mute)}
 #motionList .ng{color:var(--ng)}
 #motionList .ok{color:var(--ok)}
+#lineSec{margin-top:10px}#lineCells{display:grid;gap:6px;font-size:12px}
+#lineCells .lc{display:grid;grid-template-columns:10px 1fr auto;gap:2px 8px;align-items:center;padding:6px 8px;border:1px solid var(--line,#2a2b31);border-radius:5px}
+#lineCells .lc i{width:9px;height:9px;border-radius:50%;background:#6b6b70}
+#lineCells .lc i.busy{background:#3ddc63;box-shadow:0 0 6px #3ddc63}#lineCells .lc i.idle{background:#ffae42}#lineCells .lc i.blocked{background:#ff4a3d}
+#lineCells .lc b{font-weight:600}#lineCells .lc small{grid-column:2/4;color:var(--mute,#9a978f)}
+#lineCells .lc u{grid-column:2/4;height:4px;background:#2a2f36;border-radius:2px;overflow:hidden;text-decoration:none}#lineCells .lc u s{display:block;height:100%;background:#3ddc63}
 #motionList h4{margin:6px 0 0;font-size:10.5px;letter-spacing:.14em;font-family:var(--mono);color:var(--dim);font-weight:500}
 #safeWarn{color:var(--ng);font-size:12px;line-height:1.5}
 #cellPick{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--line);padding:8px 10px;border-radius:3px;font:inherit;font-size:12.5px}
@@ -298,6 +304,7 @@ main{display:block;position:absolute;inset:0}
           <div id="rlines"></div>
           <div id="ikwarn" hidden></div>
           <div id="safeWarn" hidden></div>
+          <div id="lineSec" hidden><div id="lineCells"></div></div>
         </div>
       </div>
       <div class="hud views" role="group" aria-label="시점">
@@ -495,7 +502,7 @@ main{display:block;position:absolute;inset:0}
   // exported as one GLB (realvirtual-models/example.glb, Draco) with its layout; shown when no save is asked for; never deleted
   const BUILTIN = [{ id: 'example', name: '예시 공정 · 감마 라인', note: '1 감마 조립 → 2 수동 페이스트 도포 → 3 브레이징 투입 (진공로 4대) → 4 감마 검사', kind: 'factory', builtin: true,
     glb: new URL('realvirtual-models/example.glb', location.href).href, timeline: new URL('realvirtual-models/example-timeline.json', location.href).href,
-    summary: { objects: 30, cells: 0, layout: { factory: { width: 64, depth: 28 } } } }];
+    summary: { objects: 4, cells: 4, layout: { factory: { width: 64, depth: 28 } } } }];
   let saves = BUILTIN.slice();
   const VARIANT_KO = { tube: '튜브형', plate: '플레이트형' };
   const label = s => { const m = s.summary || {}, d = s.created ? new Date(s.created) : null; return [s.name, VARIANT_KO[m.variant] || m.variant, m.slots ? '지그 ' + m.slots + '개' : '', d ? d.toLocaleDateString('ko-KR') : ''].filter(Boolean).join(' · '); };
@@ -667,6 +674,10 @@ main{display:block;position:absolute;inset:0}
     $('#progBar').style.width = (T ? (t / T) * 100 : 0) + '%';
     $('#clock').textContent = fmtT(t);
     $('#rlines').innerHTML = ''; $('#ikwarn').hidden = true;
+    // cells 1…4 as a whole (the example's cells are split into objects in ONE BUILDER; here each cell is one unit)
+    const LC = ROOT.line && ROOT.line.cells; $('#lineSec').hidden = !LC;
+    if (LC) { const KO = { busy: '가동', idle: '대기', blocked: '막힘' }, e = t => String(t).replace(/[<>&"]/g, '');
+      $('#lineCells').innerHTML = LC.map(c => { const s = at(c.state, f), u = at(c.util, f); return `<div class="lc"><i class="${s}"></i><b>${e(c.code)} ${e(c.name)}</b><span>${KO[s] || s}</span><small>생산 ${at(c.made, f)} · 불량 ${at(c.ng, f)} · 가동률 ${u}%</small><u><s style="width:${u}%"></s></u></div>`; }).join(''); }
     $('#tw').innerHTML = ['red', 'amber', 'green'].map(k => `<i class="${k} ${k === (on ? 'green' : 'amber') ? 'on' : ''}"></i>`).join('');
     const sc = $('[data-view="scale"]'); if (sc) sc.hidden = true;
   }

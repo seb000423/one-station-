@@ -10,7 +10,9 @@
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // no factory saved in ONE BUILDER yet: the default partner plant line (js/plant-machines.js)
-  const P = window.OnePlant, fdoc = read('one.build.factory') || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
+  // a stored factory that is still an older copy of the example (before .plant4) is replaced by the current example
+  const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant4');
+  const fdoc = (!oldEx && saved) || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
 
   // header: this page now shows the builder's factory
   const back = document.querySelector('.back'); back.href = '/build'; back.textContent = '← ONE BUILDER';
@@ -44,8 +46,12 @@
     return { it, code: x.tagPrefix.split('.').pop(), name: name || '설비', ct, ok, uph: ct ? 3600 / ct * ok : null };
   });
   const rated = machines.filter(x => x.uph), bn = rated.length ? rated.reduce((a, b) => (b.uph < a.uph ? b : a)) : null;
-  const ringAt = o => { const b = new T.Box3().setFromObject(o), s = b.getSize(new T.Vector3()), ctr = b.getCenter(new T.Vector3()); const g = stage.ring(Math.max(s.x, s.z) * 0.62 + 0.3); g.position.x = ctr.x; g.position.z = ctr.z; return g; };
-  if (bn) ringAt(objs.get(bn.it.id).o);
+  // the bottleneck: its cell outline on the floor in glowing amber (a thick frame just outside the cell's footprint)
+  const ringAt = o => { const b = new T.Box3().setFromObject(o), s = b.getSize(new T.Vector3()), ctr = b.getCenter(new T.Vector3()), w = s.x + 0.6, d = s.z + 0.6, t = 0.12;
+    const mat = new T.MeshStandardMaterial({ color: 0, emissive: new T.Color(stage.PAL.amber), emissiveIntensity: 3, roughness: 1, metalness: 0, transparent: true, opacity: 0.9, depthWrite: false }), g = new T.Group();
+    for (const [x, z, a, c] of [[0, -d / 2, w + t, t], [0, d / 2, w + t, t], [-w / 2, 0, t, d], [w / 2, 0, t, d]]) { const m = new T.Mesh(new T.PlaneGeometry(a, c).rotateX(-Math.PI / 2), mat); m.position.set(x, 0, z); g.add(m); }
+    g.position.set(ctr.x, 0.014, ctr.z); g.renderOrder = 1; g.traverse(m => m.layers.enableAll()); stage.world.add(g); return g; };
+  const bn0 = bn ? ringAt(objs.get(bn.it.id).o) : null;
 
   const flows = (fdoc.flows || []).filter(f => objs.has(f.from.split('.')[0]) && objs.has(f.to.split('.')[0]));
   const DEF_CT = 30; // a machine without a cycle time on its card runs at 30 s (shown as 가정)
@@ -62,7 +68,7 @@
   const parts = [];
   function newPart(p) { const g = L.workShape('box', PART[0] / 1000, PART[1] / 1000, PART[2] / 1000); g.traverse(o => { if (o.isMesh) o.material = okMat; }); root.add(g); const pt = { o: g, p: p.slice(), ng: false, anim: null }; setPos(pt, p); parts.push(pt); return pt; }
   function setPos(pt, p) { pt.p = p; SC.placeObj(pt.o, p, pt.yaw || 0); }
-  function markNg(pt) { pt.ng = true; pt.o.traverse(o => { if (o.isMesh) o.material = ngMat; }); }
+  function markNg(pt) { pt.ng = true; pt.ngAt = performance.now(); pt.o.traverse(o => { if (o.isMesh) o.material = ngMat; }); }
   // move a part along a polyline over d seconds, then call done
   const animate = (pt, pts, d, done) => { pt.anim = { pts, d: Math.max(0.05, d), t: 0, done }; };
 
@@ -80,6 +86,10 @@
       ct: mc?.ct || DEF_CT, assumed: !mc?.ct && it.path !== 'storage', ok: mc ? mc.ok : 1, ins: [], outs: [], inQ: null, inRes: false, cur: null, t: 0, outQ: null, feeding: false,
       busy: 0, blocked: 0, idle: 0, made: 0, ng: 0, buf: [], belts: [] };
     // conveyors inside a Machine Builder machine run while it works
+    // robots and index tables of the cell (its own objects when it is split, else its 모델 객체 blocks) move while it works
+    s.rigs = []; s.mt = 0;
+    if (it.local && it.item.params?.exploded) { for (const [, v] of objs) if (v.it.path === 'blocks' && v.it.item.params?.cell === id) s.rigs.push(v.o); }
+    else if (it.local) o.traverse(x => { if (x.name === 'model-part') s.rigs.push(x); });
     if (it.local) { const doc = SC.localDoc(it.local); if (doc) doc.nodes.forEach((n, i) => { const bd = L.BLOCKS[n.blockType]; if (bd?.conveyor && o.children[i]) s.belts.push({ g: o.children[i], bd, p: n.params, v: 0 }); }); }
     st.set(id, s); return s; }
 
@@ -155,13 +165,14 @@
       if (!s.cur && s.inQ && !s.inQ.anim) { s.cur = s.inQ; s.inQ = null; s.t = 0; }
       let state = 'idle';
       if (s.cur) { if (s.t < s.ct) { s.t = Math.min(s.ct, s.t + dt); setPos(s.cur, along(s.path, s.t / s.ct)); state = 'busy'; }
-        else { const pt = s.cur; if (pt.judged !== s.id) { pt.judged = s.id; if (rng() > s.ok) markNg(pt); }
+        else { const pt = s.cur; if (pt.judged !== s.id) { pt.judged = s.id; if (rng() > s.ok) { markNg(pt); s.alarmAt = performance.now(); } }
           if (pt.ng) { const b = s.ngBin, q = [b.at[0], b.at[1], 420 + Math.min(b.n, 4) * 30]; b.n++; s.ng++; s.cur = null; animate(pt, [pt.p, [pt.p[0], pt.p[1], pt.p[2] + 200], [q[0], q[1], Math.max(pt.p[2], q[2]) + 200], q], 2.5); }
           else if (s.sink) { const P = s.fin; if (P.parts.length >= P.slots.length) { for (const q of P.parts) { root.remove(q.o); parts.splice(parts.indexOf(q), 1); } P.parts = []; }
             const q = P.slots[P.parts.length]; P.parts.push(pt); s.cur = null; s.made++; animate(pt, [pt.p, [pt.p[0], pt.p[1], Math.max(pt.p[2], q[2]) + 200], [q[0], q[1], q[2] + 200], q], 2.5); }
           else if (!s.outQ) { s.outQ = pt; pt.link = route(s); s.cur = null; s.made++; }
           else state = 'blocked'; } }
       s[state] += dt; s.state = state;
+      if (state === 'busy') { s.mt += dt; for (const g of s.rigs) if (g.userData.rig) { const c = g.userData.cycle || 6; L.poseModel(g, (s.mt % c) / c); } }
       for (const b of s.belts) { if (state === 'busy') b.v += b.p.speed * dt || 300 * dt; b.bd.pose(b.g, b.p, { BELT: b.v }); }
     }
     for (const k of links) {
@@ -198,7 +209,7 @@
   $('links').innerHTML = links.map(k => `<div><b style="font-family:var(--mono)">${esc(k.from.code)} → ${esc(k.to.code)}</b> <span style="color:var(--mute)">${k.kind === 'direct' ? '바로 넘김' : VIA[k.via]}${k.ratio < 1 ? ` · ${Math.round(k.ratio * 100)}%` : ''}</span></div>`).join('') || '';
   const rowEls = mstations.map(s => ({ s, el: $('rows').querySelector(`[data-id="${s.id}"]`) }));
   $('rows').addEventListener('click', e => { const r_ = e.target.closest('[data-id]'); if (!r_) return; const s = st.get(r_.dataset.id); stage.fit(new T.Box3().setFromObject(s.o).expandByScalar(1.5), 1.2); });
-  let bnRing = null, bnId = null;
+  let bnRing = bn0, bnId = bn ? bn.it.id : null;
   function drawPanel() { const made = stations.filter(s => s.sink).reduce((a, s) => a + s.made, 0), ng = mstations.reduce((a, s) => a + s.ng, 0), wip = parts.filter(p => !p.ng && !stations.some(s => (s.fin && s.fin.parts.includes(p)) || (s.raw && s.raw.parts.includes(p)))).length;
     $('kOk').textContent = made; $('kNg').textContent = ng; $('kWip').textContent = wip; $('kUph').textContent = simT > 600 ? (made / simT * 3600).toFixed(1) : '–'; $('clock').textContent = fmt(simT);
     let top = null; for (const { s, el } of rowEls) { const T_ = s.busy + s.blocked + s.idle || 1, b = s.busy / T_, k = s.blocked / T_; const u = el.querySelectorAll('u'); u[0].style.width = b * 100 + '%'; u[1].style.width = k * 100 + '%';
@@ -210,7 +221,14 @@
   let xray = false;
   const chip = (txt, fn) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = txt; b.onclick = () => fn(b); $('views').appendChild(b); return b; };
   chip('전체', fitAll);
-  chip('X-RAY', b => { xray = !xray; if (xray) stage.addTwin(root, o => machines.some(x => objs.get(x.it.id)?.o === o)); stage.ghost(xray); b.classList.toggle('on', xray); });
+  // 단색: charcoal · grey · ivory with one amber accent (stage.studio), on by default; status lamps and screens keep their colour
+  let mono = true;
+  { const b = chip('단색', () => { mono = !mono; b.classList.toggle('on', mono); stage.studio(stage.world, mono); }); b.classList.add('on'); b.title = '단색 (차콜 · 회색 · 아이보리) / 원래 색'; }
+  stage.studio(stage.world, mono);
+  const xrayHot = o => machines.some(x => objs.get(x.it.id)?.o === o);
+  chip('X-RAY', b => { xray = !xray; if (xray) stage.addTwin(root, xrayHot); stage.ghost(xray); b.classList.toggle('on', xray); });
+  // a model that arrives while X-RAY is on gets its outline too (otherwise it would vanish in the ghost view)
+  L.onModel(g => { if (xray) stage.addTwin(g, xrayHot); if (mono) stage.studio(g, true); });
 
   // machine labels (projected HTML) with a state dot
   const tags = $('tags'), v3 = new T.Vector3(), box = new T.Box3();
@@ -229,11 +247,20 @@
     addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('play').click(); } }); }
   setTimeout(stage.resize, 0);
 
+  // status effects of the cells' own objects (tower lamps, sensors, operator screens), once a frame
+  const wp = new T.Vector3();
+  function updateFx() { const now = performance.now();
+    for (const s of mstations) { const there = [s.cur, s.inQ].filter(Boolean).map(pt => pt.o.position);
+      const f = { state: s.state || 'idle', alarm: s.alarmAt && now - s.alarmAt < 1500, title: s.name, made: s.made, ng: s.ng, k: s.cur ? s.t / s.ct : 0 };
+      for (const g of s.rigs) { const fx = g.userData.fx; if (!fx) continue;
+        if (fx.kind === 'sensor') { if (!g.userData.at) g.userData.at = g.getWorldPosition(new T.Vector3()); wp.copy(g.userData.at); f.hit = there.some(q => Math.hypot(q.x - wp.x, q.z - wp.z) < 0.9); }
+        L.setFx(g, f); } } }
+
   $('loading').hidden = true;
   let last = performance.now(), fr = 0;
   const loop = now => { const real = Math.min(0.1, (now - last) / 1000); last = now;
     if (playing) { let left = real * speed; while (left > 1e-6) { const h = Math.min(0.1, left); step(h); left -= h; } }
-    stage.render(); updateTags(); if (links.length && (fr++ % 10 === 0)) drawPanel(); requestAnimationFrame(loop); };
+    updateFx(); stage.render(); updateTags(); if (links.length && (fr++ % 10 === 0)) drawPanel(); requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
   window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; } };
 })();
