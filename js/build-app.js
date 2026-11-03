@@ -247,7 +247,7 @@
     placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
   function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
     if (!keep) endPlace();
-    ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); }); }
+    ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
   // drag straight from the palette onto the canvas works too
   $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
   $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
@@ -264,7 +264,10 @@
       const items = factoryItems(doc), groups = {};
       for (const it of items) { const g = it.path === 'machines' ? '설비' : (L.FACTORY[it.def] ? L.FACTORY_GROUPS.find(x => x.id === L.FACTORY[it.def].group)?.name : '기타') || '기타'; (groups[g] || (groups[g] = [])).push(it); }
       html += `<div data-id="${esc(doc.building.slabs[0]?.id || '')}" class="${sel === doc.building.slabs[0]?.id ? 'on' : ''}"><code>바닥</code><span>${esc(doc.meta.name)} · ${((slabRect(doc).x1 - slabRect(doc).x0) / 1000).toFixed(1)} × ${((slabRect(doc).y1 - slabRect(doc).y0) / 1000).toFixed(1)} m</span></div>`;
-      for (const [g, list] of Object.entries(groups)) { html += `<div class="grp">${esc(g)} · ${list.length}</div>`; for (const it of list) { n++; html += `<div data-id="${it.id}" class="${selIds().includes(it.id) ? 'on' : ''}"><code>${esc(itemCode(it))}</code><span>${esc(itemName(it))}</span></div>`; } }
+      if (doc.flows.length) { groups['공정 흐름'] = null; }
+      for (const [g, list] of Object.entries(groups)) { if (!list) { html += `<div class="grp">공정 흐름 · ${doc.flows.length}</div>`; const nm = end => { const x = items.find(y => y.id === end.split('.')[0]); return x ? itemCode(x) || itemName(x) : '?'; };
+          for (const f of doc.flows) { n++; html += `<div data-id="${f.id}" class="${sel === f.id ? 'on' : ''}"><code>${esc(VIA[f.via || 'auto'])}</code><span>${esc(nm(f.from))} → ${esc(nm(f.to))}</span></div>`; } continue; }
+        html += `<div class="grp">${esc(g)} · ${list.length}</div>`; for (const it of list) { n++; html += `<div data-id="${it.id}" class="${selIds().includes(it.id) ? 'on' : ''}"><code>${esc(itemCode(it))}</code><span>${esc(itemName(it))}</span></div>`; } }
     } else {
       html += `<div data-id="" class="${!sel ? 'on' : ''}"><code>설비</code><span>${esc(doc.meta.name)}</span></div>`;
       const kids = id => doc.nodes.filter(x => (x.parent || null) === id);
@@ -290,8 +293,13 @@
       box.innerHTML = `<div class="sec"><h2>${many.length}개 선택 <small>Shift+클릭으로 더하거나 빼기</small></h2><p class="why">끌거나 아래 조작 패드로 한꺼번에 옮기고 돌립니다. 회전은 묶음 가운데를 중심으로 돕니다.</p><div class="taglist">${names.map(n => `<span>${esc(n)}</span>`).join('')}</div></div>${teleop(tab === 'factory')}`;
       return; }
     if (tab === 'factory') {
-      const it = sel && factoryItems(doc).find(x => x.id === sel), slab = doc.building.slabs.find(s => s.id === sel);
-      if (slab) { const r = slabRect(doc); html = `<div class="sec"><h2>바닥 슬래브</h2><p class="why">모든 배치와 이동 경로가 놓이는 기준면입니다. 원점은 왼쪽 아래(입고) 모서리입니다.</p><div class="props">${field(num('w', '가로', 'm', 0.5), (r.x1 - r.x0) / 1000, 'slab.w')}${field(num('d', '세로', 'm', 0.5), (r.y1 - r.y0) / 1000, 'slab.d')}<span class="k">공장 이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"></div></div>`; }
+      const it = sel && factoryItems(doc).find(x => x.id === sel), slab = doc.building.slabs.find(s => s.id === sel), flow = sel && doc.flows.find(f => f.id === sel);
+      if (flow) { const nm = end => { const x = factoryItems(doc).find(y => y.id === end.split('.')[0]); return x ? (itemCode(x) ? itemCode(x) + ' ' : '') + itemName(x) : '?'; };
+        html = `<div class="sec"><h2>공정 흐름</h2><p class="why">${esc(nm(flow.from))} 출구 → ${esc(nm(flow.to))} 입구</p><div class="props">
+          <span class="k">옮기는 수단</span><select data-k="flow.via">${Object.entries(VIA).map(([v, t]) => `<option value="${v}"${(flow.via || 'auto') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+          ${field(num('ratio', '분기 비율', '0~1', 0.05), flow.ratio, 'flow.ratio')}</div>
+          <p class="why" style="margin-top:10px">자동: 두 끝이 맞닿으면 컨베이어, 아니면 공장에 있는 AMR·지게차·작업자 중 가까운 것이 옮깁니다.</p><div class="acts"><button class="btn" data-act="del">흐름 삭제</button></div></div>`; }
+      else if (slab) { const r = slabRect(doc); html = `<div class="sec"><h2>바닥 슬래브</h2><p class="why">모든 배치와 이동 경로가 놓이는 기준면입니다. 원점은 왼쪽 아래(입고) 모서리입니다.</p><div class="props">${field(num('w', '가로', 'm', 0.5), (r.x1 - r.x0) / 1000, 'slab.w')}${field(num('d', '세로', 'm', 0.5), (r.y1 - r.y0) / 1000, 'slab.d')}<span class="k">공장 이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"></div></div>`; }
       else if (it) {
         const d = L.FACTORY[it.def] || {}, x = it.item, pos = x.transform ? x.transform.position : [(x.from[0] + x.to[0]) / 2, (x.from[1] + x.to[1]) / 2, 0];
         html = `<div class="sec"><h2>${esc(itemName(it))} <small>${esc(itemCode(it))}</small></h2>${d.why ? `<p class="why">${esc(d.why)}</p>` : ''}<div class="props">`;
@@ -360,7 +368,7 @@
   // move every selected object by the same amount, as one undo step (children ride along with their parent)
   function moveSelBy(by) { const ids = selIds().filter(x => !isSlab(x)); if (!ids.length) return;
     ed().batch(ids.length > 1 ? `move ${ids.length}` : 'move', () => {
-      if (tab === 'factory') for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true);
+      if (tab === 'factory') { for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true); autoLink(ids); }
       else { const doc = ED.machine.doc, set = new Set(ids), up = n => { for (let p = n.parent; p; p = doc.nodes.find(x => x.id === p)?.parent) if (set.has(p)) return true; return false; };
         for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); }
         if (ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]), p = n.transform.position, sn = conveyorSnap(n, p, new Set());
@@ -416,6 +424,7 @@
     const k = e.target.dataset.k; if (!k || !sel && !k.startsWith('meta.') && !k.startsWith('card.')) return;
     const raw = e.target.value, v = e.target.type === 'number' ? (raw === '' ? null : +raw) : raw, doc = ed().doc;
     if (k === 'meta.name') { exec('set_meta', { name: raw || (tab === 'factory' ? '공장' : '설비') }); return; }
+    if (k === 'flow.via') { exec('set_flow', { id: sel, via: raw }); return; } if (k === 'flow.ratio') { exec('set_flow', { id: sel, ratio: Math.max(0, Math.min(1, +raw)) }); return; }
     if (k.startsWith('card.')) { const ck = k.slice(5); exec('set_card', { [ck]: ck === 'inlet' || ck === 'outlet' ? (raw || null) : v }); return; }
     if (k === 'slab.w' || k === 'slab.d') { const r = slabRect(doc), w = k === 'slab.w' ? v * 1000 : r.x1 - r.x0, d = k === 'slab.d' ? v * 1000 : r.y1 - r.y0; if (w > 0 && d > 0) exec('set_slab', { polygon: [[r.x0, r.y0], [r.x0 + w, r.y0], [r.x0 + w, r.y0 + d], [r.x0, r.y0 + d]] }); return; }
     if (k === 'name') { exec('rename', { id: sel, name: raw }); return; }
@@ -431,7 +440,7 @@
 
   function rotateSel() { turnSel(90); }
   function deleteSel() { if (!sel || mode === 'run' || xray) return; if (isSlab(sel)) { toast('바닥 슬래브는 지울 수 없습니다. 크기를 바꿔 주세요'); return; }
-    const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
+    const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) || ed().doc.flows.some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
     if (ids.length > 1) toast(`${ids.length}개 삭제 · Ctrl+Z로 되돌립니다`); select(null); }
   function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [];
     ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } } }); selectMany(out); }
@@ -545,6 +554,7 @@
     if (!ex) return near; tmpBox.setFromObject(objs.get(ex).obj); const s = tmpBox.getSize(pc); return s.x * s.z > 1 || s.y < 0.05 ? near : ex; }
   renderer.domElement.addEventListener('pointerdown', e => {
     if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
+    if (e.button === 0 && !xray && tab === 'factory' && mode === 'edit') { const port = pickPort(e); if (port && port.kind === 'outlet' && startLink(e, port)) return; }
     if (e.button !== 0 || xray) return; const id = pick(e); // X-ray is a view-only mode: dragging only turns the view
     if (!id) { if (e.shiftKey && mode === 'edit') { startBox(e); return; } select(null); return; }
     if (e.shiftKey && mode === 'edit') { toggleSel(id); return; }
@@ -555,6 +565,7 @@
   });
   renderer.domElement.addEventListener('pointermove', e => {
     if (placing && !drag) { trackPlace(e); return; }
+    if (link) { moveLink(e); return; }
     if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
@@ -562,7 +573,8 @@
       showSnap(sn); if (sn) { const s2 = toS([sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); d.x = s2.x; d.z = s2.z; } }
     drag.os.forEach((o, i) => o.position.set(drag.starts[i].x + d.x, drag.starts[i].y, drag.starts[i].z + d.z)); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
   });
-  const endDrag = () => {
+  const endDrag = e => {
+    if (link) { endLink(e); return; }
     if (!drag) return; showSnap(null); const { d, moved } = drag; drag = null; controls.enabled = true; if (!moved || !d) return;
     const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
@@ -688,9 +700,43 @@
   function drawPorts() { portGrp.clear(); portAnchors = [];
     if (tab === 'machine') { const P = SCN.portsOf(ED.machine.doc); if (!ED.machine.doc.nodes.length) return;
       portAnchors.push(['in', addPortArrow(P.inlet.pos, P.inlet.dir, 'in', 1.2, true)], ['out', addPortArrow(P.outlet.pos, P.outlet.dir, 'out', 1.2, true)]); }
-    else for (const it of factoryItems(ED.factory.doc)) { if (it.path !== 'machines') continue; const P = SCN.instancePorts(it); if (!P) continue; const r = (it.item.transform.rotation[2] || 0) * Math.PI / 180, dir = [Math.cos(r), Math.sin(r)];
-      const off = (p, k) => [p[0] + dir[0] * k, p[1] + dir[1] * k, p[2]]; // just outside the machine, pointing along the flow
-      addPortArrow(off(P.inlet, -450), dir, 'in', 3, false); addPortArrow(off(P.outlet, 450), dir, 'out', 3, false); } }
+    else { for (const it of factoryItems(ED.factory.doc)) { if (it.path !== 'machines' && it.path !== 'storage') continue; const P = portsF(it); if (!P) continue;
+        addPortArrow(P.inA, P.dir, 'in', 3, false); const o = addPortArrow(P.outA, P.dir, 'out', 3, false); portGrp.children[portGrp.children.length - 1].userData.port = { id: it.id, kind: 'outlet' }; portGrp.children[portGrp.children.length - 2].userData.port = { id: it.id, kind: 'inlet' }; }
+      drawFlows(); } }
+  // factory ports: the arrows sit just outside the object, pointing along the flow
+  function portsF(it) { const P = SCN.instancePorts(it); if (!P) return null; const off = (p, k) => [p[0] + P.dir[0] * k, p[1] + P.dir[1] * k, p[2]]; return Object.assign(P, { inA: off(P.inlet, -450), outA: off(P.outlet, 450) }); }
+
+  /* flows (공정 흐름): drag from an amber 출구 arrow onto the next machine (or rack) to link them; machines whose
+     출구 and 입구 meet get linked by conveyor automatically. Each link shows what carries the part. */
+  const VIA = { auto: '자동', conveyor: '컨베이어', amr: 'AMR', forklift: '지게차', worker: '작업자' };
+  const flowGrp = new T.Group(); ov.add(flowGrp); const flowEls = new Map();
+  const flowMat = new T.LineDashedMaterial({ color: 0xffae42, dashSize: 0.35, gapSize: 0.2, transparent: true, opacity: 0.95 });
+  const flowTube = new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.7 }), flowTubeOn = new T.MeshBasicMaterial({ color: 0xffc46b });
+  function flowCurve(a, b) { const A = toS([a[0], a[1], 60]), B = toS([b[0], b[1], 60]), M = A.clone().add(B).multiplyScalar(0.5); M.y += Math.min(3, A.distanceTo(B) * 0.18) + 0.2; return new T.QuadraticBezierCurve3(A, M, B); }
+  function drawFlows() { flowGrp.traverse(o => { if (o.geometry && o.geometry !== arrowGeo) o.geometry.dispose(); }); flowGrp.clear(); const doc = ED.factory.doc, items = new Map(factoryItems(doc).map(it => [it.id, it])), seen = new Set();
+    for (const f of doc.flows) { const a = items.get(f.from.split('.')[0]), b = items.get(f.to.split('.')[0]); if (!a || !b) continue; const pa = portsF(a), pb = portsF(b); if (!pa || !pb) continue;
+      const cv = flowCurve(pa.outA, pb.inA), on = sel === f.id; flowGrp.add(new T.Mesh(new T.TubeGeometry(cv, 40, on ? 0.05 : 0.035, 6), on ? flowTubeOn : flowTube));
+      for (const t of [0.3, 0.7]) { const tip = new T.Mesh(arrowGeo, portMat.out); tip.scale.setScalar(2); const p1 = cv.getPoint(t + 0.03), p0 = cv.getPoint(t); tip.position.copy(p1); tip.rotation.y = Math.atan2(-(p1.z - p0.z), p1.x - p0.x); flowGrp.add(tip); }
+      let el = flowEls.get(f.id); if (!el) { el = document.createElement('button'); el.className = 'flowlbl'; el.dataset.flow = f.id; $('labels').appendChild(el); flowEls.set(f.id, el); }
+      el.textContent = VIA[f.via || 'auto'] + (f.ratio < 1 ? ` · ${Math.round(f.ratio * 100)}%` : ''); el.userData = cv.getPoint(0.5); el.classList.toggle('on', sel === f.id); seen.add(f.id); }
+    for (const [id, el] of flowEls) if (!seen.has(id)) { el.remove(); flowEls.delete(id); } }
+  function drawFlowLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const el of flowEls.values()) { if (tab !== 'factory' || xray || !el.userData) { el.style.display = 'none'; continue; }
+      const v = el.userData.clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
+  $('labels').addEventListener('click', e => { const b = e.target.closest('[data-flow]'); if (b) select(b.dataset.flow); });
+  let link = null; const linkLine = new T.Line(new T.BufferGeometry(), flowMat); linkLine.visible = false; ov.add(linkLine);
+  function pickPort(e) { setNdc(e); const h = ray.intersectObjects(portGrp.children, true).find(x => x.object.parent?.userData.port || x.object.userData.port); return h ? (h.object.parent.userData.port || h.object.userData.port) : null; }
+  function startLink(e, port) { const it = factoryItems(ED.factory.doc).find(x => x.id === port.id), P = it && portsF(it); if (!P) return false; link = { from: port.id, a: P.outA }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId); return true; }
+  function moveLink(e) { setNdc(e); plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return; const b = fromS(hit); const cv = flowCurve(link.a, b); linkLine.geometry.dispose(); linkLine.geometry = new T.BufferGeometry().setFromPoints(cv.getPoints(30)); linkLine.computeLineDistances(); linkLine.visible = true; }
+  function endLink(e) { const L0 = link; link = null; linkLine.visible = false; controls.enabled = true; const port = pickPort(e); let to = port && port.kind === 'inlet' ? port.id : null;
+    if (!to) { const id = pickExact(); const it = id && factoryItems(ED.factory.doc).find(x => x.id === id); if (it && (it.path === 'machines' || it.path === 'storage')) to = id; }
+    if (!to || to === L0.from) { toast('다음 설비(또는 랙) 위에서 놓으면 이어집니다'); return; }
+    const nid = exec('connect_flow', { from: `${L0.from}.outlet`, to: `${to}.inlet` }); if (nid) { select(nid); toast('흐름을 이었습니다 · 오른쪽에서 옮기는 수단을 고릅니다'); } }
+  // after a machine moves or is placed: link it to a neighbour whose ports meet its own (≤ 800 mm), carried by conveyor
+  function autoLink(ids) { const doc = ED.factory.doc, items = factoryItems(doc).filter(it => it.path === 'machines'), P = new Map(items.map(it => [it.id, SCN.instancePorts(it)])); let n = 0;
+    for (const id of ids) { const me = P.get(id); if (!me) continue;
+      for (const [oid, o] of P) { if (oid === id || !o) continue;
+        for (const [fa, fb, A, B] of [[id, oid, me.outlet, o.inlet], [oid, id, o.outlet, me.inlet]]) if (Math.hypot(A[0] - B[0], A[1] - B[1]) <= 800 && !doc.flows.some(f => f.from === `${fa}.outlet` && f.to === `${fb}.inlet`) && !doc.flows.some(f => f.from === `${fa}.outlet`)) { if (exec('connect_flow', { from: `${fa}.outlet`, to: `${fb}.inlet`, via: 'conveyor' }, true)) n++; } } }
+    if (n) setTimeout(() => toast(`맞닿은 설비 ${n}곳을 컨베이어 흐름으로 이었습니다`), 0); }
   function drawPortLabels() { const r = renderer.domElement.getBoundingClientRect(); for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray) { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height - 8) + 'px'; } }
   function refresh() { syncScene(); drawPorts(); drawTree(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); if (tab === 'machine') drawIo(); }
@@ -741,7 +787,7 @@
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (mode === 'run' && tab === 'machine') { stepRun(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
-    stage.render(); drawLabels(); drawPortLabels(); requestAnimationFrame(loop);
+    stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 
   // first visit: a small example in each document so the screens are not empty

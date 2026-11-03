@@ -122,7 +122,7 @@ export const factoryCommands = {
   }),
   connect_flow: def({
     scope: 'factory', description: '자재 흐름: 설비 출구 → 설비 입구 ("인스턴스id.소켓id"), 분기 비율',
-    args: z.object({ from: z.string(), to: z.string(), ratio: z.number().min(0).max(1).default(1) }),
+    args: z.object({ from: z.string(), to: z.string(), ratio: z.number().min(0).max(1).default(1), via: z.enum(['auto', 'conveyor', 'amr', 'forklift', 'worker']).default('auto') }),
     run: (d: Factory, a, ctx) => {
       for (const end of [a.from, a.to]) {
         const mid = end.split('.')[0]!;
@@ -131,7 +131,17 @@ export const factoryCommands = {
       if (a.from.split('.')[0] === a.to.split('.')[0]) throw new CommandError('a flow cannot start and end at the same object');
       const out = d.flows.filter(f => f.from === a.from).reduce((s, f) => s + f.ratio, 0);
       if (out + a.ratio > 1 + 1e-9) throw new CommandError(`ratios out of ${a.from} would add up to ${out + a.ratio} (> 1)`);
-      const id = ctx.newId(); d.flows.push({ id, from: a.from, to: a.to, ratio: a.ratio }); return id;
+      if (d.flows.some(f => f.from === a.from && f.to === a.to)) throw new CommandError(`flow ${a.from} → ${a.to} already exists`);
+      const id = ctx.newId(); d.flows.push({ id, from: a.from, to: a.to, ratio: a.ratio, via: a.via }); return id;
+    },
+  }),
+  set_flow: def({
+    scope: 'factory', description: '흐름의 운반 수단 · 분기 비율 변경',
+    args: z.object({ id: z.string(), via: z.enum(['auto', 'conveyor', 'amr', 'forklift', 'worker']).optional(), ratio: z.number().min(0).max(1).optional() }),
+    run: (d: Factory, a) => {
+      const f = d.flows.find(x => x.id === a.id); if (!f) throw new CommandError(`no flow ${a.id}`);
+      if (a.ratio !== undefined) { const out = d.flows.filter(x => x.from === f.from && x !== f).reduce((s, x) => s + x.ratio, 0); if (out + a.ratio > 1 + 1e-9) throw new CommandError(`ratios out of ${f.from} would add up to ${out + a.ratio} (> 1)`); f.ratio = a.ratio; }
+      if (a.via) f.via = a.via;
     },
   }),
   set_meta: def({

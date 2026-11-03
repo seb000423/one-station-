@@ -40,6 +40,15 @@ describe('factory edit API', () => {
     expect(() => e.batch('bad', () => { e.exec('move', { id: a, by: [500, 0] }); e.exec('move', { id: 'nope', by: [1, 0] }); })).toThrow();
     expect(e.doc).toEqual(mid);
   });
+  it('flows carry a transport kind; set_flow changes it; duplicates are refused', () => {
+    const e = new Editor('factory', blank(), { newId: ids() });
+    const a = e.exec('place_machine', { ref: 'press-station@1', position: [2000, 4000] }) as string;
+    const b = e.exec('place_machine', { ref: 'press-station@1', position: [6000, 4000] }) as string;
+    const f = e.exec('connect_flow', { from: `${a}.outlet`, to: `${b}.inlet` }) as string;
+    expect(e.doc.flows[0]!.via).toBe('auto');
+    e.exec('set_flow', { id: f, via: 'amr' }); expect(e.doc.flows[0]!.via).toBe('amr');
+    expect(() => e.exec('connect_flow', { from: `${a}.outlet`, to: `${b}.inlet`, ratio: 0 })).toThrow(/already exists/);
+  });
   it('a new command after undo drops the redo stack', () => {
     const e = new Editor('factory', blank(), { newId: ids() });
     e.exec('add_column', { position: [0, 0] });

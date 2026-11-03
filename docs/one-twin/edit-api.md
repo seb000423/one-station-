@@ -20,7 +20,8 @@
 | `add_path` | 동선(AMR · 보행 · 지게차) 폴리라인 | `kind`, `points`, `oneway?`, `name?` |
 | `add_storage` | 랙 · 바닥 보관 · 버퍼 | `kind`, `position`, `yaw?`, `capacity?`, `params?`, `name?` |
 | `add_drop` | 유틸리티 드롭 (전원 · 에어 · 가스 · 물) | `kind`, `position`, `params?`, `name?` |
-| `connect_flow` | 자재 흐름: 설비 출구 → 설비 입구 ("인스턴스id.소켓id"), 분기 비율 | `from`, `to`, `ratio?` |
+| `connect_flow` | 자재 흐름: 설비 출구 → 설비 입구 ("인스턴스id.소켓id"), 분기 비율 | `from`, `to`, `ratio?`, `via?` |
+| `set_flow` | 흐름의 운반 수단 · 분기 비율 변경 | `id`, `via?`, `ratio?` |
 | `set_meta` | 공장 이름 · 사이트 변경 | `name?`, `site?` |
 | `set_slab` | 바닥 슬래브 외곽(다각형, mm) 설정. id가 없으면 첫 슬래브, 슬래브가 없으면 새로 만듦. 반환: 슬래브 id | `id?`, `polygon`, `thickness?`, `finish?` |
 | `add_roof` | 지붕 배치 (position = 지붕 중심, params: w·d mm, eave 처마 높이, type flat|gable). 반환: 새 id | `position`, `yaw?`, `params?`, `name?` |

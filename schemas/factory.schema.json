@@ -855,6 +855,18 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1
+          },
+          "via": {
+            "default": "auto",
+            "description": "what carries the part: auto = conveyor when the ends meet, else the nearest mover kind",
+            "type": "string",
+            "enum": [
+              "auto",
+              "conveyor",
+              "amr",
+              "forklift",
+              "worker"
+            ]
           }
         },
         "required": [

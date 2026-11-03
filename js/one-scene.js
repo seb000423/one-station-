@@ -74,7 +74,8 @@
     function instancePorts(it) { let P = null;
       if (it.local) { const m = opt.lib()[it.local.id], doc = m && (m.versions[it.local.v] || m.versions[Object.keys(m.versions).pop()]); if (doc) P = portsOf(doc); }
       else if (it.def && L.FACTORY[it.def]?.size) P = boxPorts(L.FACTORY[it.def].size);
-      if (!P) return null; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item) }; }
+      else if (it.path === 'storage') P = boxPorts([2400, 1200, 0]);
+      if (!P) return null; const r = (it.item.transform.rotation[2] || 0) * Math.PI / 180; return { inlet: toFactory(P.inlet.pos, it.item), outlet: toFactory(P.outlet.pos, it.item), dir: [Math.cos(r), Math.sin(r)] }; }
     return { factoryItems, slabRect, placeObj, buildFactoryObj, buildLocalMachine, toS, portCandidates, portAt, portsOf, instancePorts };
   }
   window.OneScene = { create };

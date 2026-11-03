@@ -36,6 +36,7 @@ export const Flow = z.object({
   from: z.string().describe('machineInstanceId.outletSocketId'),
   to: z.string().describe('machineInstanceId.inletSocketId'),
   ratio: z.number().min(0).max(1).default(1),
+  via: z.enum(['auto', 'conveyor', 'amr', 'forklift', 'worker']).default('auto').describe('what carries the part: auto = conveyor when the ends meet, else the nearest mover kind'),
 });
 export const Storage = z.object({ ...Placed, kind: z.enum(['rack', 'floor', 'buffer']), capacity: z.number().int().nonnegative().nullable().default(null) });
 export const Mover = z.object({ ...Placed, kind: z.enum(['worker', 'amr', 'forklift']) });
