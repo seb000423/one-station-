@@ -317,7 +317,7 @@
     const r = canvas.getBoundingClientRect(), s = sim.snapshot(), bn = lastResult && simT > 300 ? lastResult.bottleneck : null;
     for (const [id, d] of Object.entries(TAGS)) {
       const x = STATION_X[id]; v3.set(x, 1.75, id === 'A0' ? 1.3 : 1.3).project(camera);
-      const vis = !stage.ghosting && v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; d.style.display = vis ? '' : 'none'; if (!vis) continue;
+      const vis = v3.z < 1 && Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05; d.style.display = vis ? '' : 'none'; if (!vis) continue;
       d.style.left = ((v3.x + 1) / 2 * r.width) + 'px'; d.style.top = ((1 - v3.y) / 2 * r.height) + 'px';
       d.querySelector('i').className = 'st-' + (s.states[id] || 'idle'); d.classList.toggle('bn', id === bn);
       d.title = `${id} ${NAME(id)} · ${STATE_KO[s.states[id]] || ''}`;
@@ -341,13 +341,13 @@
   }
   const bindRange = (id, out, fmt, set) => { const el = $(id); const f = () => { $(out).textContent = fmt(+el.value); }; el.oninput = f; f(); return () => set(+el.value); };
   const getPal = bindRange('pal', 'palO', v => v, v => (cfg.pallets = v)), getSeed = bindRange('seed', 'seedO', v => v, v => (cfg.seed = v)), getHor = bindRange('hor', 'horO', v => v + ' h', v => (cfg.horizon = v * 3600));
-  $('apply').onclick = () => { $('scn').hidden = true; cfg.stations = undefined; getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; startFlow(); };
+  $('apply').onclick = () => { $('scn').hidden = true; cfg.stations = undefined; getPal(); getSeed(); getHor(); cfg.deterministic = $('det').checked; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true); };
   // run a scenario from the compare / optimisation pages (pallets + per-station overrides) in 3D
   function load(params, label) {
     cfg.pallets = params.pallets ?? 8; cfg.stations = params.stations && Object.keys(params.stations).length ? params.stations : undefined; cfg.deterministic = !!params.deterministic;
     $('pal').value = cfg.pallets; $('pal').oninput(); $('det').checked = cfg.deterministic;
     $('scn').textContent = label || ''; $('scn').hidden = !label;
-    if (!root) return; startFlow(label);
+    if (!root) return; newSim(); buildTags(); frame(31); updatePanel(); setPlaying(true);
   }
 
 
@@ -358,6 +358,13 @@
   let flow = null, studioOn = true, keepSpeed = speed;
   const FLOW_STEPS = ['권한 판정', '가상 검증', '실물 실행'];
   { const box = $('flow'); box.innerHTML = '<ol>' + FLOW_STEPS.map((t, i) => `<li data-s="${i}"><i></i><span>${t}</span></li>`).join('') + '</ol><p id="flowMsg"></p>'; }
+  let xray = false;
+  const ACCENT = o => /^(Part|Pal)_\d+(_|$)/.test(o.name || '');
+  const setXray = on => { if (!root) return; xray = on; if (on) { stage.addTwin(stage.world, ACCENT); if (partTpl) stage.addTwin(partTpl, () => true); if (palTpl) stage.addTwin(palTpl, () => true); }
+    stage.ghost(on); $('xrayChip').classList.toggle('on', on); };
+  { const b = document.createElement('button'); b.className = 'chip'; b.id = 'xrayChip'; b.textContent = 'X-RAY'; b.title = 'X-ray: 선으로 투시해서 보기 (부품·팔레트는 앰버) · 단축키 X';
+    b.onclick = () => setXray(!xray); $('views').appendChild(b);
+    window.addEventListener('keydown', e => { if ((e.key === 'x' || e.key === 'X') && e.target === document.body) setXray(!xray); }); }
   { const b = document.createElement('button'); b.className = 'chip on'; b.id = 'studioChip'; b.textContent = '단색'; b.title = '단색 (차콜 · 회색 · 아이보리) / 원래 색';
     b.onclick = () => { studioOn = !studioOn; b.classList.toggle('on', studioOn); if (root) stage.studio(stage.world, studioOn); }; $('views').appendChild(b); }
   const flowMsg = t => { $('flowMsg').textContent = t; };
@@ -416,7 +423,7 @@
     sceneRoot.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     stage.world.add(sceneRoot);
     LINE_BOX = new THREE.Box3().setFromObject(root); stage.setBounds(LINE_BOX); setView('전체');
-    stage.addTwin(sceneRoot); stage.studio(sceneRoot, studioOn);
+    stage.studio(sceneRoot, studioOn);
     TR = {};
     for (const tr of gltf.animations[0].tracks) { const { nodeName, propertyName } = THREE.PropertyBinding.parseTrackName(tr.name); (TR[nodeName] || (TR[nodeName] = {}))[propertyName] = tr.createInterpolant(); }
     partTpl = root.getObjectByName('Part_1_X').clone(true); palTpl = root.getObjectByName('Pal_1_X').clone(true);
@@ -431,7 +438,7 @@
     lampNG = root.getObjectByName('E_OKNG_NG');
     { const tr = TR.A_Tote?.scale; if (tr) for (let c = MAP.tote.a; c < MAP.tote.back; c += 0.05) if (tr.evaluate(c)[0] < 0.5) { toteUp = c; break; } }
     newSim(); buildTags(); frame(31); updatePanel();
-    $('loading').hidden = true; startFlow();
+    $('loading').hidden = true; setPlaying(true);
     let last = performance.now(), panelAt = 0;
     const loop = now => {
       const dtw = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
