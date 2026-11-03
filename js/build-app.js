@@ -161,7 +161,8 @@
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
       $('palTitle').innerHTML = '블록 팔레트';
-      for (const c of L.MACHINE_CATS) sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
+      for (const c of L.MACHINE_CATS) { sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
+        if (c.id === 'transport') sec('shapes', '컨베이어 형태 (ㄱ·ㄴ·U·2층)', Object.entries(SHAPES).map(([id, x]) => ({ key: 's:' + id, name: x.name, code: x.code, why: x.why }))); }
     }
     box.innerHTML = html;
   }
@@ -222,8 +223,8 @@
     const w0 = want || [0, 0]; if (clear(w0[0], w0[1])) return w0;
     const step = 50, out = []; for (let x = -BW / 2 + fw / 2; x <= BW / 2 - fw / 2 + 1; x += step) for (let y = -BD / 2 + fd / 2; y <= BD / 2 - fd / 2 + 1; y += step) out.push([x, y]);
     out.sort((a, b) => Math.hypot(a[0] - w0[0], a[1] - w0[1]) - Math.hypot(b[0] - w0[0], b[1] - w0[1])); return out.find(q => clear(q[0], q[1])) || null; }
-  function addBlock(id, at, onto, yaw = 0) {
-    const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
+  function addBlock(id, at, onto, yaw = 0, over) {
+    const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)), over || {});
     const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
     let pos, parent = null;
     if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null;
@@ -238,12 +239,29 @@
     const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent, position: pos, params, joints: d.joints(P, params), io: d.io(P, params) });
     if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true);
     if (nid) { select(nid); toast(`${P} ${d.name}: 축 ${d.joints(P, params).length} · 태그 ${d.io(P, params).length} 추가`); }
+    return nid;
   }
   /* placing: the chosen asset follows the pointer as a see-through preview; a click puts it there (Shift keeps placing) */
   let placing = null;
+  /* conveyor layouts (컨베이어 형태): several conveyors placed at once, already joined so a work passes from one to the
+     next (90° side transfers), plus a two-level line whose lifters carry the work between the levels.
+     Piece positions are mm about the layout origin, yaw in degrees; X = 투입 → 배출. */
+  const CV = 'roller-conveyor';
+  const SHAPES = {
+    'l-right': { name: 'ㄱ자 (오른쪽으로 꺾임)', code: 'CV×2', why: '직선 3 m 끝에서 오른쪽으로 90° 꺾어 3 m', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: -1750, yaw: -90 }] },
+    'l-left': { name: 'ㄴ자 (왼쪽으로 꺾임)', code: 'CV×2', why: '직선 3 m 끝에서 왼쪽으로 90° 꺾어 3 m', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: 1750, yaw: 90 }] },
+    'u-turn': { name: 'U자 (되돌아옴)', code: 'CV×3', why: '나가서 두 번 꺾어 같은 쪽으로 되돌아오는 라인', pieces: [{ t: CV, x: 0, y: 0, yaw: 0 }, { t: CV, x: 1250, y: 1750, yaw: 90 }, { t: CV, x: -500, y: 3000, yaw: 180 }] },
+    'two-level': { name: '2층 (위 투입 · 아래 회송)', code: 'CV×2 LFT×2', why: '위 단은 작업, 아래 단은 빈 팔레트 회송. 양 끝 리프터가 단 사이를 오르내립니다',
+      pieces: [{ t: CV, x: 0, y: 0, yaw: 0, p: { h: 900 } }, { t: CV, x: 0, y: 0, yaw: 180, p: { h: 450, w: 300 } }, { t: 'lifter', x: 1800, y: 0, yaw: 0, p: { stroke: 450 } }, { t: 'lifter', x: -1800, y: 0, yaw: 0, p: { stroke: 450 } }] },
+  };
+  const rotXY = (x, y, deg) => { const r = deg * Math.PI / 180; return [x * Math.cos(r) - y * Math.sin(r), x * Math.sin(r) + y * Math.cos(r)]; };
+  function addShape(id, at, yaw = 0) { const S0 = SHAPES[id], made = [];
+    for (const pc of S0.pieces) { const [dx, dy] = rotXY(pc.x, pc.y, yaw), nid = addBlock(pc.t, [at[0] + dx, at[1] + dy], null, ((pc.yaw + yaw) % 360 + 360) % 360, pc.p); if (nid) made.push(nid); }
+    if (made.length) { selectMany(made); toast(`${S0.name}: 컨베이어가 이어진 채로 놓였습니다 · 한 덩어리로 옮기려면 그대로 끄세요`); } }
   function previewOf(k, id) {
     let o = null;
-    try { if (k === 'b') o = L.buildBlock(id, L.BLOCKS[id].params);
+    try { if (k === 's') { o = new T.Group(); for (const pc of SHAPES[id].pieces) { const b = L.buildBlock(pc.t, Object.assign({}, L.BLOCKS[pc.t].params, pc.p)); placeObj(b, [pc.x, pc.y, 0], pc.yaw); o.add(b); } }
+      else if (k === 'b') o = L.buildBlock(id, L.BLOCKS[id].params);
       else if (k === 'l') o = buildLocalMachine({ id, v: Math.max(...Object.keys(lib()[id].versions).map(Number)) });
       else { const d = L.FACTORY[id], p = d.params || {};
         o = d.kind.cmd === 'draw_wall' ? L.special.wall((p.length || 6000) / 1000, 4, 0.2) : d.kind.cmd === 'add_column' ? L.special.column({ size: p.size || 500, h: 6 })
@@ -254,7 +272,7 @@
     tmpBox.setFromObject(g); const sz = tmpBox.getSize(new T.Vector3()); ring.scale.setScalar(Math.max(0.3, Math.hypot(sz.x, sz.z) / 2 + 0.1)); ring.position.y = 0.004; ring.raycast = () => {}; g.add(ring);
     return g; }
   function startPlace(k, id) { endPlace(); if (mode === 'run') setMode('edit'); if (xray) setXray(false);
-    const name = k === 'b' ? L.BLOCKS[id].name : k === 'l' ? lib()[id]?.name : L.FACTORY[id].name;
+    const name = k === 's' ? SHAPES[id].name : k === 'b' ? L.BLOCKS[id].name : k === 'l' ? lib()[id]?.name : L.FACTORY[id].name;
     placing = { k, id, name, yaw: 0, at: null, onto: null, obj: previewOf(k, id) }; placing.obj.visible = false; ov.add(placing.obj);
     document.querySelectorAll('#pal [data-add]').forEach(b => b.classList.toggle('placing', b.dataset.add === k + ':' + id));
     renderer.domElement.style.cursor = 'copy'; updateHint(); toast(`${name}: 놓을 곳을 누르세요 · R 회전 · Esc 취소`); }
@@ -268,7 +286,7 @@
     placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
   function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
     if (!keep) endPlace();
-    ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
+    ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else if (k === 's') addShape(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
   // drag straight from the palette onto the canvas works too
   $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
   $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
@@ -419,7 +437,16 @@
   function setParamKeepKids(id, key, value) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return;
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
       if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
-  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, ids = selIds(), set = new Set(ids); let msg = '';
+  // conveyors that meet end to end or at a side transfer, at the same height: they rise and fall together
+  function joinedConveyors(doc, start) { const cv = doc.nodes.filter(n => !n.parent && nodeDef(n)?.conveyor), P = n => Object.assign({}, nodeDef(n).params, n.params);
+    const ends = n => ['in', 'out'].map(k => SCN.portAt(doc, `${n.id}/${k}`).pos), H = n => +P(n).h;
+    const over = (p, b) => { const r = b.transform.rotation[2] * Math.PI / 180, dx = p[0] - b.transform.position[0], dy = p[1] - b.transform.position[1], a = dx * Math.cos(r) + dy * Math.sin(r), l = -dx * Math.sin(r) + dy * Math.cos(r);
+      return Math.abs(a) <= +P(b).length / 2 + 80 && Math.abs(l) <= +P(b).w / 2 + 80; };
+    const meets = (a, b) => Math.abs(H(a) - H(b)) < 5 && (ends(a).some(p => over(p, b)) || ends(b).some(p => over(p, a)));
+    const out = new Set(start), q = [...start]; while (q.length) { const id = q.shift(), a = cv.find(n => n.id === id); if (!a) continue; for (const b of cv) if (!out.has(b.id) && meets(a, b)) { out.add(b.id); q.push(b.id); } }
+    return out; }
+  function raiseSel(dz) { if (!sel || mode === 'run' || xray || tab !== 'machine') return; const doc = ED.machine.doc, picked = selIds(), ids = [...joinedConveyors(doc, picked.filter(id => nodeDef(doc.nodes.find(n => n.id === id))?.conveyor))].filter(id => !picked.includes(id)).concat(picked), set = new Set(ids); let msg = '';
+    if (ids.length > picked.length) msg = `이어진 컨베이어 ${ids.length - picked.length}개도 같은 높이로 같이 움직였습니다`;
     ed().batch('height', () => { for (const id of ids) { const n = ED.machine.doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!n || (n.parent && set.has(n.parent))) continue;
       if (d.heightKey && !n.parent) { const cur = +(n.params[d.heightKey] ?? d.params[d.heightKey]); setParamKeepKids(id, d.heightKey, Math.max(100, cur + dz)); }
       else if (n.parent) msg = '받침 위에 붙은 블록은 받침 높이를 따라갑니다. 받침(컨베이어·프레임·단상)을 골라 높이를 바꾸세요';
@@ -967,5 +994,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), get sel() { return sel; } };
 })();
