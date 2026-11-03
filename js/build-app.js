@@ -204,15 +204,36 @@
     const nid = exec('place_machine', { ref: `local:${id}@${v}`, name: nextName(ed().doc, m.name), position: [x, y] }); if (nid && yaw) exec('move', { id: nid, yaw }, true); if (nid) { select(nid); toast(`${m.name} v${v} 배치`); } }
   // a point given in a block's own frame (x along its length, y across) → stored mm
   function localToStored(n, lx, ly, z) { const p = n.transform.position, r = n.transform.rotation[2] * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [S.snap(p[0] + lx * c - ly * s, 5), S.snap(p[1] + lx * s + ly * c, 5), z]; }
+  function storedToLocal(n, p) { const q = n.transform.position, r = n.transform.rotation[2] * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), dx = p[0] - q[0], dy = p[1] - q[1]; return [dx * c + dy * s, -dx * s + dy * c]; }
+  /* a free spot on a base for a new block that sits on it, so a second stopper or sensor never lands on the first one.
+     Same-kind blocks on a conveyor keep 400 mm apart along it (from the outfeed end back); anything else on a base
+     steps around until its footprint clears what is already there. Returns local [lx, ly] or null if the base is full. */
+  const footOf = (n, d) => { const p = Object.assign({}, d?.params, n?.params); return [+(p.w || p.s || p.length || 200), +(p.d || p.s || p.w || 200)]; };
+  function freeSlot(base, d, want, skip) { const doc = ed().doc, bd = nodeDef(base), bp = Object.assign({}, bd?.params, base.params);
+    const kids = doc.nodes.filter(n => n.parent === base.id && n.id !== skip).map(n => ({ n, d: nodeDef(n), l: storedToLocal(base, n.transform.position) }));
+    if (bd?.conveyor && (d.stops || d.sensor)) { const L = +bp.length || 1000, same = kids.filter(k => d.stops ? k.d?.stops : k.d?.sensor).map(k => k.l[0]);
+      const ok = x => same.every(sx => Math.abs(sx - x) >= 300);
+      if (want && ok(want[0])) return want;
+      const cands = []; for (let x = L / 2 - 150; x >= -L / 2 + 150; x -= 50) cands.push(x);
+      if (want) cands.sort((a, b) => Math.abs(a - want[0]) - Math.abs(b - want[0])); else { const firsts = []; for (let x = L / 2 - 150; x >= -L / 2 + 150; x -= 400) firsts.push(x); cands.unshift(...firsts); }
+      const x = cands.find(ok); return x === undefined ? null : [x, want ? want[1] : 0]; }
+    const [fw, fd] = footOf(null, d), BW = +bp.length || +bp.w || +bp.s || 1000, BD = +bp.w && bp.length ? +bp.w : +bp.d || +bp.s || 1000;
+    const clear = (x, y) => kids.every(k => { if (k.d?.work || !k.d) return true; const [kw, kd] = footOf(k.n, k.d); return Math.abs(k.l[0] - x) >= (kw + fw) / 2 || Math.abs(k.l[1] - y) >= (kd + fd) / 2; });
+    const w0 = want || [0, 0]; if (clear(w0[0], w0[1])) return w0;
+    const step = 50, out = []; for (let x = -BW / 2 + fw / 2; x <= BW / 2 - fw / 2 + 1; x += step) for (let y = -BD / 2 + fd / 2; y <= BD / 2 - fd / 2 + 1; y += step) out.push([x, y]);
+    out.sort((a, b) => Math.hypot(a[0] - w0[0], a[1] - w0[1]) - Math.hypot(b[0] - w0[0], b[1] - w0[1])); return out.find(q => clear(q[0], q[1])) || null; }
   function addBlock(id, at, onto, yaw = 0) {
     const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)));
     const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
     let pos, parent = null;
-    if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null; }
+    if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null;
+      if (base && !d.work) { const l = storedToLocal(base, at), f = freeSlot(base, d, l); if (!f) { toast(`${base.params.tag || ''} 위에 ${d.name}을(를) 더 놓을 자리가 없습니다`, true); return null; }
+        if (Math.hypot(f[0] - l[0], f[1] - l[1]) > 1) { pos = localToStored(base, f[0], f[1], nodeTop(base)); toast('같은 자리에 이미 있어 옆 빈자리에 놓았습니다'); } } }
     else if (d.onTop && base) { const bd = nodeDef(base), bpar = Object.assign({}, bd?.params, base.params); parent = base.id; yaw = yaw || base.transform.rotation[2];
-      // stopper / sensor near the outfeed end, a sensor on the side rail; everything follows the base's direction
-      const lx = bd && bd.conveyor && (d.stops || d.sensor) ? (bpar.length || 1000) / 2 - 150 : 0, ly = bd && bd.conveyor && d.sensor ? -((bpar.w || 500) / 2 + 30) : 0;
-      pos = localToStored(base, lx, ly, nodeTop(base)); }
+      // stopper / sensor from the outfeed end back, 400 mm apart; a sensor on the side rail; everything follows the base's direction
+      const ly = bd && bd.conveyor && d.sensor ? -((bpar.w || 500) / 2 + 30) : 0, f = d.work ? [0, 0] : freeSlot(base, d, null);
+      if (!f) { toast(`${bpar.tag || ''} 위에 ${d.name}을(를) 더 놓을 자리가 없습니다`, true); return null; }
+      pos = localToStored(base, f[0], f[1] || ly, nodeTop(base)); }
     else { const xs = doc.nodes.filter(n => !n.parent).map(n => n.transform.position[0] + blockHalfX(n)); pos = [xs.length ? S.snap(Math.max(...xs) + 400, 50) : 0, 0, 0]; }
     const nid = exec('add_block', { blockType: id, name: `${d.name.replace(/ \(.*\)$/, '')} ${P.replace(/^\D+/, '')}`, parent, position: pos, params, joints: d.joints(P, params), io: d.io(P, params) });
     if (nid && yaw) exec('move', { id: nid, rotation: [0, 0, yaw] }, true);
@@ -391,7 +412,10 @@
     for (const id of ids) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n); if (!d || !d.onTop || (n.parent && moved.has(n.parent))) continue;
       const base = baseUnder(doc, n, moved), z = base ? nodeTop(base) : 0, par = base ? base.id : null;
       if ((n.parent || null) !== par) exec('set_parent', { id, parent: par }, true);
-      const dz = z - n.transform.position[2]; if (Math.abs(dz) > 0.5) moveNode(id, [0, 0, dz]); } }
+      const dz = z - n.transform.position[2]; if (Math.abs(dz) > 0.5) moveNode(id, [0, 0, dz]);
+      // dropped onto another stopper / sensor / block on the same base: slide to the nearest free spot
+      if (base && ids.length === 1 && !d.work) { const m = ED.machine.doc.nodes.find(x => x.id === id), l = storedToLocal(base, m.transform.position), f = freeSlot(base, d, l, id);
+        if (f && Math.hypot(f[0] - l[0], f[1] - l[1]) > 1) { const q = localToStored(base, f[0], f[1], m.transform.position[2]); moveNode(id, [q[0] - m.transform.position[0], q[1] - m.transform.position[1], 0]); toast('다른 블록과 겹쳐 옆 빈자리로 옮겼습니다'); } } } }
   function setParamKeepKids(id, key, value) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return;
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
       if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
@@ -593,8 +617,36 @@
       const a = (x1 - x0) * (y1 - y0); if (a > 90 * 90) continue; const pad = 12;
       if (mx >= x0 - pad && mx <= x1 + pad && my >= y0 - pad && my <= y1 + pad && a < bestA) { best = id; bestA = a; } }
     return best; }
-  function pick(e) { setNdc(e); const ex = pickExact(), near = pickNear(e); if (!near || near === ex) return ex;
+  function pick1(e) { setNdc(e); const ex = pickExact(), near = pickNear(e); if (!near || near === ex) return ex;
     if (!ex) return near; tmpBox.setFromObject(objs.get(ex).obj); const s = tmpBox.getSize(pc); return s.x * s.z > 1 || s.y < 0.05 ? near : ex; }
+  // everything under the cursor, front to back (the slab last)
+  function pickAll(e) { setNdc(e); const out = [], first = pick1(e); if (first) out.push(first);
+    for (const h of ray.intersectObjects(root.children, true)) { const id = h.object.visible && h.object.userData.pick; if (id && !out.includes(id)) out.push(id); }
+    return out.sort((a, b) => (isSlab(a) ? 1 : 0) - (isSlab(b) ? 1 : 0)); }
+  // clicking the same spot again steps to the object behind the one already selected
+  let lastPick = null;
+  function pick(e) { const all = pickAll(e); if (!all.length) { lastPick = null; return null; }
+    let id = all[0]; if (lastPick && Math.hypot(e.clientX - lastPick.x, e.clientY - lastPick.y) < 5 && all.includes(sel) && all.length > 1) { id = all[(all.indexOf(sel) + 1) % all.length]; if (id !== all[0]) toast(`뒤에 있는 객체: ${objLabel(id)} · 같은 자리를 다시 누르면 다음`); }
+    lastPick = { x: e.clientX, y: e.clientY }; return id; }
+  function objLabel(id) { if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); return n ? `${nodeCode(n)} ${n.name}` : ''; } const it = factoryItems(ED.factory.doc).find(x => x.id === id); return it ? `${itemCode(it) || ''} ${itemName(it)}`.trim() : ''; }
+
+  /* object list (객체 목록): pick anything by name, also what is hard to click */
+  function drawObjList() { const q = ($('olQ').value || '').trim().toLowerCase(), rows = [];
+    if (tab === 'machine') { const doc = ED.machine.doc, depth = n => { let d = 0; for (let p = n.parent; p && d < 6; p = doc.nodes.find(x => x.id === p)?.parent) d++; return d; };
+      const order = []; const walk = pid => { for (const n of doc.nodes.filter(x => (x.parent || null) === pid)) { order.push(n); walk(n.id); } }; walk(null); for (const n of doc.nodes) if (!order.includes(n)) order.push(n);
+      for (const n of order) rows.push({ id: n.id, code: nodeCode(n), name: n.name, d: depth(n), g: '' }); }
+    else { const G = { 'building.walls': '건물', 'building.columns': '건물', 'building.roofs': '건물', 'building.openings': '건물', 'building.slabs': '건물', markings: '바닥 표시', machines: '설비', storage: '물류·보관', movers: '물류·보관', 'utilities.drops': '전기·공압', blocks: '기타' };
+      for (const it of factoryItems(ED.factory.doc)) rows.push({ id: it.id, code: itemCode(it) || '', name: itemName(it), d: 0, g: G[it.path] || '기타' });
+      rows.sort((a, b) => a.g.localeCompare(b.g)); }
+    const hit = rows.filter(r => !q || `${r.code} ${r.name}`.toLowerCase().includes(q)), sels = new Set(selIds()); let g0 = null, html = '';
+    for (const r of hit) { if (r.g && r.g !== g0) { html += `<h4>${esc(r.g)}</h4>`; g0 = r.g; }
+      html += `<button data-oid="${r.id}" class="${sels.has(r.id) ? 'on' : ''}" style="padding-left:${10 + r.d * 14}px"><b>${esc(r.code)}</b>${esc(r.name)}</button>`; }
+    $('olList').innerHTML = html || '<p>찾는 객체가 없습니다</p>'; }
+  function toggleObjList(on = $('objList').hidden) { $('objList').hidden = !on; if (on) { $('olQ').value = ''; drawObjList(); setTimeout(() => $('olQ').focus(), 0); } }
+  $('olBtn').onclick = () => toggleObjList();
+  $('olQ').addEventListener('input', drawObjList);
+  $('olQ').addEventListener('keydown', e => { if (e.key === 'Escape') toggleObjList(false); if (e.key === 'Enter') { const b = $('olList').querySelector('[data-oid]'); if (b) b.click(); } e.stopPropagation(); });
+  $('olList').addEventListener('click', e => { const b = e.target.closest('[data-oid]'); if (!b) return; if (e.shiftKey || e.ctrlKey || e.metaKey) toggleSel(b.dataset.oid); else select(b.dataset.oid); drawObjList(); focusSel(); });
   renderer.domElement.addEventListener('pointerdown', e => {
     if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
     if (e.button === 0 && !xray && tab === 'factory' && mode === 'edit') { const port = pickPort(e); if (port && port.kind === 'outlet' && startLink(e, port)) return; }
@@ -667,6 +719,7 @@
     else if (k === 'escape') { if (placing) endPlace(); else select(null); }
     else if (k === 'f') sel ? focusSel() : fitAll();
     else if (k === 'x' && !mod) setXray(!xray);
+    else if (k === 'l' && !mod) { e.preventDefault(); toggleObjList(); }
   });
   $('bUndo').onclick = () => mode === 'edit' && ed().undo();
   $('bRedo').onclick = () => mode === 'edit' && ed().redo();
@@ -869,5 +922,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, get sel() { return sel; } };
 })();
