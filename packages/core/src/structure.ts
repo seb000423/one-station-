@@ -127,7 +127,10 @@ const PAIR: Record<string, string[]> = { utility: ['furnace', 'robot'], seat: ['
  */
 export function checkStructure(parts0: Part[], opt: { ref?: Part[] | null; area?: [number, number] | null; mounts?: Map<string, Mount> } = {}): StructureIssue[] {
   const parts = withRoles(parts0), P = new Map(parts.map(p => [p.id, p])), ref = opt.ref ? withRoles(opt.ref) : null, R = new Map((ref || []).map(p => [p.id, p]));
-  const M = opt.mounts || findMounts(ref && ref.length ? ref.filter(r => P.has(r.id)).concat(parts.filter(p => !R.has(p.id))) : parts);
+  /* mounts: the reference's (its offsets are how the equipment was built) while a part still sits on the same host the same way;
+     a part re-seated by the user (another host, or top → side) is judged by where it is now */
+  const Mcur = findMounts(parts), M = opt.mounts || (() => { if (!ref || !ref.length) return Mcur; const Mref = findMounts(ref.filter(r => P.has(r.id)).concat(parts.filter(p => !R.has(p.id)))), out = new Map<string, Mount>();
+    for (const p of parts) { const a = Mref.get(p.id), b = Mcur.get(p.id)!; out.set(p.id, a && a.host === b.host && a.rel === b.rel ? a : b); } return out; })();
   const out: StructureIssue[] = [], nm = (p: Part) => p.name, mid = (a: Part, b?: Part): [number, number, number] => b ? [(a.pos[0] + b.pos[0]) / 2, (a.pos[1] + b.pos[1]) / 2, Math.max(topOf(a), topOf(b))] : [a.pos[0], a.pos[1], topOf(a)];
   const tol = 10;
   for (const p of parts) {

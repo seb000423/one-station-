@@ -27,7 +27,7 @@ describe('design structure rules on the four reference stations', () => {
     let ps = move(ref, find(ref, 'OP80 경광등').id, [0, 0, 300]);
     expect(checkStructure(ps, { ref }).some(i => i.rule === 'R1')).toBe(true);
     ps = move(ref, find(ref, 'OP90 제어함').id, [0, -800, 0]);
-    expect(checkStructure(ps, { ref }).some(i => i.rule === 'R3')).toBe(true);
+    expect(checkStructure(ps, { ref }).some(i => (i.rule === 'R1' || i.rule === 'R3') && i.lv === 'err')).toBe(true);
     ps = move(ref, find(ref, 'OP90 로봇').id, [-6000, 0, 0]);
     expect(checkStructure(ps, { ref }).some(i => i.rule === 'R5')).toBe(true);
     const pr = station('paste'); ps = move(pr, find(pr, '의자').id, [0, 6000, 0]);
