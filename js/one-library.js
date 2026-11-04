@@ -48,14 +48,19 @@
   const frameRect = (g, role, w, d, t = 0.08, y = 0.003) => { flatRect(g, role, w, t, y, 0, -d / 2 + t / 2); flatRect(g, role, w, t, y, 0, d / 2 - t / 2); flatRect(g, role, t, d - 2 * t, y, -w / 2 + t / 2, 0); flatRect(g, role, t, d - 2 * t, y, w / 2 - t / 2, 0); };
   const lampStack = (g, x, y, z, s = 1) => { const t = grp(g, 'lamp', x, y, z); cy(t, 'frame', 0.012 * s, 0.25 * s); cy(t, 'glowR', 0.03 * s, 0.06 * s, 0, 0.25 * s).name = 'lamp_red'; cy(t, 'glowA', 0.03 * s, 0.06 * s, 0, 0.31 * s).name = 'lamp_yel'; cy(t, 'glowG', 0.03 * s, 0.06 * s, 0, 0.37 * s).name = 'lamp_grn'; return t; };
 
-  // a 6-axis arm on a base; joints named j1..j3 so run mode can turn them
+  /* a 6-axis arm on a base: j1 base yaw (vertical), j2 shoulder and j3 elbow pitch (local Z), j4 forearm roll (local X),
+     j5 wrist pitch (local Z, home = flange facing down), j6 flange roll; 'wrist' = the TCP, the tip of the gripper */
   function arm(g, reach = 1.2, x = 0, z = 0, y = 0) {
     const s = reach / 1.2, base = grp(g, 'arm', x, y, z);
     cy(base, 'frame', 0.2 * s, 0.12 * s);
     const j1 = grp(base, 'j1', 0, 0.12 * s, 0); cy(j1, 'light', 0.15 * s, 0.32 * s);
     const j2 = grp(j1, 'j2', 0, 0.36 * s, 0); cy(j2, 'dark', 0.1 * s, 0.26 * s, 0, 0, 0, 'z'); bx(j2, 'light', 0.16 * s, 0.62 * s, 0.16 * s, 0, 0, 0);
-    const j3 = grp(j2, 'j3', 0, 0.62 * s, 0); cy(j3, 'dark', 0.08 * s, 0.22 * s, 0, 0, 0, 'z'); bx(j3, 'light', 0.55 * s, 0.12 * s, 0.12 * s, 0.24 * s, -0.06 * s, 0);
-    const w = grp(j3, 'wrist', 0.52 * s, 0, 0); cy(w, 'dark', 0.05 * s, 0.12 * s, 0, -0.06 * s, 0); bx(w, 'steel', 0.08 * s, 0.06 * s, 0.1 * s, 0, -0.12 * s, 0);
+    const j3 = grp(j2, 'j3', 0, 0.62 * s, 0); cy(j3, 'dark', 0.08 * s, 0.22 * s, 0, 0, 0, 'z'); bx(j3, 'light', 0.27 * s, 0.13 * s, 0.13 * s, 0.1 * s, -0.065 * s, 0);
+    const j4 = grp(j3, 'j4', 0.235 * s, 0, 0); cy(j4, 'dark', 0.07 * s, 0.03 * s, 0.015 * s, 0, 0, 'x'); bx(j4, 'light', 0.25 * s, 0.1 * s, 0.1 * s, 0.155 * s, -0.05 * s, 0);
+    const j5 = grp(j4, 'j5', 0.285 * s, 0, 0); cy(j5, 'dark', 0.055 * s, 0.13 * s, 0, 0, 0, 'z'); j5.rotation.z = -Math.PI / 2;
+    const j6 = grp(j5, 'j6', 0.06 * s, 0, 0); cy(j6, 'steel', 0.045 * s, 0.025 * s, 0.0125 * s, 0, 0, 'x');
+    bx(j6, 'steel', 0.07 * s, 0.05 * s, 0.09 * s, 0.06 * s, -0.025 * s, 0); for (const k of [-1, 1]) bx(j6, 'dark', 0.06 * s, 0.03 * s, 0.015 * s, 0.125 * s, -0.015 * s, k * 0.03 * s);
+    grp(j6, 'wrist', 0.155 * s, 0, 0);
     j2.rotation.z = -0.35; j3.rotation.z = 0.2;
     return base;
   }
@@ -419,8 +424,8 @@
   bdef('robot-6axis', { cls: 'robot', name: '6축 다관절 로봇', cat: 'robot', code: 'RB', onTop: true, params: { reach: 1200, payload: 10, cycle: 4 }, fields: [num('reach', '도달 거리', 'mm', 50), num('payload', '가반 중량', 'kg', 1), num('cycle', '동작 시간', 's', 0.5)],
     joints: (P) => [J(`${P}_J1`, 'rot', [0, 0, 1], 'position', -170, 170, 180, 720)], io: robotIo,
     build: p => { const g = new T.Group(); arm(g, mm(p.reach)); g.userData.rig = rigOfArm(g); g.userData.kind = 'robot'; return g; },
-    pose: (g, p, v) => { if (g.userData.prog) return; const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'); const k = v.RUN || 0;
-      if (j1) j1.rotation.y = Math.sin(k * Math.PI) * 1.4; if (j2) j2.rotation.z = -0.35 - Math.sin(k * Math.PI) * 0.4; if (j3) j3.rotation.z = 0.2 + Math.sin(k * Math.PI) * 0.5; } });
+    pose: (g, p, v) => { if (g.userData.prog) return; const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'), j5 = g.getObjectByName('j5'), k = Math.sin((v.RUN || 0) * Math.PI);
+      if (j1) j1.rotation.y = k * 1.4; if (j2) j2.rotation.z = -0.35 - k * 0.4; if (j3) j3.rotation.z = 0.2 + k * 0.5; if (j5) j5.rotation.z = -Math.PI / 2 - k * 0.1; /* the wrist keeps the gripper pointing down */ } });
   bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
     io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
     pose: (g, p, v) => { const k = v.RUN || 0, a1 = g.getObjectByName('j1'), a2 = g.getObjectByName('j2'); if (a1) a1.rotation.y = Math.sin(k * Math.PI) * 1.2; if (a2) a2.rotation.y = -Math.sin(k * Math.PI) * 1.6; } });
@@ -489,10 +494,11 @@
     return list.map((j, k) => { const i = kind === 'rotary' ? 0 : k, pq = new T.Quaternion(); if (j.parent) j.parent.getWorldQuaternion(pq);
       return { j, i, base: j.quaternion.clone(), axis: axisW(i).clone().applyQuaternion(pq.invert()).normalize() }; });
   }
-  /** The palette arm (arm()): j1 about the vertical, j2 / j3 about their local Z, the wrist as TCP. */
-  function rigOfArm(g) { const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'), w = g.getObjectByName('wrist'); if (!j1 || !j2 || !j3) return null;
-    const rig = [{ j: j1, i: 0, base: j1.quaternion.clone(), axis: new T.Vector3(0, 1, 0) }, { j: j2, i: 1, base: j2.quaternion.clone(), axis: new T.Vector3(0, 0, 1) }, { j: j3, i: 2, base: j3.quaternion.clone(), axis: new T.Vector3(0, 0, 1) }];
-    rig.tcp = w || j3; rig.limits = [[-170, 170], [-60, 60], [-70, 90]]; return rig; }
+  /** The palette arm (arm()): six joints; the IK moves J1–J3 and turns J5 against J2 + J3 so the gripper keeps its taught
+      tilt (J4 / J6 stay as jogged), the way a pendant's linear jog keeps the tool orientation. */
+  function rigOfArm(g) { const n = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6'].map(k => g.getObjectByName(k)), w = g.getObjectByName('wrist'); if (!n[0] || !n[1] || !n[2]) return null;
+    const ax = [[0, 1, 0], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 0, 1], [1, 0, 0]], rig = n.map((j, i) => j && { j, i, base: j.quaternion.clone(), axis: new T.Vector3(...ax[i]) }).filter(Boolean);
+    rig.tcp = w || n[2]; rig.limits = [[-170, 170], [-60, 60], [-70, 90], [-190, 190], [-120, 120], [-360, 360]]; if (rig.length === 6) { rig.ikN = 3; rig.hold = (a, a0) => { a[4] = a0[4] - (a[1] - a0[1]) - (a[2] - a0[2]); }; } return rig; }
   /* ------------------------------------------------------------- 티칭 (teach) kinematics: angles in, TCP out, and the inverse
      rigSet: joint angles (deg) → pose. rigTcp: TCP position in world (scene m). rigIk: joint angles that put the TCP at a
      target, by damped least squares on a numeric Jacobian (position only; the wrist keeps its taught orientation).
@@ -502,14 +508,15 @@
   function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, a * Math.PI / 180)); } }
   function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
   function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
-    const tmp = new T.Vector3(); const fk = ang => { rigSet(rig, ang); return rigTcp(rig, g).clone(); };
+    const tmp = new T.Vector3(), m = rig.ikN || n, a0 = a.slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
+    const fk = ang => { if (rig.hold) { rig.hold(ang, a0); ang[4] = clamp(ang[4], 4); } rigSet(rig, ang); return rigTcp(rig, g).clone(); };
     let cur = fk(a), err = target.clone().sub(cur);
     for (let k = 0; k < it && err.length() > 0.0008; k++) {
       // J in m per rad (numeric, h deg): (J Jᵀ + λ² I) y = err, 3×3; Δa = Jᵀ y (rad) → deg, at most 25° a step
-      const J = []; for (let i = 0; i < n; i++) { const b = a.slice(); b[i] += h; const q = fk(b); J.push([(q.x - cur.x) / h * R, (q.y - cur.y) / h * R, (q.z - cur.z) / h * R]); }
-      const A = [[lam2, 0, 0], [0, lam2, 0], [0, 0, lam2]]; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let i = 0; i < n; i++) A[r][c] += J[i][r] * J[i][c];
+      const J = []; for (let i = 0; i < m; i++) { const b = a.slice(); b[i] += h; const q = fk(b); J.push([(q.x - cur.x) / h * R, (q.y - cur.y) / h * R, (q.z - cur.z) / h * R]); }
+      const A = [[lam2, 0, 0], [0, lam2, 0], [0, 0, lam2]]; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let i = 0; i < m; i++) A[r][c] += J[i][r] * J[i][c];
       const e = [err.x, err.y, err.z], y = solve3(A, e); if (!y) break;
-      for (let i = 0; i < n; i++) { let d = (J[i][0] * y[0] + J[i][1] * y[1] + J[i][2] * y[2]) * R * 0.8; d = Math.max(-25, Math.min(25, d)); a[i] = Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, a[i] + d)); }
+      for (let i = 0; i < m; i++) { let d = (J[i][0] * y[0] + J[i][1] * y[1] + J[i][2] * y[2]) * R * 0.8; d = Math.max(-25, Math.min(25, d)); a[i] = clamp(a[i] + d, i); }
       cur = fk(a); err = tmp.copy(target).sub(cur); }
     return { deg: a, err: err.length() * 1000, tcp: cur }; }
   /** Arm length along the joint chain (mm), the reach the pendant uses to look for pick / place targets. */

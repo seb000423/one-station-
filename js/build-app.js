@@ -127,7 +127,9 @@
 
   // the dashed envelope always wraps every block (it moves and grows with them); its size is the machine's outer size
   const envBox = new T.Box3();
-  function contentBox() { envBox.makeEmpty(); for (const v of objs.values()) envBox.expandByObject(v.obj); return envBox; }
+  // a robot counts in its zero pose (not wherever it was jogged to), so the outer size does not change with the pose
+  function contentBox() { envBox.makeEmpty(); for (const v of objs.values()) { const o = v.obj, rig = o.userData.kind === 'robot' && o.userData.rig;
+      if (!rig) { envBox.expandByObject(o); continue; } const q = rig.map(r => r.j.quaternion.clone()); L.rigSet(rig, rig.map(() => 0)); envBox.expandByObject(o); rig.forEach((r, i) => r.j.quaternion.copy(q[i])); o.updateMatrixWorld(true); } return envBox; }
   function contentSize() { const b = contentBox(); if (b.isEmpty()) return null; const a = fromS(b.min), c = fromS(b.max);
     const up = v => Math.max(50, Math.ceil(Math.abs(v) / 50) * 50); return [up(c[0] - a[0]), up(a[1] - c[1]), up(c[2] - a[2])]; }
   // the work cell (작업 칸): fixed = the size the user set, centred on the machine origin (floor centre); auto = around the blocks
@@ -842,7 +844,7 @@
      pendant) starts it, RB_BUSY while it runs, RB_DONE at the end. MOVJ moves in joint space, MOVL moves the TCP on a
      straight line (inverse kinematics each frame), GRIP takes the nearest work along and puts it down, WAIT / SET use
      tags, DELAY waits. No collision check: a path through an object shows in the design check later, it is not stopped. */
-  const ROB = { sel: null, deg: 5, mm: 50, run: {} };
+  const ROB = { sel: null, deg: 5, mm: 50, run: {}, step: false, ovr: 100 }; // step: stop after each line · ovr: speed override % (moves only)
   const progOf = id => ED.machine.doc.programs.find(p => p.node === id);
   const robObj = id => objs.get(id)?.obj;
   const rigFor = id => { const o = robObj(id); return o && o.userData.rig && o.userData.kind === 'robot' ? o.userData.rig : null; };
@@ -852,8 +854,8 @@
   function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
   function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
   const VJ = 150; // joint speed deg/s at 100 %
-  function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(); return true; }
-  function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; } drawPend(); }
+  function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; r.pause = false; log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
+  function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; r.pause = false; } drawPend(true); }
   function fkStored(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); L.rigSet(rig, deg); const t = fromS(L.rigTcp(rig, o)); L.rigSet(rig, r.deg); return t; }
   function stepRobots(dt) {
     const doc = ED.machine.doc, tags = RUN.tags;
@@ -868,8 +870,9 @@
     } }
   /* one program line, or part of it, within `dt` seconds; returns the time left over (a line that ends mid-frame hands the rest to the next) */
   function progStep(n, P, r, p, rig, o, dt, tags) {
+    if (!r.seg && r.pause) return 0; // 한 줄씩: waits for ▷ 다음 줄
     if (!r.seg) { L.rigSet(rig, r.deg); r.line++; const l = p.lines[r.line]; // pose first: a line that starts in the frame the last one ended reads the true TCP
-      if (!l) { r.on = false; r.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 프로그램 끝 · DONE`); drawPend(); return 0; }
+      if (!l) { r.on = false; r.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 프로그램 끝 · DONE`); drawPend(true); return 0; }
       const pt = l.point && p.points.find(q => q.id === l.point);
       if (l.op === 'MOVJ') { const to = pt.j.slice(0, rig.length); while (to.length < rig.length) to.push(0); const dmax = Math.max(1e-6, ...to.map((v, i) => Math.abs(v - (r.deg[i] || 0)))); r.seg = { kind: 'J', from: r.deg.slice(), to, t: 0, dur: dmax / (VJ * (l.speed || 50) / 100) }; }
       else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, d / (l.speed || 500)), lastJ: pt.j }; }
@@ -880,14 +883,14 @@
       else if (l.op === 'WAIT') r.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
       else if (l.op === 'SET') { tags[l.tag] = l.value; r.seg = { kind: 'D', t: 0, dur: 0 }; }
       else if (l.op === 'DELAY') r.seg = { kind: 'D', t: 0, dur: l.s || 0 };
-      drawPend(); }
-    const sg = r.seg;
-    if (sg.kind === 'W') { if (cmp(tags[sg.tag], '==', sg.value)) { r.seg = null; return dt; } sg.t += dt; if (sg.t > 20 && !sg.warned) { sg.warned = true; log(`${P} ${sg.tag} ${valTxt(sg.tag, sg.value)} 20초째 기다립니다`); } return 0; }
-    const left = Math.max(0, sg.t + dt - sg.dur); sg.t = Math.min(sg.dur, sg.t + dt); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
+      drawPend(true); }
+    const sg = r.seg, more = r.line + 1 < p.lines.length, hold = () => { if (ROB.step && more) { r.pause = true; drawPend(true); return true; } return false; };
+    if (sg.kind === 'W') { if (cmp(tags[sg.tag], '==', sg.value)) { r.seg = null; return hold() ? 0 : dt; } sg.t += dt; if (sg.t > 20 && !sg.warned) { sg.warned = true; log(`${P} ${sg.tag} ${valTxt(sg.tag, sg.value)} 20초째 기다립니다`); } return 0; }
+    const f = sg.kind === 'J' || sg.kind === 'L' ? ROB.ovr / 100 : 1, adv = dt * f, left = Math.max(0, sg.t + adv - sg.dur) / f; sg.t = Math.min(sg.dur, sg.t + adv); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
     if (sg.kind === 'J') r.deg = sg.from.map((a, i) => a + (sg.to[i] - a) * e);
     else if (sg.kind === 'L') { const tgt = toS([sg.t0[0] + (sg.t1[0] - sg.t0[0]) * e, sg.t0[1] + (sg.t1[1] - sg.t0[1]) * e, sg.t0[2] + (sg.t1[2] - sg.t0[2]) * e]);
       const ik = L.rigIk(rig, o, tgt, r.deg, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
-    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); r.seg = null; }
+    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); r.seg = null; if (hold()) return 0; }
     return left; }
   /** Where a released work lands: the highest block top under it that is not above the hand, else the floor. */
   function landZ(p, z) { const doc = ED.machine.doc; let best = 0; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work) continue; const top = nodeTop(b); if (top > z + 50 || top <= best) continue;
@@ -897,9 +900,22 @@
   function jogXYZ(ax, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const t = tcpOf(id); t[ax] += d; const ik = L.rigIk(rig, o, toS(t), r.deg, { iters: 30 });
     if (!ik) return; if (ik.err > 20) { toast(`도달 거리 밖입니다 (${Math.round(ik.err)} mm 못 미침)`, true); L.rigSet(rig, r.deg); return; } setDeg(id, ik.deg); drawPend(true); }
   const prog = id => { const p = progOf(id); return p ? JSON.parse(JSON.stringify(p)) : { node: id, name: '프로그램 1', points: [], lines: [] }; };
-  const saveProg = p => { exec('set_program', { node: p.node, name: p.name, points: p.points, lines: p.lines }, true); drawPend(); };
-  function recordPoint() { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id); let k = p.points.length + 1; while (p.points.some(q => q.id === `P${k}`)) k++;
-    p.points.push({ id: `P${k}`, j: r.deg.map(v => Math.round(v * 10) / 10), tcp: tcpOf(id) }); saveProg(p); toast(`P${k} 기록 · ${p.points[p.points.length - 1].tcp.join(', ')} mm`); }
+  /* light: a name / speed / point field changed: the panel keeps its DOM (and the field being typed in), only the path redraws */
+  let pendLight = false;
+  const saveProg = (p, light) => { pendLight = !!light; try { exec('set_program', { node: p.node, name: p.name, points: p.points, lines: p.lines }, true); } finally { pendLight = false; } if (light) drawPend(true); else drawPend(); drawPath(); };
+  const newPid = p => { let k = p.points.length + 1; while (p.points.some(q => q.id === `P${k}`)) k++; return `P${k}`; };
+  const round1 = deg => deg.map(v => Math.round(v * 10) / 10);
+  /* ● 점 기록 = a point and the line to it: straight down / up over the last point (same X·Y) = 직선 이동, else 관절 이동 */
+  function recordPoint() { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id), pid = newPid(p), tcp = tcpOf(id), last = p.points[p.points.length - 1];
+    p.points.push({ id: pid, j: round1(r.deg), tcp }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
+    p.lines.push(lin ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }); saveProg(p);
+    toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${p.lines.length}줄 ${lin ? '직선 이동' : '관절 이동'} 추가`); }
+  // 집기 / 놓기 block: above (150 mm up, 관절 이동) → down (직선) → gripper → back up (직선)
+  const gripLines = (above, at, on) => [{ op: 'MOVJ', point: above, speed: 60 }, { op: 'MOVL', point: at, speed: 300 }, { op: 'GRIP', on }, { op: 'MOVL', point: above, speed: 300 }];
+  function addGrip(on) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const p = prog(id), t = tcpOf(id), up = [t[0], t[1], t[2] + 150];
+    const ik = L.rigIk(rig, o, toS(up), r.deg, { iters: 40 }); L.rigSet(rig, r.deg); if (!ik || ik.err > 30) { toast(`이 자리 150 mm 위에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 손끝을 조금 낮추거나 안쪽으로 옮기세요`, true); return; }
+    const word = on ? '집기' : '놓기', a = newPid(p); p.points.push({ id: a, name: `${word} 위`, j: round1(ik.deg), tcp: up.map(Math.round) }); const b = newPid(p); p.points.push({ id: b, name: word, j: round1(r.deg), tcp: t });
+    p.lines.push(...gripLines(a, b, on)); saveProg(p); toast(`${word} 블록 · ${a} 위 → ${b} ${on ? '집고' : '놓고'} → ${a} 위 (4줄)`); }
   /* 픽 앤 플레이스 만들기: from the structure rules the robot's targets in reach are known; the nearest tray is the pick,
      the nearest jig / index table the place; approach points 150 mm above each; the program waits for START and sets DONE itself. */
   function genPickPlace() { const id = ROB.sel, n = ED.machine.doc.nodes.find(x => x.id === id), r = robState(id), rig = rigFor(id), o = robObj(id); if (!n) return;
@@ -916,7 +932,7 @@
     if (!s4) { toast(`${!s2 ? picks[0].name : places[0].name}에 손이 닿지 않습니다 (팔 길이 ${reach} mm) · 로봇을 가까이 두거나 받침을 낮추세요 · 레일 주행축은 아직 프로그램에 넣지 않습니다`, true); return; }
     pts.unshift({ id: 'P0', name: '홈', j: home.map(v => Math.round(v * 10) / 10), tcp: tcpOf(id) });
     const P = nodeCode(n), has = t => ED.machine.doc.io.some(x => x.tag === t), lines = [];
-    lines.push({ op: 'MOVJ', point: 'P1', speed: 60 }, { op: 'MOVL', point: 'P2', speed: 300 }, { op: 'GRIP', on: true }, { op: 'MOVL', point: 'P1', speed: 300 }, { op: 'MOVJ', point: 'P3', speed: 60 }, { op: 'MOVL', point: 'P4', speed: 300 }, { op: 'GRIP', on: false }, { op: 'MOVL', point: 'P3', speed: 300 }, { op: 'MOVJ', point: 'P0', speed: 60 });
+    lines.push(...gripLines('P1', 'P2', true), ...gripLines('P3', 'P4', false), { op: 'MOVJ', point: 'P0', speed: 60 });
     saveProg({ node: id, name: '픽 앤 플레이스', points: pts, lines }); log(`${P} 픽 앤 플레이스 생성 · ${pick.name} → ${place.name}`); toast(`${pick.name}에서 집어 ${place.name}에 놓는 프로그램을 만들었습니다 · ▶ 실행으로 확인`); }
   const OPK = { MOVJ: '관절 이동', MOVL: '직선 이동', GRIP: '그리퍼', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
   /* 티칭 패널. Its own column of the bottom panel while 동작 시험 runs with a robot: jog by joint (slider, −/+ held down =
@@ -926,14 +942,17 @@
   function holdJog(fn) { fn(); JOG_HOLD.t = setTimeout(() => { JOG_HOLD.iv = setInterval(fn, 50); }, 320); }
   function stopHold() { clearTimeout(JOG_HOLD.t); clearInterval(JOG_HOLD.iv); JOG_HOLD.t = JOG_HOLD.iv = null; }
   window.addEventListener('pointerup', stopHold); window.addEventListener('pointercancel', stopHold); window.addEventListener('blur', stopHold);
+  const stateTxt = r => r.on ? (r.pause ? `⏸ ${r.line + 1}줄 끝 · ▷ 한 줄로 다음` : `▶ ${r.line + 1}줄 실행 중`) : r.grip ? '워크 쥠' : '대기';
   const linesFromPoints = p => p.points.map(q => ({ op: 'MOVJ', point: q.id, speed: 50 }));
   function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = robotNodes(), show = mode === 'run' && rs.length > 0;
-    $('bottom').classList.toggle('teach', show); col.hidden = !show; tcpBall.visible = show; if (!show) return; if (box.dataset.open !== '1') growBottom(460); box.dataset.open = '1';
+    const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; return; }
     if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = L.limitsOf(rig);
     placeTcpBall();
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; }
-      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const st = box.querySelector('#pState'); if (st) st.textContent = r.on ? `▶ ${r.line + 1}줄 실행 중` : r.grip ? '워크 쥠' : '대기';
+      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
+      const rb = box.querySelector('#pRun'); if (rb) { rb.textContent = r.on ? '■ 정지' : '▶ 실행'; rb.classList.toggle('pri', r.on); }
       box.querySelectorAll('.pline').forEach((el, i) => el.classList.toggle('on', r.on && r.line === i)); return; }
+    const ae = document.activeElement, fk = ae && box.contains(ae) && ae.matches('input,select') ? { id: ae.id, f: ae.dataset.f, h: ae.closest('[data-pt],[data-li]'), s: ae.selectionStart } : null, fh = fk?.h ? (fk.h.dataset.pt ? `[data-pt="${fk.h.dataset.pt}"]` : `[data-li="${fk.h.dataset.li}"]`) : '';
     const io = ED.machine.doc.io, pSel = cur => `<select data-f="point">${p.points.map(q => `<option value="${q.id}"${q.id === cur ? ' selected' : ''}>${q.id}${q.name ? ' ' + esc(q.name) : ''}</option>`).join('')}</select>`;
     const line = (l, i) => { const on = r.on && r.line === i; let body = '';
       if (l.op === 'MOVJ') body = `${pSel(l.point)} <input data-f="speed" type="number" min="1" max="100" value="${l.speed ?? 50}"> %`;
@@ -945,8 +964,8 @@
     const tagsOut = io.filter(x => x.dir === 'out'), tagsAny = io;
     const jrow = (i) => `<div class="jrow"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><input type="range" data-js="${i}" min="${lim[i]?.[0] ?? -180}" max="${lim[i]?.[1] ?? 180}" step="0.5" value="${r.deg[i] || 0}"><button data-jog="${i}:1">+</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}°</b></div>`;
     const trow = (k, i) => `<div class="jrow"><span>${k}</span><button data-xyz="${i}:-1">−</button><b class="tv" data-tv="${i}">${t[i]}</b><button data-xyz="${i}:1">+</button><small>mm</small></div>`;
-    box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select><small id="pState">${r.on ? `▶ ${r.line + 1}줄 실행 중` : r.grip ? '워크 쥠' : '대기'}</small>
-        <button class="btn pri" id="pRec" style="margin-left:auto" title="지금 자세를 점으로 기록 (P1, P2 …)">● 점 기록</button><button class="btn${r.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 · 줄이 없으면 기록한 점을 순서대로 잇습니다">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pGen" title="도달 거리 안의 제품·트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스</button></div>
+    box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select><small id="pState">${stateTxt(r)}</small>
+        <div class="pbtns"><button class="btn pri" id="pRec" title="지금 자세를 점으로 기록 (P1, P2 …)">● 점 기록</button><button class="btn${r.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 · 줄이 없으면 기록한 점을 순서대로 잇습니다">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pNext" title="한 줄만 실행하고 멈춥니다 (누를 때마다 다음 줄)">▷ 한 줄</button><label class="povr" title="움직임 속도 배율 (관절·직선 이동에만)">속도 <select id="pOvr">${[10, 25, 50, 100].map(v => `<option value="${v}"${ROB.ovr === v ? ' selected' : ''}>${v}%</option>`).join('')}</select></label><button class="btn" id="pGen" title="도달 거리 안의 제품·트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스</button></div></div>
       <div class="pbody">
         <div class="pjog">
           <h5>관절 조그 <select id="pStepJ">${[1, 5, 15].map(v => `<option${ROB.deg === v ? ' selected' : ''}>${v}</option>`).join('')}</select>° <em>슬라이더를 끌거나 −/+를 누르고 있으면 계속 움직입니다</em></h5>
@@ -957,17 +976,22 @@
         </div>
         <div class="pprog">
           <h5>점 <em>${p.points.length}</em></h5>
-          <div class="ppts">${p.points.map(q => `<div class="ppt" data-pt="${q.id}"><b>${q.id}</b><input data-f="pname" value="${esc(q.name || '')}" placeholder="이름"><small>${(q.tcp || []).join(', ')}</small><button data-pa="go" title="이 자세로">↷</button><button data-pa="re" title="지금 자세로 다시 기록">●</button><button data-pa="del" title="지우기">×</button></div>`).join('') || '<p class="why">● 점 기록을 누르면 지금 자세가 P1부터 쌓입니다</p>'}</div>
-          <h5>프로그램 <em>${p.lines.length}줄</em> <span class="padd">${p.points.length ? '<button data-chain="1" title="기록한 점을 P1부터 차례로 관절 이동으로 잇습니다">점 순서대로 잇기</button>' : ''}+ <button data-add="MOVJ">관절 이동</button><button data-add="MOVL">직선 이동</button><button data-add="GRIP">그리퍼</button><button data-add="WAIT">신호 대기</button><button data-add="SET">신호 출력</button><button data-add="DELAY">기다림</button></span></h5>
+          <div class="ppts">${p.points.map(q => `<div class="ppt" data-pt="${q.id}"><b>${q.id}</b><input data-f="pname" value="${esc(q.name || '')}" placeholder="이름"><small>${(q.tcp || []).join(', ')}</small><button data-pa="go" title="이 자세로">↷</button><button data-pa="re" title="지금 자세로 다시 기록">●</button><button data-pa="del" title="지우기">×</button></div>`).join('') || '<p class="why">● 점 기록을 누르면 지금 자세가 P1부터 쌓이고 그 점으로 가는 줄도 하나 생깁니다</p>'}</div>
+          <h5>프로그램 <em>${p.lines.length}줄 · 끝나면 ${esc(nodeCode(n))}_DONE 자동 켜짐</em></h5>
+          <div class="padd"><button data-grip="1" title="지금 손끝 자리에서 집는 4줄: 150 mm 위 → 내려가 → 그리퍼 닫기 → 위로">＋ 집기</button><button data-grip="0" title="지금 손끝 자리에 놓는 4줄: 150 mm 위 → 내려가 → 그리퍼 열기 → 위로">＋ 놓기</button>${p.points.length ? '<button data-chain="1" title="기록한 점을 P1부터 차례로 관절 이동으로 잇습니다 (지금 줄은 지움)">점 순서대로 잇기</button>' : ''}<span class="sep">한 줄</span><button data-add="MOVJ">관절 이동</button><button data-add="MOVL">직선 이동</button><button data-add="GRIP">그리퍼</button><button data-add="WAIT">신호 대기</button><button data-add="SET">신호 출력</button><button data-add="DELAY">기다림</button></div>
           <div class="plines">${p.lines.map(line).join('') || '<p class="why">줄을 더하거나 점 순서대로 잇기 · 픽 앤 플레이스를 누르세요. ▶ 실행이나 RB_START 신호로 돕니다</p>'}</div></div></div>`;
+    drawPath();
     box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; drawPend(); };
     box.querySelector('#pStepJ').onchange = e => { ROB.deg = +e.target.value; }; box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
-    box.querySelector('#pRun').onclick = () => { if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, '티칭 패널')) toast('점을 기록하거나 줄을 더해 주세요', true); };
-    box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = recordPoint;
+    box.querySelector('#pRun').onclick = () => { const r = robState(id); ROB.step = false; if (r.on && r.pause) { r.pause = false; return; } if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, '티칭 패널')) toast('점을 기록하거나 줄을 더해 주세요', true); };
+    box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = recordPoint; box.querySelector('#pOvr').onchange = e => { ROB.ovr = +e.target.value; };
+    box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
+    if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
     box.onpointerdown = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
       const x = e.target.closest('[data-xyz]'); if (x) { const [a, d] = x.dataset.xyz.split(':'); holdJog(() => jogXYZ(+a, +d * (JOG_HOLD.iv ? Math.min(ROB.mm, 10) : ROB.mm))); e.preventDefault(); } };
     box.oninput = e => { const sl = e.target.closest('[data-js]'); if (!sl) return; const deg = robState(id).deg.slice(); deg[+sl.dataset.js] = +sl.value; setDeg(id, deg); drawPend(true); };
     box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz]')) return;
+      const gp = e.target.closest('[data-grip]'); if (gp) { addGrip(gp.dataset.grip === '1'); return; }
       const ch = e.target.closest('[data-chain]'); if (ch) { const q = prog(id); if (q.lines.length && !confirm('지금 프로그램 줄을 지우고 점을 순서대로 이을까요? (실행 취소 가능)')) return; q.lines = linesFromPoints(q); saveProg(q); return; }
       const ad = e.target.closest('[data-add]'); if (ad) { const q = prog(id), op = ad.dataset.add, first = q.points[0]?.id; if ((op === 'MOVJ' || op === 'MOVL') && !first) { toast('먼저 점을 기록하세요', true); return; }
         if ((op === 'WAIT' && !tagsAny.length) || (op === 'SET' && !tagsOut.length)) { toast('신호가 없습니다', true); return; }
@@ -976,21 +1000,40 @@
         if (pa.dataset.pa === 'go') { setDeg(id, pt.j); drawPend(true); } else if (pa.dataset.pa === 're') { pt.j = r.deg.map(v => Math.round(v * 10) / 10); pt.tcp = tcpOf(id); saveProg(q); } else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
       const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') q.lines.splice(i, 1); else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); return; } };
     box.onchange = e => { const f = e.target.dataset.f; if (!f) return; const q = prog(id);
-      const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q); return; }
+      const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q, true); return; }
       const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 'speed' || f === 's') v = +v;
-      l[f] = v; saveProg(q); }; }
+      l[f] = v; saveProg(q, ['speed', 's', 'point', 'on'].includes(f)); }; }
   // TELEOP: the TCP ball of the selected robot; dragging it moves the TCP on the plane at its height (Shift: a vertical plane facing the camera)
   const tcpBall = new T.Mesh(new T.SphereGeometry(0.045, 20, 14), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.85, depthTest: false })); tcpBall.visible = false; tcpBall.renderOrder = 20; ov.add(tcpBall);
   function placeTcpBall() { if (!tcpBall.visible || !ROB.sel) return; const o = robObj(ROB.sel), rig = rigFor(ROB.sel); if (!o || !rig) { tcpBall.visible = false; return; } tcpBall.position.copy(L.rigTcp(rig, o)); }
+  /* the program in 3D: a blue bead per taught point (with its name), a line along the moves in program order (solid =
+     직선 이동, dashed = 관절 이동, the real joint path curves). Drag a bead to move that point (the robot follows; on release the
+     point is re-taught there). */
+  const pathGrp = new T.Group(); pathGrp.renderOrder = 19; ov.add(pathGrp);
+  const beadMat = new T.MeshBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.9, depthTest: false }), beadGeo = new T.SphereGeometry(0.03, 16, 12);
+  const pathL = new T.LineBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.9, depthTest: false }), pathJ = new T.LineDashedMaterial({ color: 0x4fb3ff, dashSize: 0.05, gapSize: 0.04, transparent: true, opacity: 0.7, depthTest: false });
+  const labelOf = txt => { const c = document.createElement('canvas'); c.width = 128; c.height = 48; const g = c.getContext('2d'); g.fillStyle = 'rgba(14,22,34,.82)'; g.fillRect(0, 0, 128, 48); g.fillStyle = '#9fd4ff'; g.font = 'bold 26px sans-serif'; g.textBaseline = 'middle'; g.fillText(txt, 10, 25);
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), depthTest: false, transparent: true })); sp.scale.set(0.16, 0.06, 1); sp.renderOrder = 21; return sp; };
+  function drawPath() { for (const c of [...pathGrp.children]) { pathGrp.remove(c); c.geometry?.dispose?.(); if (c.material?.map) { c.material.map.dispose(); c.material.dispose(); } }
+    pathGrp.visible = tcpBall.visible && !!ROB.sel; if (!pathGrp.visible) return; const id = ROB.sel, p = progOf(id); if (!p || !p.points.length) return;
+    const at = q => toS(q.tcp || fkStored(id, q.j)), pos = new Map(p.points.map(q => [q.id, at(q)]));
+    for (const q of p.points) { const b = new T.Mesh(beadGeo, beadMat); b.position.copy(pos.get(q.id)); b.renderOrder = 20; b.userData.pt = q.id; pathGrp.add(b);
+      const lb = labelOf(q.id + (q.name ? ' ' + q.name : '')); lb.position.copy(b.position).add(new T.Vector3(0, 0.07, 0)); lb.raycast = () => {}; pathGrp.add(lb); }
+    let prev = null; for (const l of p.lines) { const v = l.point && pos.get(l.point); if (!v) continue;
+      if (prev) { const ln = new T.Line(new T.BufferGeometry().setFromPoints([prev, v]), l.op === 'MOVL' ? pathL : pathJ); ln.renderOrder = 19; ln.raycast = () => {}; if (l.op !== 'MOVL') ln.computeLineDistances(); pathGrp.add(ln); } prev = v; } }
   let tele = null;
-  function teleopStart(e) { if (mode !== 'run' || !tcpBall.visible || !ROB.sel) return false; setNdc(e); if (!ray.intersectObject(tcpBall, false).length) return false;
+  function teleopStart(e) { if (mode !== 'run' || !tcpBall.visible || !ROB.sel) return false; setNdc(e); let pt = null;
+    if (!ray.intersectObject(tcpBall, false).length) { const h = ray.intersectObjects(pathGrp.children.filter(c => c.userData.pt), false)[0]; if (!h) return false;
+      const r = robState(ROB.sel); if (r.on) stopProg(ROB.sel); pt = h.object.userData.pt; const q = progOf(ROB.sel).points.find(x => x.id === pt); setDeg(ROB.sel, q.j); placeTcpBall(); drawPend(true); }
     const c = tcpBall.position.clone(); let nrm; if (e.shiftKey) { nrm = new T.Vector3(); camera.getWorldDirection(nrm); nrm.y = 0; if (nrm.lengthSq() < 1e-6) nrm.set(0, 0, 1); nrm.normalize(); } else nrm = new T.Vector3(0, 1, 0);
-    tele = { plane: new T.Plane().setFromNormalAndCoplanarPoint(nrm, c), off: new T.Vector3(), vertical: !!e.shiftKey }; const hit0 = new T.Vector3(); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0);
-    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 1; $('hint').textContent = 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
+    tele = { plane: new T.Plane().setFromNormalAndCoplanarPoint(nrm, c), off: new T.Vector3(), vertical: !!e.shiftKey, pt }; const hit0 = new T.Vector3(); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0);
+    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 1; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Shift: 높이)` : 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
   function teleopMove(e) { if (!tele) return; setNdc(e); const hit1 = new T.Vector3(); if (!ray.ray.intersectPlane(tele.plane, hit1)) return; hit1.add(tele.off);
     const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const ik = L.rigIk(rig, o, hit1, r.deg, { iters: 16 }); if (!ik) return; setDeg(id, ik.deg); drawPend(true);
-    $('hint').textContent = `TELEOP · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · 도달 거리 밖 (${Math.round(ik.err)} mm 못 미침)` : ''}`; }
-  function teleopEnd() { if (!tele) return; tele = null; controls.enabled = true; tcpBall.material.opacity = 0.85; updateHint(); }
+    if (tele.pt) { const b = pathGrp.children.find(c => c.userData.pt === tele.pt); if (b) b.position.copy(L.rigTcp(rig, o)); }
+    $('hint').textContent = `${tele.pt ? tele.pt + ' 고치기' : 'TELEOP'} · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · 도달 거리 밖 (${Math.round(ik.err)} mm 못 미침)` : ''}`; }
+  function teleopEnd() { if (!tele) return; const pt = tele.pt; tele = null;
+    if (pt && ROB.sel) { const id = ROB.sel, q = prog(id), z = q.points.find(x => x.id === pt); if (z) { z.j = round1(robState(id).deg); z.tcp = tcpOf(id); saveProg(q, true); toast(`${pt} 고침 · ${z.tcp.join(', ')} mm`); } } controls.enabled = true; tcpBall.material.opacity = 0.85; updateHint(); }
   function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;
     if (on && doc.io.some(x => /_ESTOP$/.test(x.tag) && RUN.tags[x.tag])) { toast('비상정지가 눌려 있습니다 · 먼저 비상정지를 해제하세요', true); return; }
     if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
@@ -1054,18 +1097,19 @@
     if (!k) { toast('워크 블록이 없습니다. 팔레트의 워크를 컨베이어 위에 놓으세요', true); return; }
     AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; log(`워크 ${k}개를 처음 놓은 자리로 다시 투입${AUTO.on ? ' · 자동 운전은 1단계부터' : ''}`); drawSeq(); };
   // the panel under the view: drag its top edge to make it taller or shorter; the 3D view takes the rest
-  let growBottom = () => {};
   (() => { const b = $('bottom'), g = $('bGrip'); let h0 = LS.get('one.build.bottomH', 300), drag = null;
     const apply = h => { h0 = Math.max(120, Math.min(innerHeight * 0.7, h)); b.style.height = h0 + 'px'; stage.resize(); };
-    growBottom = min => { if (!b.classList.contains('fold') && b.getBoundingClientRect().height < min) apply(min); }; // the pendant needs room: raise the panel once, the grip still sets it
     b.style.height = h0 + 'px';
     g.addEventListener('pointerdown', e => { if (b.classList.contains('fold')) { $('bFold').click(); return; } drag = { y: e.clientY, h: b.getBoundingClientRect().height }; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     g.addEventListener('pointermove', e => { if (drag) apply(drag.h - (e.clientY - drag.y)); });
     g.addEventListener('pointerup', () => { if (drag) { drag = null; LS.set('one.build.bottomH', h0); } });
     g.addEventListener('dblclick', () => $('bFold').click()); })();
-  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); b.style.height = b.classList.contains('fold') ? '' : LS.get('one.build.bottomH', 300) + 'px'; $('bFold').textContent = b.classList.contains('fold') ? '▴ 전체 펼치기' : '▾ 전체 접기'; setTimeout(stage.resize, 0); };
+  $('bFold').onclick = () => { const b = $('bottom'); b.classList.toggle('fold'); b.style.height = b.classList.contains('fold') ? '' : LS.get('one.build.bottomH', 300) + 'px'; $('bFold').textContent = b.classList.contains('fold') ? '▴ 펼치기' : '▾ 접기'; setTimeout(stage.resize, 0); };
   // each part of the bottom panel folds on its own (객체별 ON / OFF, 신호 목록, 동작 순서); remembered per browser
-  const FOLD = LS.get('one.build.fold', {}); const applyFold = () => { for (const id of ['subSw', 'subTbl']) $(id).classList.toggle('shut', !!FOLD[id]); $('bottom').classList.toggle('seqshut', !!FOLD.seq); document.querySelector('.seqb').classList.toggle('shut', !!FOLD.seq); };
+  const FOLD = LS.get('one.build.fold', {}); const applyFold = () => { for (const id of ['subSw', 'subTbl']) $(id).classList.toggle('shut', !!FOLD[id]); }; FOLD.seq = false;
+  // the bottom panel shows one tab at a time over its full width (remembered); 자동 운전 / 접기 stay on the tab strip
+  const setBt = t => { const b = $('bottom'); b.classList.toggle('bt-ctl', t === 'ctl'); b.classList.toggle('bt-seq', t === 'seq'); for (const x of document.querySelectorAll('#bTabs [data-bt]')) x.classList.toggle('on', x.dataset.bt === t); LS.set('one.build.btab', t); if (t === 'ctl') fitSwRows(); };
+  for (const x of document.querySelectorAll('#bTabs [data-bt]')) x.onclick = () => { if ($('bottom').classList.contains('fold')) $('bFold').click(); setBt(x.dataset.bt); }; setBt(LS.get('one.build.btab', 'ctl'));
   for (const h of document.querySelectorAll('.shead[data-fold]')) h.onclick = () => { FOLD[h.dataset.fold] = !FOLD[h.dataset.fold]; LS.set('one.build.fold', FOLD); applyFold(); fitSwRows(); };
   $('seqFold').onclick = () => { FOLD.seq = !FOLD.seq; LS.set('one.build.fold', FOLD); applyFold(); }; applyFold();
 
@@ -1320,12 +1364,13 @@
 
   /* ------------------------------------------------------------------ keys, toolbar, files */
   window.addEventListener('keydown', e => {
-    const k = e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
+    // letters by the physical key (e.code): with the Korean IME on, e.key is 'ㄱ' for R, 'ㅣ' for L …
+    const k = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : e.key.toLowerCase(), mod = e.ctrlKey || e.metaKey;
     // TELEOP keys while the pendant is open: arrows move the TCP in X / Y, PgUp / PgDn in Z (the jog step)
     if (mode === 'run' && tcpBall.visible && ROB.sel && !mod && !(e.target.matches && e.target.matches('input,select,textarea'))) { const K = { arrowright: [0, 1], arrowleft: [0, -1], arrowup: [1, 1], arrowdown: [1, -1], pageup: [2, 1], pagedown: [2, -1] }[k]; if (K) { jogXYZ(K[0], K[1] * ROB.mm); e.preventDefault(); return; } }
     // a select (e.g. 종류) keeps focus after a change; only text fields swallow keys
     if (e.target.matches('select') && !mod && (k === 'delete' || k === 'backspace' || k === 'escape')) e.target.blur();
-    else if (e.target.matches('input, select, textarea')) return;
+    else if (e.target.matches('input, select, textarea') || e.isComposing) return;
     if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); if (mode === 'edit') ed().undo(); }
     else if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); if (mode === 'edit') ed().redo(); }
     else if (mod && k === 'd') { e.preventDefault(); dupSel(); }
@@ -1533,7 +1578,7 @@
     if (tab !== 'machine' || !originMark || !showOrigin || xray || mode === 'run') originLbl.style.display = 'none';
     else { const v = originMark.position.clone().project(camera); originLbl.style.display = ''; originLbl.style.left = ((v.x + 1) / 2 * r.width + 10) + 'px'; originLbl.style.top = ((1 - v.y) / 2 * r.height + 12) + 'px'; } for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
-  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); else { cellPlate.visible = false; $('cellWarn').hidden = true; } if (tab === 'machine') { drawIo(); drawPend(); } updateCheck(); }
+  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); else { cellPlate.visible = false; $('cellWarn').hidden = true; } if (tab === 'machine') { drawIo(); drawPend(pendLight); } updateCheck(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit'); endPlace(); // a block in hand belongs to the tab it was picked in
     tab = t; LS.set(KEY.tab, t); originChip(); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
