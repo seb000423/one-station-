@@ -1,0 +1,233 @@
+{
+  "$id": "https://one-station-beta.vercel.app/schemas/structure-catalog.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "classes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cls": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "structure",
+              "machine",
+              "handling",
+              "control",
+              "safety",
+              "operator",
+              "fixture"
+            ]
+          },
+          "words": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "floor",
+              "top",
+              "side",
+              "robot",
+              "seat"
+            ]
+          },
+          "host": {
+            "type": "object",
+            "properties": {
+              "top": {
+                "type": "boolean"
+              },
+              "side": {
+                "type": "boolean"
+              },
+              "inside": {
+                "type": "boolean"
+              },
+              "front": {
+                "type": "boolean"
+              },
+              "stack": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "top",
+              "side"
+            ]
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "floor",
+                "top",
+                "side",
+                "inside",
+                "front"
+              ]
+            }
+          },
+          "mount": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "floor",
+                "top",
+                "side",
+                "inside",
+                "front"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "anchor",
+                "feet",
+                "caster",
+                "bolt",
+                "clamp",
+                "bracket",
+                "din",
+                "post",
+                "span",
+                "stack",
+                "free"
+              ]
+            }
+          },
+          "solid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cls",
+          "label",
+          "group",
+          "words",
+          "role",
+          "host"
+        ]
+      }
+    },
+    "needsByRole": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "floor",
+          "top",
+          "side",
+          "robot",
+          "seat"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "floor",
+            "top",
+            "side",
+            "inside",
+            "front"
+          ]
+        }
+      },
+      "required": [
+        "floor",
+        "top",
+        "side",
+        "robot",
+        "seat"
+      ]
+    },
+    "mountBySlot": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "floor",
+          "top",
+          "side",
+          "inside",
+          "front"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "anchor",
+          "feet",
+          "caster",
+          "bolt",
+          "clamp",
+          "bracket",
+          "din",
+          "post",
+          "span",
+          "stack",
+          "free"
+        ]
+      },
+      "required": [
+        "floor",
+        "top",
+        "side",
+        "inside",
+        "front"
+      ]
+    },
+    "verified": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "floor",
+          "top",
+          "side",
+          "inside",
+          "front"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "floor",
+        "top",
+        "side",
+        "inside",
+        "front"
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "classes",
+    "needsByRole",
+    "mountBySlot",
+    "verified"
+  ]
+}

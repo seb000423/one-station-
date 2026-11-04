@@ -7,3 +7,4 @@ export * from './block';
 export * from './machine';
 export * from './factory';
 export * from './legacy';
+export * from './structure';

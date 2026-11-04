@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { checkStructure, findMounts, placePart, withRoles, type Part, type SlotKind } from '@one-twin/core';
+import { checkStructure, findMounts, placePart, withRoles, classify, type Part, type SlotKind } from '@one-twin/core';
+import { StructureCatalog, STRUCTURE_CATALOG } from '@one-twin/schema';
 
 // the four partner stations (js/plant-data.js is a browser script: window.ONE_PLANT_DATA = {...})
 const src = readFileSync(new URL('../../../js/plant-data.js', import.meta.url), 'utf8');
@@ -76,3 +77,26 @@ describe('proof: the four stations rebuilt from an empty cell, one object at a t
   });
 });
 const gaps2 = (pos: number[], h: Part) => [Math.abs(pos[0]! - h.pos[0]) - h.size[0] / 2, Math.abs(pos[1]! - h.pos[1]) - h.size[1] / 2];
+
+describe('design structure catalogue (platform default, packages/schema)', () => {
+  it('is valid and every verified pair names known classes', () => {
+    const cat = StructureCatalog.parse(STRUCTURE_CATALOG), known = new Set(cat.classes.map(c => c.cls));
+    for (const pairs of Object.values(cat.verified)) for (const pr of pairs) if (pr !== '*') for (const c of pr.split('>')) expect(known.has(c), pr).toBe(true);
+    expect(cat.classes.length).toBeGreaterThan(25);
+  });
+  it('classifies by the most specific keyword and knows standard industrial objects', () => {
+    expect(classify('진공로 부대설비').cls).toBe('utility'); expect(classify('회전 테이블').cls).toBe('rotary'); expect(classify('PLC 모듈', undefined, 800).cls).toBe('device');
+    expect(classify('안전 펜스 패널', undefined, 0).cls).toBe('fence'); expect(classify('로봇 받침대').cls).toBe('column'); expect(classify('컨베이어 1').cls).toBe('conveyor');
+  });
+  it('standard joins: a robot bolts onto its pedestal, a fence panel hangs between posts, a DIN device goes inside a cabinet, a conveyor stands on feet', () => {
+    const col: Part = { id: 'c', name: '로봇 받침대', size: [500, 500, 600], pos: [0, 0, 0] }, rb: Part = { id: 'r', name: '로봇', kind: 'robot', size: [600, 600, 1400], pos: [0, 0, 0] };
+    const r1 = placePart([col], rb, { at: [0, 0, 600], face: 'top', host: 'c' }); expect(r1.ok).toBe(true); expect(r1.pos[2]).toBe(600); expect(r1.how).toBe('bolt'); expect(r1.lv).toBeUndefined();
+    const post: Part = { id: 'p', name: '포스트', size: [50, 50, 2000], pos: [3000, 0, 0] }, fence: Part = { id: 'f', name: '안전 펜스 패널', size: [1500, 30, 1800], pos: [0, 0, 0] };
+    const r2 = placePart([post], fence, { at: [3000, -30, 1000], face: 'side', host: 'p' }); expect(r2.ok).toBe(true); expect(r2.how).toBe('post'); expect(r2.rel).toBe('side');
+    const cab: Part = { id: 'k', name: '캐비닛', size: [800, 400, 2000], pos: [6000, 0, 0] }, dev: Part = { id: 'd', name: 'PLC', size: [120, 90, 100], pos: [0, 0, 0] };
+    const r3 = placePart([cab], dev, { at: [6000, 0, 1200], face: 'inside', host: 'k' }); expect(r3.ok).toBe(true); expect(r3.how).toBe('din'); expect(r3.rel).toBe('in');
+    const cv: Part = { id: 'v', name: '컨베이어', size: [3000, 500, 800], pos: [0, 0, 0] };
+    const r4 = placePart([cab], cv, { at: [0, 3000, 0], face: 'floor' }); expect(r4.ok).toBe(true); expect(r4.how).toBe('feet');
+    const r5 = placePart([cab], rb, { at: [6000, 0, 2000], face: 'top', host: 'k' }); expect(r5.ok).toBe(false); // a cabinet carries nothing on top
+  });
+});

@@ -1,5 +1,6 @@
 /**
- * 설계 구조 규칙 (design structure rules) v0, derived from the four reference stations (조립 · 도포 · 브레이징 · 검사).
+ * 설계 구조 규칙 (design structure rules) v1. The class table is the platform catalogue in packages/schema/src/structure.ts
+ * (general industrial practice + the pairs verified in the four reference stations 조립 · 도포 · 브레이징 · 검사).
  *
  * Every object of a machine gets a ROLE (how it is held: on the floor, on top of something, on the side of something,
  * a robot, an operator seat). Objects that can carry others have a HOST capability (top surface, side faces). From roles
@@ -11,60 +12,33 @@
  * overlap that is already in the reference model is how the real equipment is built, only a change away from it is reported.
  */
 
-export type Role = 'floor' | 'top' | 'side' | 'robot' | 'seat';
-export type HostCap = { top: boolean; side: boolean; inside?: boolean; front?: boolean; stack?: number };
-/** 자리 (slot) kinds an object can need: the floor, a host's top plane, a side face, its inside volume, the space in front of it (a seat at a desk). */
-export type SlotKind = 'floor' | 'top' | 'side' | 'inside' | 'front';
+import { STRUCTURE_CATALOG, MOUNT_LABEL, ROLE_LABEL, SLOT_LABEL, GROUP_LABEL, type Role, type SlotKind, type HostCap, type MountKind, type ClassDef } from '@one-twin/schema';
+export { STRUCTURE_CATALOG, MOUNT_LABEL, ROLE_LABEL, SLOT_LABEL, GROUP_LABEL, type Role, type SlotKind, type HostCap, type MountKind, type ClassDef };
 export interface Part { id: string; name: string; kind?: string; size: [number, number, number]; pos: [number, number, number]; yaw?: number; role?: Role; cls?: string; reach?: number }
 export interface Mount { host: string | null; rel: 'floor' | 'top' | 'side' | 'in'; dz: number; gap: number; off?: [number, number, number] }
 export interface StructureIssue { rule: string; lv: 'err' | 'warn'; ids: string[]; at: [number, number, number]; txt: string; fix?: { label: string; moves: { id: string; by: [number, number, number] }[] } }
 
-/** Object classes: label keywords (generic names, in priority order) → class, role and what it can carry. */
-export const CLASSES: { cls: string; label: string; words: string[]; role: Role; host: HostCap; needs?: SlotKind[] }[] = [
-  { cls: 'base', label: '셀 베이스', words: ['셀 베이스', '베이스', 'base'], role: 'floor', host: { top: true, side: true, inside: true } },
-  { cls: 'utility', label: '부대 설비', words: ['부대설비', '부대 설비', '용접 전원', '에어 필터', '컴프레서', '전원'], role: 'floor', host: { top: false, side: false } },
-  { cls: 'furnace', label: '로 · 대형 장비', words: ['브레이징로', '진공로', '열처리로'], role: 'floor', host: { top: false, side: true } },
-  { cls: 'rotary', label: '회전 테이블', words: ['회전 테이블', '턴테이블'], role: 'floor', host: { top: true, side: false } },
-  { cls: 'desk', label: '작업대', words: ['작업대', '테이블'], role: 'floor', host: { top: true, side: true, front: true } },
-  { cls: 'frame', label: '프레임', words: ['프레임', 'frame'], role: 'floor', host: { top: true, side: true, inside: true } , needs: ['floor', 'top', 'inside'] },
-  { cls: 'rail', label: '레일', words: ['레일', 'rail'], role: 'floor', host: { top: true, side: true } , needs: ['floor', 'top', 'inside'] },
-  { cls: 'shelf', label: '선반', words: ['선반', '랙', 'shelf'], role: 'floor', host: { top: true, side: true, inside: true } , needs: ['floor', 'top', 'inside'] },
-  { cls: 'lamp', label: '경광등', words: ['경광등', '타워램프', 'lamp'], role: 'top', host: { top: false, side: false } },
-  { cls: 'jig', label: '지그', words: ['지그', 'jig'], role: 'top', host: { top: true, side: false }, needs: ['top', 'inside', 'floor'] },
-  { cls: 'tray', label: '트레이', words: ['트레이', 'tray'], role: 'top', host: { top: true, side: false, stack: 315 }, needs: ['top', 'inside', 'floor'] },
-  { cls: 'work', label: '제품', words: ['제품', '워크', 'work'], role: 'top', host: { top: true, side: false } },
-  { cls: 'dispenser', label: '디스펜서', words: ['디스펜서'], role: 'floor', host: { top: false, side: false } },
-  { cls: 'control', label: '제어함', words: ['제어함', '제어반', 'control'], role: 'side', host: { top: false, side: false } },
-  { cls: 'monitor', label: '모니터', words: ['모니터', 'monitor'], role: 'side', host: { top: false, side: false } },
-  { cls: 'sensor', label: '센서', words: ['센서', 'sensor'], role: 'side', host: { top: false, side: false } },
-  { cls: 'guard', label: '가림판 · 가드', words: ['가림판', '가드', 'guard'], role: 'side', host: { top: false, side: false } },
-  { cls: 'aux', label: '부속 · 부대 장치', words: ['부대 장치', '부속'], role: 'side', host: { top: false, side: false } },
-  { cls: 'seat', label: '의자', words: ['의자', 'chair'], role: 'seat', host: { top: false, side: false }, needs: ['front', 'floor'] },
-  { cls: 'robot', label: '로봇', words: ['로봇', 'robot'], role: 'robot', host: { top: false, side: false } },
-];
-export const ROLE_LABEL: Record<Role, string> = { floor: '바닥에 섬', top: '위에 얹힘', side: '옆면에 붙음', robot: '로봇', seat: '작업자 자리' };
+/** Object classes (the platform catalogue, packages/schema/src/structure.ts): label keywords → class, role, what it can carry, how it is joined. */
+export const CLASSES: ClassDef[] = STRUCTURE_CATALOG.classes;
 const NOHOST: HostCap = { top: false, side: false };
-const NEEDS: Record<Role, SlotKind[]> = { floor: ['floor', 'inside'], top: ['top', 'inside'], side: ['side', 'inside'], robot: ['floor', 'top', 'inside'], seat: ['floor'] };
-/** Which slots an object of this class can take, best first. */
-export const needsOf = (cls?: string, role?: Role): SlotKind[] => (cls && byCls.get(cls)?.needs) || NEEDS[role || (cls && byCls.get(cls)?.role) || 'floor'];
-/** Pairs seen in the four reference stations (part class → host class, by slot): a pair outside this list is allowed with a warning. */
-export const SEEN_PAIRS: Record<SlotKind, string[]> = {
-  floor: ['*'],
-  top: ['lamp>frame', 'lamp>shelf', 'lamp>tray', 'lamp>base', 'shelf>shelf', 'work>tray', 'tray>jig', 'tray>tray', 'robot>base', 'jig>base'],
-  side: ['control>shelf', 'control>frame', 'aux>frame', 'monitor>frame'],
-  inside: ['aux>shelf', 'sensor>base', 'guard>base', 'monitor>base', 'jig>base', 'tray>base', 'lamp>base', 'robot>base'],
-  front: ['seat>desk'],
-};
 const byCls = new Map(CLASSES.map(c => [c.cls, c]));
+/** Which slots an object of this class can take, best first. */
+export const needsOf = (cls?: string, role?: Role): SlotKind[] => (cls && byCls.get(cls)?.needs) || STRUCTURE_CATALOG.needsByRole[role || (cls && byCls.get(cls)?.role) || 'floor'];
+/** How a part of this class is joined in a slot (앵커 · 레벨링 풋 · 볼트 · 브래킷 · DIN 레일 …). */
+export const mountOf = (cls: string | undefined, slot: SlotKind): MountKind => (cls && byCls.get(cls)?.mount?.[slot]) || STRUCTURE_CATALOG.mountBySlot[slot];
+/** Verified part>host pairs per slot: the reference stations plus standard practice; a pair outside is allowed with a warning. */
+export const SEEN_PAIRS: Record<SlotKind, string[]> = STRUCTURE_CATALOG.verified;
 /** Can a thing of this class carry things on top / on its sides? */
 export const hostCap = (cls?: string): HostCap => (cls && byCls.get(cls)?.host) || NOHOST;
+const isSolid = (cls?: string) => !!(cls && byCls.get(cls)?.solid);
 
 /** Class and role of an object from its name and kind; a part standing on the floor whose class is mounted keeps 'floor'. */
 export function classify(name: string, kind?: string, z = 0): { cls: string; role: Role } {
   if (kind === 'robot') return { cls: 'robot', role: 'robot' };
   if (kind === 'rotary') return { cls: 'rotary', role: 'floor' };
   const n = ` ${name.toLowerCase()} `;
-  const c = CLASSES.find(c => c.words.some(w => n.includes(w.toLowerCase())));
+  // the most specific keyword wins ('진공로 부대설비' is a utility, '회전 테이블' a rotary table, not a desk)
+  let c: ClassDef | undefined, best = 0; for (const k of CLASSES) for (const w of k.words) if (w.length > best && n.includes(w.toLowerCase())) { best = w.length; c = k; }
   if (!c) return { cls: 'part', role: z < 50 ? 'floor' : 'top' };
   // a tray table, a shelf base, an aux unit standing on the floor are floor objects; a shelf up on a frame is carried
   if (c.role !== 'floor' && c.role !== 'robot' && c.role !== 'seat' && z < 50) return { cls: c.cls, role: 'floor' };
@@ -203,7 +177,7 @@ export const STRUCTURE_RULES: { id: string; name: string; txt: string }[] = [
 // ------------------------------------------------------------------------------------------------------- placement
 /** Where the user dropped a part: the pointer hit in stored mm, the kind of surface under it and the object it belongs to. */
 export interface Drop { at: [number, number, number]; face: SlotKind; host?: string | null }
-export interface Placement { ok: boolean; pos: [number, number, number]; yaw: number; host: string | null; rel: Mount['rel']; why?: string; lv?: 'err' | 'warn' }
+export interface Placement { ok: boolean; pos: [number, number, number]; yaw: number; host: string | null; rel: Mount['rel']; how?: MountKind; why?: string; lv?: 'err' | 'warn' }
 
 const clsLabel = (c?: string) => (c && byCls.get(c)?.label) || c || '객체';
 /** The side face of `h` nearest to point (x, y): its outward unit normal (world) and the distance from the face. */
@@ -230,7 +204,7 @@ export function placePart(parts0: Part[], part0: Part, drop: Drop): Placement {
   // a desk's top under the pointer with a seat in hand: the seat goes in front of the desk
   if (face !== 'floor' && needs.includes('front') && cap.front) face = 'front';
   if (!needs.includes(face)) {
-    const want = needs.map(k => ({ floor: '바닥', top: '받침 윗면', side: '받침 옆면', inside: '받침 안', front: '작업대 앞' })[k]).join('·');
+    const want = needs.map(k => SLOT_LABEL[k]).join('·');
     return no(face === 'floor' ? `${clsLabel(part.cls)}은(는) 바닥에 놓을 수 없습니다 · ${want}에 놓으세요` : `${clsLabel(part.cls)}은(는) ${clsLabel(host?.cls)} ${face === 'top' ? '윗면' : face === 'side' ? '옆면' : '안'}에 둘 수 없습니다 · ${want}에 놓으세요`);
   }
   let pos: [number, number, number] = [drop.at[0], drop.at[1], 0], yaw = part.yaw || 0, rel: Mount['rel'] = 'floor';
@@ -260,13 +234,14 @@ export function placePart(parts0: Part[], part0: Part, drop: Drop): Placement {
     if (h) { hostId = h.id; rel = 'in'; } }
   /* real objects are not boxes (a chair tucks under a desk, a shelf stands in its frame), so an overlap of two outlines is a
      warning, except two solid floor machines (furnaces, utilities, desks) driven into each other */
-  const SOLID = new Set(['furnace', 'utility', 'desk', 'dispenser']); let warn: string | null = null;
+  let warn: string | null = null;
   for (const o of parts) { if (o.id === hostId || o === host || o.cls === 'base' || placed.cls === 'base') continue; const d = interfere(placed, o); if (d <= 20) continue;
-    if (SOLID.has(placed.cls!) && SOLID.has(o.cls!)) return { ok: false, pos, yaw, host: hostId, rel, why: `${o.name}와(과) ${Math.round(d)} mm 겹칩니다`, lv: 'err' };
+    if (isSolid(placed.cls) && isSolid(o.cls)) return { ok: false, pos, yaw, host: hostId, rel, why: `${o.name}와(과) ${Math.round(d)} mm 겹칩니다`, lv: 'err' };
     warn = warn || `${o.name}와(과) 외곽이 ${Math.round(d)} mm 겹칩니다 · 실제 형상을 확인하세요`; }
   if (face === 'floor' && part.role === 'seat') { const desk = parts.filter(o => o.cls === 'desk').sort((a, b) => hDist(placed, a) - hDist(placed, b))[0];
     if (!desk || hDist(placed, desk) > 1200) warn = '작업대에서 1200 mm 안에 두세요'; }
   const pair = host ? `${part.cls}>${host.cls}` : '*', seen = !host || SEEN_PAIRS[face].includes(pair) || SEEN_PAIRS[face].includes('*');
   if (!seen) warn = warn || `${clsLabel(part.cls)}을(를) ${clsLabel(host?.cls)}에 두는 조합은 기준 설비에 없습니다 · 확인하세요`;
-  return { ok: true, pos, yaw, host: hostId, rel, ...(warn ? { why: warn, lv: 'warn' as const } : {}) };
+  const how = mountOf(part.cls, rel === 'in' ? 'inside' : face === 'front' ? 'front' : face);
+  return { ok: true, pos, yaw, host: hostId, rel, how, ...(warn ? { why: warn, lv: 'warn' as const } : {}) };
 }

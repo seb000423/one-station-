@@ -1,0 +1,651 @@
+{
+  "version": "1.0",
+  "classes": [
+    {
+      "cls": "base",
+      "label": "셀 베이스",
+      "group": "structure",
+      "words": [
+        "셀 베이스",
+        "베이스",
+        "base"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true,
+        "inside": true
+      },
+      "mount": {
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "plate",
+      "label": "베이스 플레이트",
+      "group": "structure",
+      "words": [
+        "베이스 플레이트",
+        "정반",
+        "plate"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": false
+      },
+      "mount": {
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "frame",
+      "label": "프레임",
+      "group": "structure",
+      "words": [
+        "프레임",
+        "frame"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true,
+        "inside": true
+      },
+      "needs": [
+        "floor",
+        "top",
+        "inside"
+      ],
+      "mount": {
+        "floor": "anchor",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "column",
+      "label": "기둥 · 받침대",
+      "group": "structure",
+      "words": [
+        "기둥",
+        "받침대",
+        "페데스탈",
+        "pedestal",
+        "column"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true
+      },
+      "mount": {
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "gantry",
+      "label": "갠트리 · 천장 빔",
+      "group": "structure",
+      "words": [
+        "갠트리",
+        "빔",
+        "gantry"
+      ],
+      "role": "top",
+      "host": {
+        "top": true,
+        "side": true
+      },
+      "needs": [
+        "top"
+      ],
+      "mount": {
+        "top": "span"
+      }
+    },
+    {
+      "cls": "shelf",
+      "label": "선반",
+      "group": "structure",
+      "words": [
+        "선반",
+        "랙",
+        "shelf"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true,
+        "inside": true
+      },
+      "needs": [
+        "floor",
+        "top",
+        "inside"
+      ],
+      "mount": {
+        "floor": "feet",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "furnace",
+      "label": "로 · 대형 장비",
+      "group": "machine",
+      "words": [
+        "브레이징로",
+        "진공로",
+        "열처리로"
+      ],
+      "role": "floor",
+      "host": {
+        "top": false,
+        "side": true
+      },
+      "mount": {
+        "floor": "anchor"
+      },
+      "solid": true
+    },
+    {
+      "cls": "rotary",
+      "label": "회전 테이블",
+      "group": "machine",
+      "words": [
+        "회전 테이블",
+        "턴테이블"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": false
+      },
+      "mount": {
+        "floor": "anchor",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "dispenser",
+      "label": "디스펜서",
+      "group": "machine",
+      "words": [
+        "디스펜서"
+      ],
+      "role": "floor",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "floor": "feet"
+      },
+      "solid": true
+    },
+    {
+      "cls": "conveyor",
+      "label": "컨베이어",
+      "group": "machine",
+      "words": [
+        "컨베이어",
+        "conveyor"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true
+      },
+      "needs": [
+        "floor",
+        "top"
+      ],
+      "mount": {
+        "floor": "feet",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "utility",
+      "label": "부대 설비",
+      "group": "machine",
+      "words": [
+        "부대설비",
+        "부대 설비",
+        "용접 전원",
+        "에어 필터",
+        "컴프레서",
+        "전원"
+      ],
+      "role": "floor",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "floor": "feet"
+      },
+      "solid": true
+    },
+    {
+      "cls": "cabinet",
+      "label": "제어반 (바닥 설치)",
+      "group": "machine",
+      "words": [
+        "캐비닛",
+        "분전반",
+        "cabinet"
+      ],
+      "role": "floor",
+      "host": {
+        "top": false,
+        "side": true,
+        "inside": true
+      },
+      "mount": {
+        "floor": "anchor"
+      },
+      "solid": true
+    },
+    {
+      "cls": "rail",
+      "label": "레일",
+      "group": "handling",
+      "words": [
+        "레일",
+        "rail"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true
+      },
+      "needs": [
+        "floor",
+        "top",
+        "inside"
+      ],
+      "mount": {
+        "floor": "anchor",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "robot",
+      "label": "로봇",
+      "group": "handling",
+      "words": [
+        "로봇",
+        "robot"
+      ],
+      "role": "robot",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "floor": "anchor",
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "tray",
+      "label": "트레이",
+      "group": "handling",
+      "words": [
+        "트레이",
+        "tray"
+      ],
+      "role": "top",
+      "host": {
+        "top": true,
+        "side": false,
+        "stack": 315
+      },
+      "needs": [
+        "top",
+        "inside",
+        "floor"
+      ],
+      "mount": {
+        "top": "free",
+        "floor": "free"
+      }
+    },
+    {
+      "cls": "control",
+      "label": "제어함",
+      "group": "control",
+      "words": [
+        "제어함",
+        "제어반",
+        "control"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "side": "bracket"
+      }
+    },
+    {
+      "cls": "device",
+      "label": "제어 기기 (DIN)",
+      "group": "control",
+      "words": [
+        "PLC",
+        "인버터",
+        "릴레이",
+        "차단기",
+        "DIN"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "needs": [
+        "inside",
+        "side"
+      ],
+      "mount": {
+        "inside": "din",
+        "side": "bracket"
+      }
+    },
+    {
+      "cls": "monitor",
+      "label": "모니터",
+      "group": "control",
+      "words": [
+        "모니터",
+        "monitor"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "side": "bracket"
+      }
+    },
+    {
+      "cls": "sensor",
+      "label": "센서",
+      "group": "control",
+      "words": [
+        "센서",
+        "sensor"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "side": "bracket"
+      }
+    },
+    {
+      "cls": "lamp",
+      "label": "경광등",
+      "group": "control",
+      "words": [
+        "경광등",
+        "타워램프",
+        "lamp"
+      ],
+      "role": "top",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "top": "bolt"
+      }
+    },
+    {
+      "cls": "post",
+      "label": "펜스 포스트",
+      "group": "safety",
+      "words": [
+        "포스트",
+        "post"
+      ],
+      "role": "floor",
+      "host": {
+        "top": false,
+        "side": true
+      },
+      "mount": {
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "fence",
+      "label": "안전 펜스 패널",
+      "group": "safety",
+      "words": [
+        "펜스",
+        "안전 울타리",
+        "fence"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "needs": [
+        "side",
+        "floor"
+      ],
+      "mount": {
+        "side": "post",
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "guard",
+      "label": "가림판 · 가드",
+      "group": "safety",
+      "words": [
+        "가림판",
+        "가드",
+        "guard"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "side": "bracket"
+      }
+    },
+    {
+      "cls": "desk",
+      "label": "작업대",
+      "group": "operator",
+      "words": [
+        "작업대",
+        "테이블"
+      ],
+      "role": "floor",
+      "host": {
+        "top": true,
+        "side": true,
+        "front": true
+      },
+      "mount": {
+        "floor": "feet"
+      },
+      "solid": true
+    },
+    {
+      "cls": "seat",
+      "label": "의자",
+      "group": "operator",
+      "words": [
+        "의자",
+        "chair"
+      ],
+      "role": "seat",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "needs": [
+        "front",
+        "floor"
+      ],
+      "mount": {
+        "front": "free",
+        "floor": "free"
+      }
+    },
+    {
+      "cls": "jig",
+      "label": "지그",
+      "group": "fixture",
+      "words": [
+        "지그",
+        "jig"
+      ],
+      "role": "top",
+      "host": {
+        "top": true,
+        "side": false
+      },
+      "needs": [
+        "top",
+        "inside",
+        "floor"
+      ],
+      "mount": {
+        "top": "bolt",
+        "inside": "bolt",
+        "floor": "anchor"
+      }
+    },
+    {
+      "cls": "work",
+      "label": "제품",
+      "group": "fixture",
+      "words": [
+        "제품",
+        "워크",
+        "work"
+      ],
+      "role": "top",
+      "host": {
+        "top": true,
+        "side": false
+      },
+      "mount": {
+        "top": "free"
+      }
+    },
+    {
+      "cls": "aux",
+      "label": "부속 · 부대 장치",
+      "group": "fixture",
+      "words": [
+        "부대 장치",
+        "부속"
+      ],
+      "role": "side",
+      "host": {
+        "top": false,
+        "side": false
+      },
+      "mount": {
+        "side": "bracket"
+      }
+    }
+  ],
+  "needsByRole": {
+    "floor": [
+      "floor",
+      "inside"
+    ],
+    "top": [
+      "top",
+      "inside"
+    ],
+    "side": [
+      "side",
+      "inside"
+    ],
+    "robot": [
+      "floor",
+      "top",
+      "inside"
+    ],
+    "seat": [
+      "floor"
+    ]
+  },
+  "mountBySlot": {
+    "floor": "feet",
+    "top": "bolt",
+    "side": "bracket",
+    "inside": "free",
+    "front": "free"
+  },
+  "verified": {
+    "floor": [
+      "*"
+    ],
+    "top": [
+      "lamp>frame",
+      "lamp>shelf",
+      "lamp>tray",
+      "lamp>base",
+      "shelf>shelf",
+      "work>tray",
+      "tray>jig",
+      "tray>tray",
+      "robot>base",
+      "jig>base",
+      "robot>column",
+      "robot>plate",
+      "jig>plate",
+      "jig>desk",
+      "gantry>column",
+      "gantry>frame",
+      "conveyor>frame",
+      "rail>frame",
+      "control>column"
+    ],
+    "side": [
+      "control>shelf",
+      "control>frame",
+      "aux>frame",
+      "monitor>frame",
+      "fence>post",
+      "control>column",
+      "sensor>frame",
+      "sensor>conveyor",
+      "guard>frame",
+      "monitor>column",
+      "control>cabinet"
+    ],
+    "inside": [
+      "aux>shelf",
+      "sensor>base",
+      "guard>base",
+      "monitor>base",
+      "jig>base",
+      "tray>base",
+      "lamp>base",
+      "robot>base",
+      "device>cabinet",
+      "device>control"
+    ],
+    "front": [
+      "seat>desk"
+    ]
+  }
+}
