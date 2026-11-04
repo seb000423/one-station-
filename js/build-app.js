@@ -1582,7 +1582,7 @@
     if (ED.factory.doc.building.walls.length || ED.factory.doc.machines.length) LS.set(KEY.factory + '.before-plant', ED.factory.doc);
     LS.set(KEY.factory + '.plant', true); LS.set(KEY.factory + '.seeded', true); openDoc('factory', window.OnePlant.defaultFactory());
   }
-  L.onModel(g => { updateSelMark(); if (xray) stage.addTwin(g); });
+  L.onModel(g => { updateSelMark(); if (xray) stage.addTwin(g); if (mode === 'run' && g.userData.rig && $('pend')?.hidden) drawPend(); }); // a robot that arrives after 동작 시험 began opens the pendant
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
