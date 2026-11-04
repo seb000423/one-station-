@@ -1149,25 +1149,52 @@
     if ((doc.machines.length || doc.building.walls.length) && !confirm('지금 공장 대신 예시 공정을 엽니다. 지금 공장은 이 브라우저에 따로 보관됩니다. 계속할까요?')) return;
     if (doc.machines.length || doc.building.walls.length) LS.set(KEY.factory + '.before-plant', doc);
     openDoc('factory', window.OnePlant.defaultFactory()); dirty.factory = false; switchTab('factory', true); toast('예시 공정 · 감마 라인을 열었습니다'); }
-  function save() {
+  /* 설비 카드 저장: a dialog first, with the card from the right panel to check or change, what the save does (new version,
+     placed copies follow) and what the design check found; nothing is stored until 저장 is pressed */
+  function saveDialog(after) { document.querySelector('.savedlg')?.remove(); const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id], v = m ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
+    const placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${doc.meta.id}@`)).length, c = doc.card, sz = doc.meta.cellFixed ? doc.meta.bbox : contentSize() || doc.meta.bbox, ne = issues.filter(i => i.lv === 'err').length;
+    const P = SCN.portsOf(doc), lab = (w, x) => x.key ? (SCN.portCandidates(doc).find(y => y.key === x.key)?.label || x.key) : `자동 · 외곽 ${w === 'inlet' ? '−X' : '+X'} 면`;
+    const box = document.createElement('div'); box.className = 'savedlg';
+    box.innerHTML = `<div class="savecard"><h3>설비 카드 저장 <small>${m ? `${esc(m.name)} v${v - 1} → <b>v${v}</b>` : '새 설비 <b>v1</b>'}</small></h3>
+      <div class="props"><span class="k">이름</span><input id="sdName" value="${esc(doc.meta.name)}">
+      <span class="k">사이클</span><span class="v"><input id="sdCt" type="number" step="0.5" min="0" value="${c.cycle_time ?? ''}"> s</span>
+      <span class="k">양품률</span><span class="v"><input id="sdOk" type="number" step="0.001" min="0" max="1" value="${c.ok_rate ?? ''}"> 0~1</span>
+      <span class="k">작업자</span><span class="v"><input id="sdOp" type="number" step="1" min="0" value="${c.operators ?? ''}"> 명</span>
+      <span class="k">외곽</span><span class="v">${sz.join(' × ')} mm${doc.meta.cellFixed ? ' (작업 칸 고정)' : ' (블록 기준)'}</span>
+      <span class="k">입구 · 출구</span><span class="v" style="font-family:var(--sans)">${esc(lab('inlet', P.inlet))} · ${esc(lab('outlet', P.outlet))}</span>
+      <span class="k">구성</span><span class="v">블록 ${doc.nodes.length} · 태그 ${doc.io.length}</span>
+      <span class="k">메모</span><input id="sdNote" placeholder="이번 버전에서 바뀐 점 (선택)"></div>
+      ${issues.length ? `<p class="${ne ? 'bad' : 'warn'}">설계 검사 ${ne ? `● 고쳐야 할 것 ${ne}개` : ''}${issues.length - ne ? ` ▲ 확인할 것 ${issues.length - ne}개` : ''} · 그대로 저장할 수 있지만 SIM에서 그대로 재현됩니다</p>` : '<p class="ok">설계 검사 통과</p>'}
+      ${m ? `<label><input type="checkbox" id="sdPlaced"${placed ? ' checked' : ' disabled'}> 공장에 놓인 ${placed}대도 v${v}로 바꾸기</label><label><input type="checkbox" id="sdAsNew"> 다른 설비로 저장 (원래 설비는 그대로 두고 새 설비 v1)</label>` : ''}
+      <div class="acts"><button class="btn" data-sd="cancel">취소</button><button class="btn pri" data-sd="ok">${after ? '저장하고 시뮬레이션' : '저장'}</button></div></div>`;
+    document.body.appendChild(box); box.querySelector('#sdName').focus();
+    box.onclick = e => { const b = e.target.closest('[data-sd]'); if (e.target === box || b?.dataset.sd === 'cancel') { box.remove(); return; } if (b?.dataset.sd !== 'ok') return;
+      const g = id => box.querySelector(id), num = id => g(id).value === '' ? null : +g(id).value, name = g('#sdName').value.trim() || doc.meta.name;
+      ED.machine.batch('save card', () => { if (name !== doc.meta.name) ED.machine.exec('set_meta', { name }); ED.machine.exec('set_card', { cycle_time: num('#sdCt'), ok_rate: num('#sdOk'), operators: num('#sdOp') }); });
+      const asNew = g('#sdAsNew')?.checked; if (asNew) { const d = S.Machine.parse(JSON.parse(JSON.stringify(ED.machine.doc))); d.meta.id = S.uuidv7(); openDoc('machine', d); }
+      box.remove(); save(true, { note: g('#sdNote').value.trim(), follow: asNew ? false : (g('#sdPlaced') ? g('#sdPlaced').checked : true) }); if (after) after(); };
+    box.onkeydown = e => { if (e.key === 'Escape') box.remove(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') box.querySelector('[data-sd=ok]').click(); }; }
+  function save(confirmed, opt = {}) {
+    if (tab === 'machine' && confirmed !== true) { saveDialog(); return; }
     if (tab === 'machine') {
       const doc = ED.machine.doc, all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;
       const sz = contentSize(); if (!doc.meta.cellFixed && sz && sz.join() !== doc.meta.bbox.join()) ED.machine.exec('set_meta', { bbox: sz }); const cur = ED.machine.doc;
       const snap = JSON.parse(JSON.stringify(cur)); snap.meta.version = v; snap.card.footprint = [cur.meta.bbox[0], cur.meta.bbox[1]];
-      m.name = doc.meta.name; m.versions[v] = snap; all[doc.meta.id] = m; LS.set(KEY.lib, all);
-      // the same machine already placed in the factory now uses this version
-      const placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${doc.meta.id}@`) && x.ref !== `local:${doc.meta.id}@${v}`);
+      m.name = doc.meta.name; m.versions[v] = snap; if (opt.note) m.notes = Object.assign({}, m.notes, { [v]: opt.note }); all[doc.meta.id] = m; LS.set(KEY.lib, all);
+      // the same machine already placed in the factory now uses this version (unless unticked in the dialog)
+      const placed = opt.follow === false ? [] : ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${doc.meta.id}@`) && x.ref !== `local:${doc.meta.id}@${v}`);
       if (placed.length) ED.factory.batch('set_machine_ref', () => { for (const x of placed) ED.factory.exec('set_machine_ref', { id: x.id, ref: `local:${doc.meta.id}@${v}` }); });
       dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · ${placed.length ? `공장에 놓인 ${placed.length}대도 v${v}로 바뀌었습니다` : "Factory Builder의 '내 설비'에 나옵니다"}`); log(`저장 v${v}`);
     } else { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; toast('공장을 이 브라우저에 저장했습니다 · 파일로 받으려면 내보내기'); }
     drawCrumb();
   }
-  $('bSave').onclick = save;
+  $('bSave').onclick = () => save();
   // 도움말: a popover from the header (?) instead of a block in the properties panel
   const drawHelp = () => { $('helpBody').innerHTML = tab === 'factory' ? howtoFactory : howtoMachine; };
   $('bHelp').onclick = () => { drawHelp(); $('helpBox').hidden = !$('helpBox').hidden; };
   $('helpX').onclick = () => { $('helpBox').hidden = true; };
-  $('bSim').onclick = e => { e.preventDefault(); if (tab === 'machine') save(); LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; location.href = '/sim?src=build'; };
+  $('bSim').onclick = e => { e.preventDefault(); const go = () => { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; location.href = '/sim?src=build'; };
+    if (tab === 'machine' && dirty.machine) saveDialog(go); else go(); };
   $('bExport').onclick = () => { const doc = ed().doc, a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }));
     a.download = `${(doc.meta.name || tab).replace(/[\\/:*?"<>|\s]+/g, '_')}.${tab}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
   $('bOpen').onclick = () => $('file').click();

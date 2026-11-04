@@ -209,6 +209,13 @@ tr.xtra td{color:var(--dim)}
 .seqadd{margin:8px 14px;color:var(--amber);border-color:var(--amber)}
 .seqempty{color:var(--dim);font-size:12px;padding:10px 14px;line-height:1.6;margin:0}
 @media (max-width:1100px){main{grid-template-columns:240px minmax(0,1fr) 260px}.bottom{grid-template-columns:1fr}.logb{display:none}.seqb{display:none}}
+.savedlg{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
+.savecard{width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.savecard h3{margin:0 0 12px;font-size:15px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}.savecard h3 small{font-weight:400;color:var(--mute);font-size:12px}.savecard h3 b{color:var(--amber)}
+.savecard .props input{width:100%}.savecard .props .v input{width:90px;text-align:right}
+.savecard p{font-size:12px;margin:12px 0 6px}.savecard p.bad{color:#ff7b6b}.savecard p.warn{color:var(--amber)}.savecard p.ok{color:#5fd08a}
+.savecard label{display:flex;gap:8px;align-items:center;font-size:12.5px;margin:6px 0;color:var(--fg)}
+.savecard .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 </style>
 </head>
 <body>
