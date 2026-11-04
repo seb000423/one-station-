@@ -78,7 +78,7 @@ export const STRUCTURE_CATALOG: StructureCatalog = StructureCatalog.parse({
     { cls: 'cabinet', label: '제어반 (바닥 설치)', group: 'machine', words: ['캐비닛', '분전반', 'cabinet'], role: 'floor', host: { top: false, side: true, inside: true }, mount: { floor: 'anchor' }, solid: true },
     // 반송 · 로봇
     { cls: 'rail', label: '레일', group: 'handling', words: ['레일', 'rail'], role: 'floor', host: { top: true, side: true }, needs: ['floor', 'top', 'inside'], mount: { floor: 'anchor', top: 'bolt' } },
-    { cls: 'robot', label: '로봇', group: 'handling', words: ['로봇', 'robot'], role: 'robot', host: NO, mount: { floor: 'anchor', top: 'bolt' } },
+    { cls: 'robot', label: '로봇', group: 'handling', words: ['로봇', 'robot'], role: 'robot', host: NO, needs: ['top', 'floor', 'inside'], mount: { floor: 'anchor', top: 'bolt' } },
     { cls: 'tray', label: '트레이', group: 'handling', words: ['트레이', 'tray'], role: 'top', host: { top: true, side: false, stack: 315 }, needs: ['top', 'inside', 'floor'], mount: { top: 'free', floor: 'free' } },
     // 제어 · 표시
     { cls: 'control', label: '제어함', group: 'control', words: ['제어함', '제어반', 'control'], role: 'side', host: NO, mount: { side: 'bracket' } },

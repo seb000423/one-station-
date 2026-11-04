@@ -364,11 +364,12 @@
     if (!node) return null; const top = nodeTop(node), face = nrm.y > 0.7 ? (p[2] < top - 60 ? 'inside' : 'top') : Math.abs(nrm.y) < 0.4 ? 'side' : 'inside';
     return { at: [S.snap(p[0], 5), S.snap(p[1], 5), Math.round(p[2])], face, host: id }; }
   const SLOT_KO = { floor: '바닥', top: '윗면', side: '옆면', inside: '안', front: '앞' };
-  function slotHint(r, sl, name) { $('hint').textContent = r.ok ? `${name}: ${sl.host ? `${ED.machine.doc.nodes.find(x => x.id === sl.host)?.name || ''} ${SLOT_KO[r.rel === 'in' ? 'inside' : sl.face]}에` : '바닥에'} 놓습니다${r.how ? ` (${C.MOUNT_LABEL[r.how]})` : ''}${r.why ? ` · ▲ ${r.why}` : ''} · 누르면 결합` : `● ${r.why}`; }
+  function slotHint(r, sl, name) { const hostId = r.ok ? r.host : sl.host, rel = r.rel === 'in' ? 'inside' : r.rel === 'floor' && r.host ? 'inside' : r.ok ? (r.rel === 'floor' ? 'floor' : r.rel) : sl.face;
+    $('hint').textContent = r.ok ? `${name}: ${hostId ? `${ED.machine.doc.nodes.find(x => x.id === hostId)?.name || ''} ${SLOT_KO[rel] || ''}에` : '바닥에'} 놓습니다${r.how ? ` (${C.MOUNT_LABEL[r.how]})` : ''}${r.snapped ? ` · ↘ ${r.snapWhy}` : ''}${r.why ? ` · ▲ ${r.why}` : ''} · 누르면 결합` : `● ${r.why}`; }
   function trackPlace(e) {
     setNdc(e); plane.constant = 0; let onto = null, z = 0;
     if (usesSlots(placing.k, placing.id)) { const sl = slotUnder(new Set()); if (!sl) return; const part = placing.k === 'p' ? Object.assign({ id: 'new', pos: [0, 0, 0], yaw: placing.yaw }, (e => ({ name: e.name, kind: e.kind, cls: e.cls, size: e.size }))(partEntry(placing.id))) : blockPart(placing.id, placing.yaw);
-      const r = C.placePart(slotParts(ED.machine.doc), part, sl); placing.slot = r; placing.at = r.pos.slice(0, 2); placing.obj.visible = true; placeObj(placing.obj, r.pos, r.yaw);
+      const r = C.snapPlace(slotParts(ED.machine.doc), part, sl); placing.slot = r; placing.at = r.pos.slice(0, 2); placing.obj.visible = true; placeObj(placing.obj, r.pos, r.yaw);
       placing.obj.traverse(m => { if (m.isMesh && m.material) m.material.color.setHex(r.ok ? (m.userData.c0 ?? (m.userData.c0 = m.material.color.getHex())) : 0xff4040); }); slotHint(r, sl, placing.name); return; }
     if (placing.k === 'b' && L.BLOCKS[placing.id].onTop) { const id = pickExact(); const n = id && ED.machine.doc.nodes.find(x => x.id === id); if (n) { onto = n.id; z = nodeTop(n) / 1000; } }
     if (!ray.ray.intersectPlane(plane, hit)) return; const st = tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50);
@@ -1229,7 +1230,7 @@
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
     if (tab === 'machine' && drag.ids.length === 1 && drag.slotPart) { const skip = new Set([drag.ids[0], ...descendants(ED.machine.doc, drag.ids[0]).map(k => k.id)]), sl = slotUnder(skip);
-      if (sl) { const r = C.placePart(slotParts(ED.machine.doc, skip), drag.slotPart, sl); drag.slot = r; drag.moved = true; const o = drag.os[0]; o.position.copy(toS(r.pos)); showSnap(r.ok ? { pt: r.pos, h: r.pos[2] } : null); slotHint(r, sl, drag.slotPart.name); }
+      if (sl) { const r = C.snapPlace(slotParts(ED.machine.doc, skip), drag.slotPart, sl); drag.slot = r; drag.moved = true; const o = drag.os[0]; o.position.copy(toS(r.pos)); showSnap(r.ok ? { pt: r.pos, h: r.pos[2] } : null); slotHint(r, sl, drag.slotPart.name); }
       updateSelMark(); updateEnvelope(); return; }
     if (tab === 'machine' && drag.ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === drag.ids[0]), by = S.sceneToStored([d.x, 0, d.z]), p = n.transform.position, sn = n && conveyorSnap(n, [p[0] + by[0], p[1] + by[1]], new Set());
       showSnap(sn); if (sn) { const s2 = toS([sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); d.x = s2.x; d.z = s2.z; } }

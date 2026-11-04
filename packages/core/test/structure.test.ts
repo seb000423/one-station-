@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { checkStructure, findMounts, placePart, withRoles, classify, type Part, type SlotKind } from '@one-twin/core';
+import { checkStructure, findMounts, placePart, snapPlace, withRoles, classify, type Part, type SlotKind } from '@one-twin/core';
 import { StructureCatalog, STRUCTURE_CATALOG } from '@one-twin/schema';
 
 // the four partner stations (js/plant-data.js is a browser script: window.ONE_PLANT_DATA = {...})
@@ -104,5 +104,27 @@ describe('design structure catalogue (platform default, packages/schema)', () =>
     const cv: Part = { id: 'v', name: '컨베이어', size: [3000, 500, 800], pos: [0, 0, 0] };
     const r4 = placePart([cab], cv, { at: [0, 3000, 0], face: 'floor' }); expect(r4.ok).toBe(true); expect(r4.how).toBe('feet');
     const r5 = placePart([cab], rb, { at: [6000, 0, 2000], face: 'top', host: 'k' }); expect(r5.ok).toBe(false); // a cabinet carries nothing on top
+  });
+});
+
+describe('pull to a valid slot', () => {
+  const frame: Part = { id: 'f', name: '프레임', cls: 'frame', size: [1200, 800, 850], pos: [0, 0, 0] }, lamp: Part = { id: 'l', name: '경광등', cls: 'lamp', size: [80, 80, 500], pos: [0, 0, 0] };
+  it('a lamp dropped on the floor 300 mm from a frame is pulled onto the frame top; 2 m away it stays refused', () => {
+    const r = snapPlace([frame], lamp, { at: [900, 0, 0], face: 'floor' }); expect(r.ok).toBe(true); expect(r.snapped).toBe(true); expect(r.host).toBe('f'); expect(r.pos).toEqual([560, 0, 850]);
+    const far = snapPlace([frame], lamp, { at: [2600, 0, 0], face: 'floor' }); expect(far.ok).toBe(false);
+  });
+  it('a control box dropped on a frame top slides to its nearest side face', () => {
+    const box: Part = { id: 'b', name: '제어함', cls: 'control', size: [300, 200, 400], pos: [0, 0, 0] };
+    const r = snapPlace([frame], box, { at: [500, 100, 850], face: 'top', host: 'f' }); expect(r.ok).toBe(true); expect(r.rel).toBe('side'); expect(r.pos[0]).toBe(600 + 150); expect(r.snapped).toBe(true);
+  });
+  it('a robot set on the floor beside its pedestal goes up onto it; a desk beside a desk stays on the floor', () => {
+    const col: Part = { id: 'c', name: '로봇 단상', cls: 'column', size: [700, 700, 600], pos: [0, 0, 0] }, rb: Part = { id: 'r', name: '로봇', cls: 'robot', size: [400, 400, 1400], pos: [0, 0, 0] };
+    const r = snapPlace([col], rb, { at: [650, 0, 0], face: 'floor' }); expect(r.host).toBe('c'); expect(r.pos[2]).toBe(600); expect(r.snapped).toBe(true);
+    const alone = snapPlace([], rb, { at: [650, 0, 0], face: 'floor' }); expect(alone.ok).toBe(true); expect(alone.rel).toBe('floor');
+  });
+  it('a floor block set 100 mm from another closes the gap and lines up its edge', () => {
+    const desk: Part = { id: 'd', name: '작업대', cls: 'desk', size: [1500, 700, 750], pos: [0, 0, 0] }, next: Part = { id: 'n', name: '작업대 2', cls: 'desk', size: [1500, 700, 750], pos: [0, 0, 0] };
+    const r = snapPlace([desk], next, { at: [1600, 60, 0], face: 'floor' }); expect(r.snapped).toBe(true); expect(r.pos).toEqual([1500, 0, 0]); expect(r.snapWhy).toMatch(/맞닿게/);
+    const r2 = snapPlace([desk], next, { at: [2000, 60, 0], face: 'floor' }); expect(r2.snapped).toBeUndefined(); expect(r2.pos).toEqual([2000, 60, 0]);
   });
 });

@@ -255,3 +255,38 @@ export function placePart(parts0: Part[], part0: Part, drop: Drop): Placement {
   const how = mountOf(part.cls, rel === 'in' ? 'inside' : face === 'front' ? 'front' : face);
   return { ok: true, pos, yaw, host: hostId, rel, how, ...(warn ? { why: warn, lv: 'warn' as const } : {}) };
 }
+
+// ------------------------------------------------------------------------------------------------ pull to a valid slot
+/** placePart, and when the drop is refused, the nearest slot within `radius` (mm) that takes the part: the pointer need not hit the exact face. On the floor, the part snaps flush / aligned with a neighbour within `edge` mm. */
+export function snapPlace(parts0: Part[], part0: Part, drop: Drop, opt: { radius?: number; edge?: number } = {}): Placement & { snapped?: boolean; snapWhy?: string } {
+  const radius = opt.radius ?? 600, edge = opt.edge ?? 150, first = placePart(parts0, part0, drop);
+  const parts = withRoles(parts0.filter(p => p.id !== part0.id)), part = withRoles([part0])[0]!, needs = needsOf(part.cls, (part.cls && byCls.get(part.cls)?.role) || part.role);
+  const onFloor = first.ok && first.rel === 'floor' && !first.host && drop.face === 'floor';
+  // a part set on the floor whose place is really on a host (a lamp, a jig, a tray, a robot on its pedestal) goes onto a host within reach
+  const flush = (): ReturnType<typeof snapPlace> => { if (!onFloor) return first; const e = edgeSnap(parts, Object.assign({}, part, { pos: first.pos, yaw: first.yaw }), edge); if (!e) return first; const r = placePart(parts0, part0, { at: [e.pos[0], e.pos[1], 0], face: 'floor' }); return r.ok ? { ...r, snapped: true, snapWhy: e.why } : first; };
+  if (first.ok && !(onFloor && needs[0] !== 'floor')) return flush();
+  let best: (Placement & { d: number; snapWhy: string }) | null = null;
+  const consider = (d: Drop, why: string) => { const r = placePart(parts0, part0, d); if (!r.ok) return; const dist = Math.hypot(r.pos[0] - drop.at[0], r.pos[1] - drop.at[1]); if (dist <= radius && (!best || dist < best.d)) best = { ...r, d: dist, snapWhy: why }; };
+  const pe = half(part);
+  for (const h of parts) { const cap = hostCap(h.cls), e = half(h), mx = Math.max(0, e[0] - pe[0]), my = Math.max(0, e[1] - pe[1]), cx = Math.max(-mx, Math.min(mx, drop.at[0] - h.pos[0])) + h.pos[0], cy = Math.max(-my, Math.min(my, drop.at[1] - h.pos[1])) + h.pos[1];
+    if (hDist(h, { ...part, pos: [drop.at[0], drop.at[1], 0] }) > radius) continue;
+    if (needs.includes('top') && cap.top) consider({ at: [cx, cy, topOf(h)], face: 'top', host: h.id }, `${h.name} 윗면으로 끌어당김`);
+    if (needs.includes('side') && cap.side) { const f = nearestFace(h, drop.at[0], drop.at[1]); consider({ at: [drop.at[0] - f.n[0] * f.d, drop.at[1] - f.n[1] * f.d, Math.min(topOf(h), Math.max(h.pos[2] + part.size[2] / 2, drop.at[2]))], face: 'side', host: h.id }, `${h.name} 옆면으로 끌어당김`); }
+    if (needs.includes('inside') && cap.inside && drop.face === 'inside') consider({ at: [cx, cy, Math.max(h.pos[2], Math.min(topOf(h) - part.size[2], drop.at[2]))], face: 'inside', host: h.id }, `${h.name} 안으로 끌어당김`);
+    if (needs.includes('front') && cap.front) consider({ at: [cx, cy, 0], face: 'front', host: h.id }, `${h.name} 앞으로 끌어당김`); }
+  if (!first.ok && needs.includes('floor') && drop.face !== 'floor') consider({ at: [drop.at[0], drop.at[1], 0], face: 'floor' }, '바닥으로 내림');
+  if (!best) return flush();
+  const b = best as Placement & { d: number; snapWhy: string }; return { ok: b.ok, pos: b.pos, yaw: b.yaw, host: b.host, rel: b.rel, how: b.how, ...(b.why ? { why: b.why, lv: b.lv } : {}), snapped: true, snapWhy: b.snapWhy };
+}
+/** Flush / aligned with the nearest floor neighbour (axis-aligned, both unrotated or rotated by multiples of 90°): a gap under `edge` closes, an edge within `edge` of the neighbour's lines up. */
+export function edgeSnap(parts: Part[], p: Part, edge = 150): { pos: [number, number, number]; why: string } | null {
+  const ok = (q: Part) => Math.abs(((q.yaw || 0) % 90 + 90) % 90) < 1e-6; if (!ok(p)) return null;
+  const ep = half(p), pp = [p.pos[0], p.pos[1]]; let pos = [p.pos[0], p.pos[1]], why = '', bestD = Infinity;
+  for (const q of parts) { if (!ok(q) || q.role === 'top' || q.role === 'side' || q.cls === 'base') continue; const eq = half(q), qp = [q.pos[0], q.pos[1]], [gx, gy] = gaps(p, q);
+    const axes = [[0, gx, gy, eq[0] + ep[0]], [1, gy, gx, eq[1] + ep[1]]]; // [axis, gap along it, gap on the other, centre distance when touching]
+    for (const [ax, g, go, touch] of axes as [number, number, number, number][]) { if (g <= 0 || g > edge || go > edge) continue; // beside each other across this axis, overlapping along the other
+      if (g >= bestD) continue; bestD = g; const oa = 1 - ax, s = Math.sign(pp[ax]! - qp[ax]!) || 1; pos = [pp[0]!, pp[1]!]; pos[ax] = qp[ax]! + s * touch; why = `${q.name}에 맞닿게`;
+      const lines: [number, number][] = [[qp[oa]! - eq[oa]!, -ep[oa]!], [qp[oa]! + eq[oa]!, ep[oa]!], [qp[oa]!, 0]]; // align an edge or the centre on the other axis
+      for (const [ln, off] of lines) { const d = Math.abs(pp[oa]! + off - ln); if (d <= edge && d > 0) { pos[oa] = ln - off; why += ' · 모서리 맞춤'; break; } } } }
+  return why ? { pos: [Math.round(pos[0]!), Math.round(pos[1]!), p.pos[2]], why } : null;
+}

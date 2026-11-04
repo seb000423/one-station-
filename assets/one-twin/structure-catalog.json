@@ -282,6 +282,11 @@
         "top": false,
         "side": false
       },
+      "needs": [
+        "top",
+        "floor",
+        "inside"
+      ],
       "mount": {
         "floor": "anchor",
         "top": "bolt"
