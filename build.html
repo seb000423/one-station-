@@ -187,7 +187,7 @@ tr.hl td{background:rgba(255,174,66,.07)}
 .shead{display:flex;align-items:center;gap:8px;padding:5px 14px;background:var(--panel2);border-bottom:1px solid var(--line);cursor:pointer;user-select:none;font-size:12px}.shead:hover b{color:var(--amber)}.shead small{color:var(--dim)}.shead small+small{margin-left:auto}
 .car{display:inline-block;width:12px;color:var(--mute);transition:transform .15s}.sub.shut .car,.seqb.shut .seqcar{transform:rotate(-90deg)}
 .sub.shut>.swrow,.sub.shut>.tbl{display:none}.sub.grow.shut{flex:0}
-.seqcar{background:none;border:0;padding:0;cursor:pointer;font-size:12px}.bottom.seqshut{grid-template-columns:minmax(0,1fr) 150px}.seqb.shut #seq,.seqb.shut #pend,.seqb.shut .bhead .btn,.seqb.shut #seqN{display:none}
+.seqcar{background:none;border:0;padding:0;cursor:pointer;font-size:12px}.bottom.seqshut{grid-template-columns:minmax(0,1fr) 150px}.seqb.shut #seq,.seqb.shut .bhead .btn,.seqb.shut #seqN{display:none}
 #subSw{flex:none}#subTbl{min-height:96px}#subTbl.shut{min-height:0}.ctl:has(#subTbl.shut) #subSw{flex:1}.ctl:has(#subSw.shut) #subSw{flex:none}
 .swrow{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:8px 14px 0;margin-bottom:8px;flex:none;box-sizing:border-box;overflow-y:auto;scroll-snap-type:y mandatory;scroll-padding-top:8px}.swrow .sw{scroll-snap-align:start}.swrow small{color:var(--dim)}
 .sw{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:4px;padding:3px 4px 3px 8px;font-size:11.5px;background:#121317}.sw.hl{border-color:var(--amber)}
@@ -196,11 +196,11 @@ tr.hl td{background:rgba(255,174,66,.07)}
 .onoff button.on{background:var(--ok);color:#0b0b0d}.onoff button.off{background:#2a2b30;color:var(--fg)}
 tr.xtra td{color:var(--dim)}
 .cellseg{margin-left:8px;display:inline-flex;gap:2px}.cellseg button{padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellseg button.on{border-color:var(--amber);color:var(--amber)}.cellfit{margin-left:6px;padding:3px 9px;font-size:11.5px;white-space:nowrap}.cellwarn{white-space:nowrap;margin-left:8px;color:#ff5a4f;font-size:11.5px;border:1px solid #ff5a4f;border-radius:3px;padding:1px 6px}
-#pend{border-top:1px solid var(--line);margin-top:6px;padding-top:4px;font-size:12px}#pend .bhead select{font-size:11.5px;max-width:180px}#pend h5{margin:6px 0 3px;font-size:11.5px}#pend h5 em{font-style:normal;color:var(--mute);font-weight:400}
-.pbody{display:grid;grid-template-columns:minmax(220px,1fr) minmax(0,1.3fr);gap:10px}.jrow{display:flex;align-items:center;gap:4px;margin:2px 0}.jrow span{width:18px;color:var(--mute)}.jrow b{min-width:52px;text-align:center;font-weight:500}.jrow button,.ppt button,.pline button{border:1px solid var(--line);background:none;color:inherit;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px}.jrow small{color:var(--mute);margin-left:4px}
+#pend{font-size:12px}#pend .bhead{position:sticky;top:0;background:var(--panel);z-index:2;gap:8px}#pend .bhead .btn{padding:3px 9px;font-size:11.5px}#pend .bhead select{font-size:11.5px;max-width:180px}#pend h5{margin:6px 0 3px;font-size:11.5px}#pend h5 em{font-style:normal;color:var(--mute);font-weight:400}
+.pbody{display:grid;grid-template-columns:270px minmax(0,1fr);gap:0 14px;padding:0 10px 10px}.pjog .jrow input[type=range]{flex:1;min-width:60px;accent-color:var(--amber)}.pjog .jrow b.tv{min-width:64px}.pprog{min-width:0}.jrow{display:flex;align-items:center;gap:4px;margin:2px 0}.jrow span{width:18px;color:var(--mute)}.jrow b{min-width:54px;text-align:right;font-weight:500;font-variant-numeric:tabular-nums}.jrow button,.ppt button,.pline button{border:1px solid var(--line);background:none;color:inherit;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px}.jrow small{color:var(--mute);margin-left:4px}
 .tcp{margin:4px 0;color:var(--mute)}.tcp b{color:inherit;font-weight:500}.ppts{margin-top:4px}.ppt{display:flex;align-items:center;gap:4px;margin:2px 0}.ppt input{width:80px;font-size:11px}.ppt small{color:var(--mute);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.padd button{margin-left:3px;border:1px solid var(--line);background:none;color:inherit;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px}.pline{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:4px;margin:1px 0}.pline.on{background:rgba(255,170,0,.18)}.pline b{width:16px;color:var(--mute);font-weight:500}.pline .op{min-width:58px}.pline input{width:60px;font-size:11px}.pline select{font-size:11px;max-width:200px}#pend .why{color:var(--mute);margin:4px 0}
-.seqb{border-left:1px solid var(--line);min-width:0;display:flex;flex-direction:column;min-height:0}.seqb .bhead{flex:0 0 auto}.seqb>.tbl{flex:1 1 auto;min-height:0;height:auto}.seqb:has(#pend:not([hidden]))>.tbl{flex:0 1 28%}.bottom:has(#pend:not([hidden])){grid-template-columns:minmax(0,1fr) 640px}#pend{flex:1 1 auto;min-height:0;overflow:auto}.seqb .bhead .btn{padding:3px 9px;font-size:11.5px}
+.padd button{margin-left:3px;border:1px solid var(--line);background:none;color:inherit;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:11px}.pline{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:4px;margin:1px 0}.pline .sp{flex:1}.pline.on{background:rgba(255,170,0,.18)}.pline b{width:16px;color:var(--mute);font-weight:500}.pline .op{min-width:58px}.pline input{width:60px;font-size:11px}.pline select{font-size:11px;max-width:200px}#pend .why{color:var(--mute);margin:4px 0}
+.seqb{border-left:1px solid var(--line);min-width:0;display:flex;flex-direction:column;min-height:0}.seqb .bhead{flex:0 0 auto}.seqb>.tbl{flex:1 1 auto;min-height:0;height:auto}.bottom.teach{grid-template-columns:minmax(0,1fr) 340px 600px}.pendb{border-left:1px solid var(--line);min-width:0;min-height:0;overflow:auto}#pend{min-height:0}.seqb .bhead .btn{padding:3px 9px;font-size:11.5px}
 .seqst{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;padding:6px 14px;border-bottom:1px solid var(--line);font-size:12px}
 .seqst b{font-family:var(--mono);color:var(--dim);font-weight:500}.seqst small{display:block;color:var(--dim);font-family:var(--mono);font-size:10.5px;margin-top:2px;line-height:1.5}
 .seqst.on{background:rgba(255,174,66,.1)}.seqst.on b,.seqst.on span{color:var(--amber)}
@@ -212,7 +212,7 @@ tr.xtra td{color:var(--dim)}
 .seqed .add{justify-self:start;color:var(--dim)}.seqbtns{display:flex;gap:4px;margin-top:4px}.seqbtns .pri{margin-left:auto;background:var(--amber);border-color:var(--amber);color:#111}
 .seqadd{margin:8px 14px;color:var(--amber);border-color:var(--amber)}
 .seqempty{color:var(--dim);font-size:12px;padding:10px 14px;line-height:1.6;margin:0}
-@media (max-width:1100px){main{grid-template-columns:240px minmax(0,1fr) 260px}.bottom{grid-template-columns:1fr}.logb{display:none}.seqb{display:none}}
+@media (max-width:1100px){main{grid-template-columns:240px minmax(0,1fr) 260px}.bottom{grid-template-columns:1fr}.bottom.teach{grid-template-columns:minmax(0,1fr) 560px}.logb{display:none}.seqb{display:none}}
 .savedlg{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center}
 .savecard{width:min(460px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:16px 18px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
 .savecard h3{margin:0 0 12px;font-size:15px;display:flex;justify-content:space-between;gap:10px;align-items:baseline}.savecard h3 small{font-weight:400;color:var(--mute);font-size:12px}.savecard h3 b{color:var(--amber)}
@@ -280,8 +280,8 @@ tr.xtra td{color:var(--dim)}
     <div class="seqb">
       <div class="bhead"><button class="car seqcar" id="seqFold" title="동작 순서 패널 접기 / 펼치기">▾</button><h3>동작 순서</h3><small id="seqN"></small><button class="btn" id="bAuto" style="margin-left:auto">▶ 자동 운전</button><button class="btn" id="bSeqGen" title="놓인 블록(컨베이어·스토퍼·센서·공정·리프트)을 보고 동작 순서를 새로 만듭니다. 지금 순서는 지워지고 (실행 취소 가능), 만든 뒤 단계마다 고칠 수 있습니다">블록으로 만들기</button><button class="btn" id="bWorkBack" title="모든 워크를 처음 놓은 자리(높이 포함)로 다시 올려놓습니다. 자동 운전 중이면 1단계부터 다시 돌고, 컨베이어·스토퍼 상태는 그대로입니다">워크 다시 투입</button></div>
       <div class="tbl" id="seq"></div>
-      <section id="pend" hidden></section>
     </div>
+    <div class="pendb" id="pendb" hidden><section id="pend"></section></div>
   </div>
 </div>
 <input type="file" id="file" accept=".json,application/json" multiple hidden>
