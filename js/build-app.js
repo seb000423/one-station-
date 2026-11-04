@@ -1481,7 +1481,7 @@
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
   function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); else { cellPlate.visible = false; $('cellWarn').hidden = true; } if (tab === 'machine') { drawIo(); drawPend(); } updateCheck(); }
   function switchTab(t, fit) {
-    if (mode === 'run') setMode('edit');
+    if (mode === 'run') setMode('edit'); endPlace(); // a block in hand belongs to the tab it was picked in
     tab = t; LS.set(KEY.tab, t); originChip(); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     for (const v of objs.values()) root.remove(v.obj); objs = new Map(); floorKey = '';
     $('mode').hidden = t !== 'machine'; $('bottom').hidden = true; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';

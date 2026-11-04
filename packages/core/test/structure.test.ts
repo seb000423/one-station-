@@ -88,6 +88,12 @@ describe('design structure catalogue (platform default, packages/schema)', () =>
     expect(classify('진공로 부대설비').cls).toBe('utility'); expect(classify('회전 테이블').cls).toBe('rotary'); expect(classify('PLC 모듈', undefined, 800).cls).toBe('device');
     expect(classify('안전 펜스 패널', undefined, 0).cls).toBe('fence'); expect(classify('로봇 받침대').cls).toBe('column'); expect(classify('컨베이어 1').cls).toBe('conveyor');
   });
+  it('a stored class wins over the name: a 로봇 단상 block classed frame carries a robot, whatever it is called', () => {
+    const ped: Part = { id: 'p', name: '로봇 단상 1', cls: 'frame', size: [700, 700, 600], pos: [0, 0, 0] }, rb: Part = { id: 'r', name: '6축 다관절 로봇', cls: 'robot', size: [600, 600, 1400], pos: [0, 0, 0] };
+    expect(withRoles([ped])[0]!.cls).toBe('frame'); expect(withRoles([ped])[0]!.role).toBe('floor');
+    const r = placePart([ped], rb, { at: [0, 0, 600], face: 'top', host: 'p' }); expect(r.ok, r.why).toBe(true); expect(r.pos[2]).toBe(600); expect(r.host).toBe('p');
+    const r2 = placePart([{ ...ped, name: 'Robot pedestal' }], { ...rb, name: '받침' }, { at: [0, 0, 600], face: 'top', host: 'p' }); expect(r2.ok).toBe(true);
+  });
   it('standard joins: a robot bolts onto its pedestal, a fence panel hangs between posts, a DIN device goes inside a cabinet, a conveyor stands on feet', () => {
     const col: Part = { id: 'c', name: '로봇 받침대', size: [500, 500, 600], pos: [0, 0, 0] }, rb: Part = { id: 'r', name: '로봇', kind: 'robot', size: [600, 600, 1400], pos: [0, 0, 0] };
     const r1 = placePart([col], rb, { at: [0, 0, 600], face: 'top', host: 'c' }); expect(r1.ok).toBe(true); expect(r1.pos[2]).toBe(600); expect(r1.how).toBe('bolt'); expect(r1.lv).toBeUndefined();

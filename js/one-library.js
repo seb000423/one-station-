@@ -324,7 +324,7 @@
 
   bdef('frame', { cls: 'frame', name: '프레임 (테이블)', cat: 'structure', code: 'FR', params: { w: 1200, d: 800, h: 850 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)],
     top: p => mm(p.h), heightKey: 'h', build: p => { const g = new T.Group(); legs(g, mm(p.w), mm(p.d), mm(p.h) - 0.03); bx(g, 'body', mm(p.w), 0.03, mm(p.d), 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.04, mm(p.d) - 0.1, 0, 0.12); return g; } });
-  bdef('pedestal', { cls: 'frame', name: '로봇 단상 (받침대)', cat: 'structure', code: 'PD', params: { w: 700, d: 700, h: 600 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)], heightKey: 'h',
+  bdef('pedestal', { cls: 'column', name: '로봇 단상 (받침대)', cat: 'structure', code: 'PD', params: { w: 700, d: 700, h: 600 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)], heightKey: 'h',
     top: p => mm(p.h), build: p => { const g = new T.Group(), w = mm(p.w), d = mm(p.d), h = mm(p.h); bx(g, 'frame', w, 0.03, d); bx(g, 'body', w * 0.7, Math.max(0.02, h - 0.06), d * 0.7, 0, 0.03); bx(g, 'light', w * 0.85, 0.03, d * 0.85, 0, h - 0.03); return g; } });
   bdef('base-plate', { name: '베이스 플레이트', cat: 'structure', code: 'BP', params: { w: 800, d: 600, t: 25 }, fields: [num('w', '가로'), num('d', '세로'), num('t', '두께', 'mm', 5)], onTop: true,
     top: p => mm(p.t), build: p => { const g = new T.Group(); bx(g, 'steel', mm(p.w), mm(p.t), mm(p.d)); return g; } });

@@ -32,7 +32,16 @@ export const SEEN_PAIRS: Record<SlotKind, string[]> = STRUCTURE_CATALOG.verified
 export const hostCap = (cls?: string): HostCap => (cls && byCls.get(cls)?.host) || NOHOST;
 const isSolid = (cls?: string) => !!(cls && byCls.get(cls)?.solid);
 
-/** Class and role of an object from its name and kind; a part standing on the floor whose class is mounted keeps 'floor'. */
+/** Role of a classed object at height z: a mounted class standing on the floor is a floor object; a shelf / desk / rail / frame up on something is carried. */
+function roleFor(c: ClassDef, z: number): Role {
+  if (c.role !== 'floor' && c.role !== 'robot' && c.role !== 'seat' && z < 50) return 'floor';
+  if (c.role === 'floor' && z >= 50 && (c.cls === 'shelf' || c.cls === 'desk' || c.cls === 'rail' || c.cls === 'frame')) return 'top';
+  return c.role;
+}
+/**
+ * Class and role of an object from its name and kind — the fallback for imported parts without a stored class. A block or
+ * part that carries its class (params.cls, the palette block's cls) never goes through the name: see withRoles.
+ */
 export function classify(name: string, kind?: string, z = 0): { cls: string; role: Role } {
   if (kind === 'robot') return { cls: 'robot', role: 'robot' };
   if (kind === 'rotary') return { cls: 'rotary', role: 'floor' };
@@ -40,10 +49,7 @@ export function classify(name: string, kind?: string, z = 0): { cls: string; rol
   // the most specific keyword wins ('진공로 부대설비' is a utility, '회전 테이블' a rotary table, not a desk)
   let c: ClassDef | undefined, best = 0; for (const k of CLASSES) for (const w of k.words) if (w.length > best && n.includes(w.toLowerCase())) { best = w.length; c = k; }
   if (!c) return { cls: 'part', role: z < 50 ? 'floor' : 'top' };
-  // a tray table, a shelf base, an aux unit standing on the floor are floor objects; a shelf up on a frame is carried
-  if (c.role !== 'floor' && c.role !== 'robot' && c.role !== 'seat' && z < 50) return { cls: c.cls, role: 'floor' };
-  if (c.role === 'floor' && z >= 50 && (c.cls === 'shelf' || c.cls === 'desk' || c.cls === 'rail' || c.cls === 'frame')) return { cls: c.cls, role: 'top' };
-  return { cls: c.cls, role: c.role };
+  return { cls: c.cls, role: roleFor(c, z) };
 }
 
 // ---------------------------------------------------------------------------------------------------------- geometry
@@ -60,8 +66,12 @@ const within = (a: Part, b: Part) => { const ea = half(a), eb = half(b), ox = Ma
 const hDist = (a: Part, b: Part) => { const [gx, gy] = gaps(a, b); return Math.hypot(Math.max(0, gx), Math.max(0, gy)); };
 const vol = (p: Part) => p.size[0] * p.size[1] * p.size[2];
 
-/** Fill in class and role (unless given). */
-export function withRoles(parts: Part[]): Part[] { return parts.map(p => (p.role && p.cls ? p : Object.assign({}, p, classify(p.name, p.kind, p.pos[2]), p.role ? { role: p.role } : {}))); }
+/** Fill in class and role (unless given). A stored class is kept as it is (a '로봇 단상' block classed frame stays a frame); only an unclassed part is classified by its name. */
+export function withRoles(parts: Part[]): Part[] {
+  return parts.map(p => { if (p.role && p.cls) return p; const c = p.cls ? byCls.get(p.cls) : undefined;
+    if (c) return Object.assign({}, p, { role: p.role || roleFor(c, p.pos[2]) });
+    return Object.assign({}, p, classify(p.name, p.kind, p.pos[2]), p.role ? { role: p.role } : {}); });
+}
 
 /**
  * Host finding. A 'top' object sits on the highest top-host whose top is at or just under its bottom and whose footprint
