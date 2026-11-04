@@ -1338,17 +1338,25 @@
     if (e.shiftKey && mode === 'edit') { toggleSel(id); return; }
     // joined conveyors (a layout, or pieces snapped end to end) are picked as one line; pressing a piece of the
     // already picked line again (without dragging) picks just that piece, and a single picked piece stays single
-    let drill = null; if (tab === 'machine' && mode === 'edit') { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n);
+    /* 이동 대상 (toolbar): 셀 전체 이동 = any press drags the whole cell (Machine Builder: every block; Factory Builder: the cell
+       with its objects); 객체 이동 = only the pressed object (with what sits on it), and the cell itself / its base plate stays put.
+       Ctrl (⌘) + drag = 객체 이동 for this drag. */
+    const mv = mode !== 'edit' ? null : (e.ctrlKey || e.metaKey) ? 'obj' : MOVE.mode; let whole = false;
+    if (mv === 'cell') { if (tab === 'machine') { const tops = ED.machine.doc.nodes.filter(n => !n.parent).map(n => n.id); if (tops.includes(id) || ED.machine.doc.nodes.some(n => n.id === id)) { id = topOf(id); selectMany([...new Set([id, ...tops])]); whole = true; } }
+      else { const b = ED.factory.doc.blocks.find(x => x.id === id), c = b && blockCell(b); if (c) { select(c); id = c; whole = true; } else if (cellParts(id).length) { select(id); whole = true; } } }
+    else if (mv === 'obj') { if (tab === 'machine' && isCellRoot(id)) { selectOnly(id); toast(`${objLabel(id)}은(는) 셀 바닥이라 객체 이동에서는 고정입니다 · 옮기려면 셀 전체 이동`); return; }
+      if (tab === 'factory') { const b = ED.factory.doc.blocks.find(x => x.id === id); if (b && blockCell(b)) selectOnly(id); else if (cellParts(id).length) { selectOnly(id); toast(`${objLabel(id)}: 객체 이동 중에는 셀이 고정입니다 · 셀을 옮기려면 셀 전체 이동`); return; } } }
+    let drill = null; if (tab === 'machine' && mode === 'edit' && !whole) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n);
       if (d && !n.parent && (d.conveyor || d.curve || d.corner)) { const chain = [...joinedConveyors(doc, [id])], cur = selIds();
         if (chain.length > 1 && !(cur.length === 1 && cur[0] === id)) { if (cur.length === chain.length && chain.every(x => cur.includes(x))) drill = id;
           else { selectMany([id, ...chain.filter(x => x !== id)]); toast(`이어진 컨베이어 ${chain.length}개를 한 덩어리로 골랐습니다 · 한 번 더 누르면 그 조각만`); } } } }
     /* a member of a group (a cell with its objects, a joined line, several picked): a press without moving picks that member
        alone, the next drag moves only it; Ctrl (⌘) + drag moves only it straight away */
-    let group = selIds().includes(id) && selIds().length > 1; if (group && !drill && id !== sel) drill = id;
-    if (group && (e.ctrlKey || e.metaKey) && mode === 'edit') { group = false; drill = null; selectOnly(id); }
+    let group = selIds().includes(id) && selIds().length > 1; if (group && !drill && !whole && id !== sel) drill = id;
+    if (group && mv === 'obj' && !whole && (e.ctrlKey || e.metaKey)) { group = false; drill = null; selectOnly(id); }
     if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
     plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
-    const ids = group ? selIds().filter(x => !isSlab(x)) : [id], os = ids.map(x => objs.get(x)?.obj).filter(Boolean);
+    const ids = group ? selIds().filter(x => !isSlab(x)) : [id], carried = tab === 'machine' ? [...new Set(ids.flatMap(x => [x, ...descendants(ED.machine.doc, x).map(k => k.id)]))] : ids, os = carried.map(x => objs.get(x)?.obj).filter(Boolean); // what sits on a block is seen moving with it
     drag = { drill, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
     if (tab === 'machine' && ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]); if (n && (n.blockType === 'model-part' || nodeDef(n)?.cls)) drag.slotPart = toPart(n); }
   });
@@ -1360,7 +1368,7 @@
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
     if (tab === 'machine' && drag.ids.length === 1 && drag.slotPart) { const skip = new Set([drag.ids[0], ...descendants(ED.machine.doc, drag.ids[0]).map(k => k.id)]), sl = slotUnder(skip);
-      if (sl) { const r = C.snapPlace(slotParts(ED.machine.doc, skip), drag.slotPart, sl); drag.slot = r; drag.moved = true; const o = drag.os[0]; o.position.copy(toS(r.pos)); showSnap(r.ok ? { pt: r.pos, h: r.pos[2] } : null); slotHint(r, sl, drag.slotPart.name); }
+      if (sl) { const r = C.snapPlace(slotParts(ED.machine.doc, skip), drag.slotPart, sl); drag.slot = r; drag.moved = true; const o = drag.os[0]; o.position.copy(toS(r.pos)); const dd = o.position.clone().sub(drag.starts[0]); for (let i = 1; i < drag.os.length; i++) drag.os[i].position.copy(drag.starts[i]).add(dd); showSnap(r.ok ? { pt: r.pos, h: r.pos[2] } : null); slotHint(r, sl, drag.slotPart.name); }
       updateSelMark(); updateEnvelope(); return; }
     if (tab === 'machine' && drag.ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === drag.ids[0]), by = S.sceneToStored([d.x, 0, d.z]), p = n.transform.position, sn = n && conveyorSnap(n, [p[0] + by[0], p[1] + by[1]], new Set());
       showSnap(sn); if (sn) { const s2 = toS([sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); d.x = s2.x; d.z = s2.z; } }
@@ -1402,6 +1410,13 @@
   /** The ids to hand to a factory command: a cell carries its objects itself (core move / delete / duplicate), so its objects are dropped when their cell is in the set. */
   const ownIds = ids => { if (tab !== 'factory') return ids; const set = new Set(ids), doc = ED.factory.doc; return ids.filter(id => { const b = doc.blocks.find(x => x.id === id); return !(b && blockCell(b) && set.has(blockCell(b))); }); };
   function select(id, focus) { const kids = cellParts(id); if (kids.length) { selectMany([id, ...kids]); if (focus) focusSel(); return; } multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
+  // 이동 대상 (객체 이동 / 셀 전체 이동), remembered per browser; G switches
+  const MOVE = { mode: LS.get('one.build.move', 'obj') };
+  function setMove(m) { MOVE.mode = m; LS.set('one.build.move', m); for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.classList.toggle('on', b.dataset.mv === m); }
+  for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.onclick = () => { setMove(b.dataset.mv); toast(b.dataset.mv === 'cell' ? '셀 전체 이동: 어디를 눌러 끌어도 셀 전체가 움직입니다' : '객체 이동: 누른 객체(와 그 위에 놓인 것)만 움직입니다 · 셀 바닥은 고정'); }; setMove(MOVE.mode);
+  const topOf = id => { const doc = ED.machine.doc; let n = doc.nodes.find(x => x.id === id); while (n && n.parent) { const p = doc.nodes.find(x => x.id === n.parent); if (!p) break; n = p; } return n ? n.id : id; };
+  // a cell's base plate: a top-level block carrying most of the machine (half of the blocks or more)
+  const isCellRoot = id => { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n || n.parent) return false; const k = descendants(doc, id).length; return k >= 3 && k >= (doc.nodes.length - 1) / 2; };
   // one object alone, even a cell (whose plain select takes its objects along)
   function selectOnly(id) { multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
@@ -1434,6 +1449,7 @@
     else if (k === 'escape') { if (ROB.pick) setPick(false); else if (placing) endPlace(); else select(null); }
     else if (k === 'f') sel ? focusSel() : fitAll();
     else if (k === 'x' && !mod) setXray(!xray);
+    else if (k === 'g' && !mod && mode === 'edit') { setMove(MOVE.mode === 'cell' ? 'obj' : 'cell'); toast(MOVE.mode === 'cell' ? '셀 전체 이동' : '객체 이동'); }
     else if (k === 'l' && !mod) { e.preventDefault(); toggleObjList(); }
   });
   $('bUndo').onclick = () => mode === 'edit' && ed().undo();
