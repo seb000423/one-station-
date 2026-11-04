@@ -35,6 +35,10 @@
     if (scope === 'machine') { const codes = new Set(doc.nodes.map(n => n.params.tag).filter(Boolean)), dead = new Set(doc.io.filter(t => { const m = /^([A-Z]+\d+)_/.exec(t.tag); return m && !codes.has(m[1]); }).map(t => t.tag));
       if (dead.size) { doc.io = doc.io.filter(t => !dead.has(t.tag)); for (const st of doc.sequence.steps) { st.wait = st.wait.filter(w => !dead.has(w.tag)); st.set = st.set.filter(x => !dead.has(x.tag)); } } }
     return doc; } catch { return make(); } };
+  /* Machine Builder starts blank on a new visit; within the same tab (reload, back / forward) it keeps the machine that was
+     open (sessionStorage). The draft of the previous visit stays under one.build.machine.prev. */
+  const SESSION = (() => { try { const k = 'one.build.session', had = sessionStorage.getItem(k); sessionStorage.setItem(k, '1'); return !!had; } catch { return true; } })();
+  if (!SESSION) { const d = LS.get(KEY.machine, null); if (d && d.nodes && d.nodes.length) LS.set(KEY.machine + '.prev', d); LS.set(KEY.machine, null); }
   const ED = { factory: new C.Editor('factory', load('factory', newFactory)), machine: new C.Editor('machine', load('machine', newMachine)) };
   let tab = LS.get(KEY.tab, 'factory') === 'machine' ? 'machine' : 'factory';
   let mode = 'edit', sel = null, multi = new Set(), dirty = { factory: false, machine: false };
@@ -187,8 +191,11 @@
       if (ED.machine.doc.meta.id === id) exec('set_meta', { name: n }); toast(`이름을 '${n}'(으)로 바꿨습니다`); drawPalette(); refresh(); return; }
     if (k === 'dup') { const nid = S.uuidv7(), d = JSON.parse(JSON.stringify(m.versions[latest])); d.meta.id = nid; d.meta.version = 1; d.meta.name = m.name + ' 복사본';
       all[nid] = { name: d.meta.name, versions: { 1: d } }; LS.set(KEY.lib, all); toast(`'${d.meta.name}'을(를) 만들었습니다`); drawPalette(); return; }
-    if (k === 'del' || k === 'reset') { if (placed.length) { toast(`공장에 놓인 ${placed.length}대를 먼저 지워 주세요`); return; }
-      if (!confirm(k === 'reset' ? `${m.name}을(를) 원래 협력사 설비(v1)로 되돌릴까요? 저장한 버전은 지워집니다.` : `${m.name}을(를) 내 설비에서 지울까요? 되돌릴 수 없습니다.`)) return;
+    if (k === 'del' && placed.length) { toast(`공장에 놓인 ${placed.length}대를 먼저 지워 주세요 · 지우면 그 셀이 가리킬 설비가 없어집니다`, true); return; }
+    if (k === 'del' || k === 'reset') {
+      if (!confirm(k === 'reset' ? `${m.name}을(를) 원래 협력사 설비(v1)로 되돌릴까요? 저장한 v2~v${latest}와 바꾼 이름이 지워집니다.${placed.length ? `\n공장에 놓인 ${placed.length}대도 v1을 쓰게 됩니다.` : ''}` : `${m.name}을(를) 내 설비에서 지울까요? 되돌릴 수 없습니다.`)) return;
+      if (k === 'reset' && placed.length) ED.factory.batch('set_machine_ref', () => { for (const x of placed) ED.factory.exec('set_machine_ref', { id: x.id, ref: `local:${id}@1` }); });
+      if (k === 'reset' && ED.machine.doc.meta.id === id) { openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(window.OnePlant.builtins()[id].versions[1])))); dirty.machine = false; }
       delete all[id]; LS.set(KEY.lib, all); toast(k === 'reset' ? '원래 설비로 되돌렸습니다' : '내 설비에서 지웠습니다'); drawPalette(); refresh(); return; } }
   /* ------------------------------------------------------------------ palette */
   let openCats = LS.get('one.build.cats', { building: true, structure: true, transport: true });
@@ -1105,7 +1112,11 @@
   // here can be checked against the room it really has in the factory
   function factoryArea() { const doc = ED.machine.doc, fdoc = ED.factory.doc, inst = fdoc.machines.find(m => m.ref.startsWith(`local:${doc.meta.id}@`));
     if (!inst) { toast('이 설비는 아직 공장에 놓이지 않았습니다 · Factory Builder에 놓은 뒤 셀 영역을 불러옵니다', true); return; }
-    const A = SCN.cellArea(doc, inst.params || {}), H = doc.meta.cellFixed ? doc.meta.bbox[2] : (contentSize() || doc.meta.bbox)[2];
+    // the area of the placed copy: its own area_* when set, else the box of the version it uses (+ 200 mm a side), written
+    // onto the placed copy once so that loading it again does not grow with the work cell
+    const ip = inst.params || {}, used = SCN.localDoc({ id: doc.meta.id, v: +inst.ref.split('@')[1] }) || doc, A = SCN.cellArea(used, ip);
+    if (!ip.area_w || !ip.area_d) ED.factory.batch('cell area', () => { ED.factory.exec('set_param', { id: inst.id, key: 'area_w', value: Math.round(A.w) }); ED.factory.exec('set_param', { id: inst.id, key: 'area_d', value: Math.round(A.d) }); });
+    const H = doc.meta.cellFixed ? doc.meta.bbox[2] : (contentSize() || doc.meta.bbox)[2];
     exec('set_meta', { cellFixed: true, bbox: [Math.round(A.w), Math.round(A.d), Math.max(500, Math.round(H))] }); fitAll();
     toast(`공장의 셀 영역을 작업 칸으로 불러왔습니다 · ${Math.round(A.w)} × ${Math.round(A.d)} mm (${inst.tagPrefix.split('.').pop()})${outOfCell() ? ' · 빨간 선 = 영역 밖 블록' : ''}`, outOfCell()); }
   $('cellSeg').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b || tab !== 'machine') return;
@@ -1190,7 +1201,7 @@
   function drawBar() {
     const doc = ed().doc;
     if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('cellSeg').hidden = true; $('cellFit').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
-    else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = '작업 칸'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('cellFit').hidden = !fx; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
+    else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = '작업 칸'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', b.dataset.c !== 'factory' && (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('cellFit').hidden = !fx; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
@@ -1330,7 +1341,7 @@
   }
 
   // first visit: a small example in each document so the screens are not empty
-  if (!ED.machine.doc.nodes.length && !LS.get(KEY.machine + '.seeded', false)) {
+  if (false) { // (the conveyor-station sample on a first visit is gone: Machine Builder opens blank)
     LS.set(KEY.machine + '.seeded', true); const t = tab; tab = 'machine';
     ED.machine.exec('set_meta', { name: '컨베이어 스테이션' }); syncScene();
     addBlock('roller-conveyor'); const cv = sel; addBlock('stopper'); select(cv); addBlock('photo-sensor'); select(cv);
