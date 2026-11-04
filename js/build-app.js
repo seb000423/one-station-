@@ -889,16 +889,22 @@
     const f = sg.kind === 'J' || sg.kind === 'L' ? ROB.ovr / 100 : 1, adv = dt * f, left = Math.max(0, sg.t + adv - sg.dur) / f; sg.t = Math.min(sg.dur, sg.t + adv); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
     if (sg.kind === 'J') r.deg = sg.from.map((a, i) => a + (sg.to[i] - a) * e);
     else if (sg.kind === 'L') { const tgt = toS([sg.t0[0] + (sg.t1[0] - sg.t0[0]) * e, sg.t0[1] + (sg.t1[1] - sg.t0[1]) * e, sg.t0[2] + (sg.t1[2] - sg.t0[2]) * e]);
-      const ik = L.rigIk(rig, o, tgt, r.deg, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
+      const ik = ikR(rig, o, tgt, r.deg, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
     if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); r.seg = null; if (hold()) return 0; }
     return left; }
   /** Where a released work lands: the highest block top under it that is not above the hand, else the floor. */
   function landZ(p, z) { const doc = ED.machine.doc; let best = 0; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work) continue; const top = nodeTop(b); if (top > z + 50 || top <= best) continue;
       const o = objs.get(b.id)?.obj; if (!o) continue; tmpBox.setFromObject(o); const s = toS([p[0], p[1], 0]); if (s.x >= tmpBox.min.x - 0.05 && s.x <= tmpBox.max.x + 0.05 && s.z >= tmpBox.min.z - 0.05 && s.z <= tmpBox.max.z + 0.05) best = top; } return best; }
   // jogging: by joint (deg) or by TCP axis (mm, inverse kinematics)
-  function jogJ(i, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id); if (!r) return; const lim = L.limitsOf(rig)[i] || [-180, 180]; const deg = r.deg.slice(); deg[i] = Math.max(lim[0], Math.min(lim[1], (deg[i] || 0) + d)); setDeg(id, deg); drawPend(true); }
-  function jogXYZ(ax, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const t = tcpOf(id); t[ax] += d; const ik = L.rigIk(rig, o, toS(t), r.deg, { iters: 30 });
-    if (!ik) return; if (ik.err > 20) { toast(`도달 거리 밖입니다 (${Math.round(ik.err)} mm 못 미침)`, true); L.rigSet(rig, r.deg); return; } setDeg(id, ik.deg); drawPend(true); }
+  /* joint limits: each robot has its mechanical range (cables, end stops, its own body: there is no collision check, so the
+     range is what keeps the arm out of its base). 관절 한계 해제 lifts them while trying things out. */
+  const limOf = rig => ROB.free ? rig.map(() => [-360, 360]) : L.limitsOf(rig);
+  const ikR = (rig, o, t, seed, opt = {}) => L.rigIk(rig, o, t, seed, { ...opt, lim: limOf(rig) });
+  const atLimit = (rig, deg) => { const lim = limOf(rig); return rig.map((_, i) => i).filter(i => lim[i] && (deg[i] <= lim[i][0] + 0.5 || deg[i] >= lim[i][1] - 0.5)).map(i => `J${i + 1} ${deg[i] <= lim[i][0] + 0.5 ? lim[i][0] : lim[i][1]}°`); };
+  const stuckWhy = (rig, deg) => { const a = atLimit(rig, deg); return a.length ? ` · 관절 한계: ${a.join(', ')}${ROB.free ? '' : ' (관절 한계 해제로 풀 수 있음)'}` : ' · 팔을 다 폈습니다'; };
+  function jogJ(i, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id); if (!r) return; const lim = limOf(rig)[i] || [-180, 180]; const deg = r.deg.slice(); deg[i] = Math.max(lim[0], Math.min(lim[1], (deg[i] || 0) + d)); setDeg(id, deg); drawPend(true); }
+  function jogXYZ(ax, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const t = tcpOf(id); t[ax] += d; if (ax === 2 && d < 0 && t[2] < 0) { toast('손끝은 바닥(Z 0) 아래로 내려가지 않습니다', true); return; } const ik = ikR(rig, o, toS(t), r.deg, { iters: 30 });
+    if (!ik) return; if (ik.err > 20) { toast(`더 못 갑니다 (${Math.round(ik.err)} mm 못 미침)${stuckWhy(rig, ik.deg)}`, true); L.rigSet(rig, r.deg); return; } setDeg(id, ik.deg); drawPend(true); }
   const prog = id => { const p = progOf(id); return p ? JSON.parse(JSON.stringify(p)) : { node: id, name: '프로그램 1', points: [], lines: [] }; };
   /* light: a name / speed / point field changed: the panel keeps its DOM (and the field being typed in), only the path redraws */
   let pendLight = false;
@@ -913,7 +919,7 @@
   // 집기 / 놓기 block: above (150 mm up, 관절 이동) → down (직선) → gripper → back up (직선)
   const gripLines = (above, at, on) => [{ op: 'MOVJ', point: above, speed: 60 }, { op: 'MOVL', point: at, speed: 300 }, { op: 'GRIP', on }, { op: 'MOVL', point: above, speed: 300 }];
   function addGrip(on) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const p = prog(id), t = tcpOf(id), up = [t[0], t[1], t[2] + 150];
-    const ik = L.rigIk(rig, o, toS(up), r.deg, { iters: 40 }); L.rigSet(rig, r.deg); if (!ik || ik.err > 30) { toast(`이 자리 150 mm 위에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 손끝을 조금 낮추거나 안쪽으로 옮기세요`, true); return; }
+    const ik = ikR(rig, o, toS(up), r.deg, { iters: 40 }); L.rigSet(rig, r.deg); if (!ik || ik.err > 30) { toast(`이 자리 150 mm 위에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 손끝을 조금 낮추거나 안쪽으로 옮기세요`, true); return; }
     const word = on ? '집기' : '놓기', a = newPid(p); p.points.push({ id: a, name: `${word} 위`, j: round1(ik.deg), tcp: up.map(Math.round) }); const b = newPid(p); p.points.push({ id: b, name: word, j: round1(r.deg), tcp: t });
     p.lines.push(...gripLines(a, b, on)); saveProg(p); toast(`${word} 블록 · ${a} 위 → ${b} ${on ? '집고' : '놓고'} → ${a} 위 (4줄)`); }
   /* 픽 앤 플레이스 만들기: from the structure rules the robot's targets in reach are known; the nearest tray is the pick,
@@ -923,7 +929,7 @@
     const near = cls => parts.filter(x => x.id !== id && cls.includes(x.cls) && dist(x) <= reach * 1.5).sort((a, b) => dist(a) - dist(b) || b.pos[2] - a.pos[2]);
     // pick from a tray (top of a stack first); place on a jig, rotary table or desk, else on a rail / conveyor to the next station
     const picks = near(['tray', 'work', 'rail']), places = [...near(['jig', 'rotary', 'desk']), ...near(['rail'])]; if (!picks.length || !places.length) { toast(`도달 거리 ${reach} mm 안에 트레이(집을 곳)와 지그·회전 테이블(놓을 곳)이 있어야 합니다`, true); return; }
-    const top = x => [x.pos[0], x.pos[1], x.pos[2] + x.size[2]], ikTo = (t, seed) => L.rigIk(rig, o, toS(t), seed, { iters: 40 });
+    const top = x => [x.pos[0], x.pos[1], x.pos[2] + x.size[2]], ikTo = (t, seed) => ikR(rig, o, toS(t), seed, { iters: 40 });
     const home = r.deg.slice(); let pts = [], pick = null, place = null; const add = (name, t, seed) => { const ik = ikTo(t, seed); if (!ik || ik.err > 30) return null; pts.push({ id: `P${pts.length + 1}`, name, j: ik.deg.map(v => Math.round(v * 10) / 10), tcp: t.map(Math.round) }); return ik.deg; };
     // the nearest tray and jig the arm really reaches (IK must close within 30 mm), tried in distance order
     let s2 = null, s4 = null; for (const pk of picks) { pts = []; const a = top(pk), a1 = [a[0], a[1], a[2] + 150]; const s1 = add('집기 위', a1, home); s2 = s1 && add('집기', a, s1); if (s2) { pick = pk; break; } }
@@ -946,9 +952,9 @@
   const linesFromPoints = p => p.points.map(q => ({ op: 'MOVJ', point: q.id, speed: 50 }));
   function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = robotNodes(), show = mode === 'run' && rs.length > 0;
     const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; if (ROB.pick) setPick(false); return; }
-    if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = L.limitsOf(rig);
+    if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = limOf(rig);
     placeTcpBall();
-    if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; }
+    if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; const lm = lim[i]; if (e) e.classList.toggle('lim', !!lm && ((r.deg[i] || 0) <= lm[0] + 0.5 || (r.deg[i] || 0) >= lm[1] - 0.5)); }
       ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
       const rb = box.querySelector('#pRun'); if (rb) { rb.textContent = r.on ? '■ 정지' : '▶ 실행'; rb.classList.toggle('pri', r.on); }
       box.querySelectorAll('.pline').forEach((el, i) => el.classList.toggle('on', r.on && r.line === i)); return; }
@@ -962,12 +968,13 @@
       else if (l.op === 'DELAY') body = `<input data-f="s" type="number" min="0" step="0.1" value="${l.s ?? 1}"> s`;
       return `<div class="pline${on ? ' on' : ''}" data-li="${i}"><b>${i + 1}</b><span class="op">${OPK[l.op]}</span>${body}<span class="sp"></span><button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
     const tagsOut = io.filter(x => x.dir === 'out'), tagsAny = io;
-    const jrow = (i) => `<div class="jrow"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><input type="range" data-js="${i}" min="${lim[i]?.[0] ?? -180}" max="${lim[i]?.[1] ?? 180}" step="0.5" value="${r.deg[i] || 0}"><button data-jog="${i}:1">+</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}°</b></div>`;
+    const jrow = (i) => `<div class="jrow" title="범위 ${lim[i]?.[0] ?? -180}° ~ ${lim[i]?.[1] ?? 180}°"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><input type="range" data-js="${i}" min="${lim[i]?.[0] ?? -180}" max="${lim[i]?.[1] ?? 180}" step="0.5" value="${r.deg[i] || 0}"><button data-jog="${i}:1">+</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}°</b></div>`;
     const trow = (k, i) => `<div class="jrow"><span>${k}</span><button data-xyz="${i}:-1">−</button><b class="tv" data-tv="${i}">${t[i]}</b><button data-xyz="${i}:1">+</button><small>mm</small></div>`;
     box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select><small id="pState">${stateTxt(r)}</small>
         <div class="pbtns"><button class="btn pri" id="pRec" title="지금 자세를 점으로 기록 (P1, P2 …)">● 점 기록</button><button class="btn${ROB.pick ? ' pri' : ''}" id="pPick" title="3D에서 물체(제품·트레이·지그 윗면 등)를 누르면 손끝이 그 자리로 가고 점으로 기록됩니다 · 작은 물체(800 mm 이하)는 윗면 가운데에 맞추고, Alt+클릭은 누른 그 자리 · Esc로 끝">◎ 3D에서 찍기</button><button class="btn${r.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 · 줄이 없으면 기록한 점을 순서대로 잇습니다">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pNext" title="한 줄만 실행하고 멈춥니다 (누를 때마다 다음 줄)">▷ 한 줄</button><label class="povr" title="움직임 속도 배율 (관절·직선 이동에만)">속도 <select id="pOvr">${[10, 25, 50, 100].map(v => `<option value="${v}"${ROB.ovr === v ? ' selected' : ''}>${v}%</option>`).join('')}</select></label><button class="btn" id="pGen" title="도달 거리 안의 제품·트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스</button></div></div>
       <div class="pbody">
         <div class="pjog">
+          <h5 class="pjh"><button id="pHome" title="모든 관절 0° (처음 자세)로 · 꼬인 자세를 풀 때">⌂ 홈 자세</button><label title="시험용: 관절 한계(기계적 끝)를 풀어 줍니다. 실제 로봇에서는 갈 수 없는 자세가 나올 수 있습니다"><input type="checkbox" id="pFree"${ROB.free ? ' checked' : ''}> 관절 한계 해제</label></h5>
           <h5>관절 조그 <select id="pStepJ">${[1, 5, 15].map(v => `<option${ROB.deg === v ? ' selected' : ''}>${v}</option>`).join('')}</select>° <em>슬라이더를 끌거나 −/+를 누르고 있으면 계속 움직입니다</em></h5>
           ${rig.map((_, i) => jrow(i)).join('')}
           <h5>TCP 조그 <select id="pStepM">${[10, 50, 200].map(v => `<option${ROB.mm === v ? ' selected' : ''}>${v}</option>`).join('')}</select> mm <em>설비 원점 기준</em></h5>
@@ -985,6 +992,8 @@
     box.querySelector('#pStepJ').onchange = e => { ROB.deg = +e.target.value; }; box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
     box.querySelector('#pRun').onclick = () => { const r = robState(id); ROB.step = false; if (r.on && r.pause) { r.pause = false; return; } if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, '티칭 패널')) toast('점을 기록하거나 줄을 더해 주세요', true); };
     box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = () => recordPoint(); box.querySelector('#pPick').onclick = () => setPick(!ROB.pick); box.querySelector('#pOvr').onchange = e => { ROB.ovr = +e.target.value; };
+    box.querySelector('#pHome').onclick = () => { const rr = robState(id); if (rr.on) stopProg(id); setDeg(id, rig.map(() => 0)); drawPend(true); };
+    box.querySelector('#pFree').onchange = e => { ROB.free = e.target.checked; if (!ROB.free) { const lm = L.limitsOf(rig), d = robState(id).deg.map((v, i) => lm[i] ? Math.max(lm[i][0], Math.min(lm[i][1], v)) : v); setDeg(id, d); } drawPend(); toast(ROB.free ? '관절 한계를 풀었습니다 · 실제 로봇에서는 못 가는 자세가 나올 수 있습니다' : '관절 한계를 다시 켰습니다'); };
     box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
     if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
     box.onpointerdown = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
@@ -1036,7 +1045,7 @@
       name = node?.name || '';
       if (!e.altKey && Math.max(sz.x, sz.z) <= 0.8) { tgt = new T.Vector3((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2); name = name ? `${name} 위` : ''; } else tgt = h.point.clone(); }
     else { plane.constant = 0; const p0 = new T.Vector3(); if (!ray.ray.intersectPlane(plane, p0)) return; tgt = p0; name = '바닥'; }
-    const ik = L.rigIk(rig, o, tgt, r.deg, { iters: 40 }); if (!ik || ik.err > 20) { L.rigSet(rig, r.deg); toast(`${name || '그 자리'}에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 로봇 가까이를 찍어 주세요`, true); return; }
+    if (tgt.y < 0) tgt.y = 0; const ik = ikR(rig, o, tgt, r.deg, { iters: 40 }); if (!ik || ik.err > 20) { L.rigSet(rig, r.deg); toast(`${name || '그 자리'}에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 로봇 가까이를 찍어 주세요`, true); return; }
     setDeg(id, ik.deg); drawPend(true); recordPoint(name); }
   let tele = null;
   function teleopStart(e) { if (mode !== 'run' || !tcpBall.visible || !ROB.sel) return false; setNdc(e); let pt = null;
@@ -1046,9 +1055,9 @@
     tele = { plane: new T.Plane().setFromNormalAndCoplanarPoint(nrm, c), off: new T.Vector3(), vertical: !!e.shiftKey, pt }; const hit0 = new T.Vector3(); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0);
     controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 0.5; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Shift: 높이)` : 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
   function teleopMove(e) { if (!tele) return; setNdc(e); const hit1 = new T.Vector3(); if (!ray.ray.intersectPlane(tele.plane, hit1)) return; hit1.add(tele.off);
-    const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const ik = L.rigIk(rig, o, hit1, r.deg, { iters: 16 }); if (!ik) return; setDeg(id, ik.deg); drawPend(true);
+    const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; if (hit1.y < 0) hit1.y = 0; const ik = ikR(rig, o, hit1, r.deg, { iters: 16 }); if (!ik) return; setDeg(id, ik.deg); drawPend(true);
     if (tele.pt) { const b = pathGrp.children.find(c => c.userData.pt === tele.pt); if (b) b.position.copy(L.rigTcp(rig, o)); }
-    $('hint').textContent = `${tele.pt ? tele.pt + ' 고치기' : 'TELEOP'} · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · 도달 거리 밖 (${Math.round(ik.err)} mm 못 미침)` : ''}`; }
+    $('hint').textContent = `${tele.pt ? tele.pt + ' 고치기' : 'TELEOP'} · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · ${Math.round(ik.err)} mm 못 미침${stuckWhy(rig, ik.deg)}` : ''}`; }
   function teleopEnd() { if (!tele) return; const pt = tele.pt; tele = null;
     if (pt && ROB.sel) { const id = ROB.sel, q = prog(id), z = q.points.find(x => x.id === pt); if (z) { z.j = round1(robState(id).deg); z.tcp = tcpOf(id); saveProg(q, true); toast(`${pt} 고침 · ${z.tcp.join(', ')} mm`); } } controls.enabled = true; tcpBall.material.opacity = 0.3; updateHint(); }
   function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;

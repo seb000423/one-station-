@@ -513,7 +513,7 @@
     let best = r0; const d0 = (deg0 || []).slice(); while (d0.length < rig.length) d0.push(0);
     for (const [i, d] of [[2, 35], [2, -35], [1, -25], [1, 25], [2, 70]]) { const s0 = d0.slice(); s0[i] += d; if (i === 1) s0[2] += d * 1.6; const r = ikOnce(rig, g, target, s0, { ...opt, a0: d0 }); if (r && r.err < best.err - 2) best = r; if (best.err <= 3) break; }
     if (best !== r0) rigSet(rig, best.deg); return best; }
-  function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
+  function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = opt.lim || limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
     const tmp = new T.Vector3(), m = rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
     const fk = ang => { if (rig.hold) { rig.hold(ang, a0); ang[4] = clamp(ang[4], 4); } rigSet(rig, ang); return rigTcp(rig, g).clone(); };
     let cur = fk(a), err = target.clone().sub(cur);
