@@ -919,7 +919,7 @@
     lines.push({ op: 'MOVJ', point: 'P1', speed: 60 }, { op: 'MOVL', point: 'P2', speed: 300 }, { op: 'GRIP', on: true }, { op: 'MOVL', point: 'P1', speed: 300 }, { op: 'MOVJ', point: 'P3', speed: 60 }, { op: 'MOVL', point: 'P4', speed: 300 }, { op: 'GRIP', on: false }, { op: 'MOVL', point: 'P3', speed: 300 }, { op: 'MOVJ', point: 'P0', speed: 60 });
     saveProg({ node: id, name: '픽 앤 플레이스', points: pts, lines }); log(`${P} 픽 앤 플레이스 생성 · ${pick.name} → ${place.name}`); toast(`${pick.name}에서 집어 ${place.name}에 놓는 프로그램을 만들었습니다 · ▶ 실행으로 확인`); }
   const OPK = { MOVJ: '관절 이동', MOVL: '직선 이동', GRIP: '그리퍼', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
-  function drawPend(light) { const box = $('pend'); if (!box) return; const rs = robotNodes(); if (mode !== 'run' || !rs.length) { box.hidden = true; return; } box.hidden = false;
+  function drawPend(light) { const box = $('pend'); if (!box) return; const rs = robotNodes(); if (mode !== 'run' || !rs.length) { box.hidden = true; return; } if (box.hidden) growBottom(460); box.hidden = false;
     if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id), lim = L.limitsOf(rig);
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; } const e = box.querySelector('#pTcp'); if (e) e.textContent = t.join(', '); return; }
     const io = ED.machine.doc.io, pSel = cur => `<select data-f="point">${p.points.map(q => `<option value="${q.id}"${q.id === cur ? ' selected' : ''}>${q.id}${q.name ? ' ' + esc(q.name) : ''}</option>`).join('')}</select>`;
@@ -1023,8 +1023,10 @@
     if (!k) { toast('워크 블록이 없습니다. 팔레트의 워크를 컨베이어 위에 놓으세요', true); return; }
     AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; log(`워크 ${k}개를 처음 놓은 자리로 다시 투입${AUTO.on ? ' · 자동 운전은 1단계부터' : ''}`); drawSeq(); };
   // the panel under the view: drag its top edge to make it taller or shorter; the 3D view takes the rest
+  let growBottom = () => {};
   (() => { const b = $('bottom'), g = $('bGrip'); let h0 = LS.get('one.build.bottomH', 300), drag = null;
     const apply = h => { h0 = Math.max(120, Math.min(innerHeight * 0.7, h)); b.style.height = h0 + 'px'; stage.resize(); };
+    growBottom = min => { if (!b.classList.contains('fold') && b.getBoundingClientRect().height < min) apply(min); }; // the pendant needs room: raise the panel once, the grip still sets it
     b.style.height = h0 + 'px';
     g.addEventListener('pointerdown', e => { if (b.classList.contains('fold')) { $('bFold').click(); return; } drag = { y: e.clientY, h: b.getBoundingClientRect().height }; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     g.addEventListener('pointermove', e => { if (drag) apply(drag.h - (e.clientY - drag.y)); });
