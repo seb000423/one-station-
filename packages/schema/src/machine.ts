@@ -50,6 +50,20 @@ export const SequenceStep = z.object({
   next: z.array(z.string()).optional().describe('parallel branches: ids of the steps that start after this one'),
 });
 
+/** 티칭 (teach pendant) program of one robot node: taught points (joint angles, deg, with the TCP where they were taught)
+    and lines a pendant runs: moves, gripper, signal wait/set, delay. Runs on the signal table: START starts it, BUSY/DONE report. */
+export const RobotPoint = z.object({ id: z.string(), name: z.string().optional(), j: z.array(z.number()).describe('joint angles deg, J1…'), tcp: z.array(z.number()).length(3).optional().describe('TCP x, y, z mm (machine frame) when taught') });
+export const RobotLine = z.discriminatedUnion('op', [
+  z.object({ op: z.literal('MOVJ'), point: z.string(), speed: z.number().min(1).max(100).default(50).describe('% of joint vmax') }),
+  z.object({ op: z.literal('MOVL'), point: z.string(), speed: z.number().positive().default(500).describe('TCP mm/s') }),
+  z.object({ op: z.literal('GRIP'), on: z.boolean() }),
+  z.object({ op: z.literal('WAIT'), tag: z.string(), value: z.union([z.boolean(), z.number()]) }),
+  z.object({ op: z.literal('SET'), tag: z.string(), value: z.union([z.boolean(), z.number()]) }),
+  z.object({ op: z.literal('DELAY'), s: z.number().nonnegative() }),
+]);
+export const RobotProgram = z.object({ node: Id, name: z.string().default('프로그램 1'), points: z.array(RobotPoint).default([]), lines: z.array(RobotLine).default([]) });
+export type RobotProgram = z.infer<typeof RobotProgram>;
+
 export const MachineCard = z.object({
   cycle_time: z.number().nonnegative().nullable().default(null),
   ok_rate: z.number().min(0).max(1).nullable().default(null),
@@ -77,6 +91,7 @@ export const Machine = z.object({
   trajectories: z.array(Trajectory).default([]),
   io: z.array(Io).default([]),
   sequence: z.object({ steps: z.array(SequenceStep).default([]) }).default({ steps: [] }),
+  programs: z.array(RobotProgram).default([]).describe('teach-pendant programs, one per robot node'),
   process: ProcessModel.nullable().default(null),
   spec: Spec.default(emptySpec()),
 });

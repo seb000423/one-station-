@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { Factory, FACTORY_SCHEMA, MACHINE_SCHEMA, importLegacy, factoryToLegacy, type LegacyDoc } from '@one-twin/schema';
+import { Factory, Machine as MachineDoc, FACTORY_SCHEMA, MACHINE_SCHEMA, importLegacy, factoryToLegacy, type LegacyDoc } from '@one-twin/schema';
 import { Editor, commandCatalog, factoryCommands, machineCommands, CommandError } from '@one-twin/core';
 
 const ids = () => { let n = 0; return () => `id${++n}`; };
@@ -257,5 +257,19 @@ describe('command catalogue', () => {
     expect(cat.length).toBe(Object.keys(factoryCommands).length + Object.keys(machineCommands).length);
     for (const c of cat) { expect(c.description.length).toBeGreaterThan(3); expect(c.args).toHaveProperty('type', 'object'); }
     expect(cat.map(c => c.name)).toEqual(expect.arrayContaining(['place_machine', 'draw_wall', 'connect_flow', 'snap', 'set_param', 'add_block', 'add_joint', 'bind_tag']));
+  });
+});
+
+describe('robot teach program', () => {
+  it('set_program validates points and tags, delete removes the robot program, undo restores it', () => {
+    const e = new Editor('machine', MachineDoc.parse({ schema: MACHINE_SCHEMA, meta: { id: 'm', name: 'm', bbox: [3000, 2000, 2000] } }), { newId: ids() });
+    const rb = e.exec('add_block', { blockType: 'robot-6axis', name: 'RB1', position: [0, 0, 0], params: { tag: 'RB1' }, joints: [], io: [{ tag: 'RB1_START', dir: 'out', type: 'bool' }, { tag: 'RB1_DONE', dir: 'in', type: 'bool' }] }) as string;
+    const pts = [{ id: 'P1', j: [0, 0, 0, 0, 0, 0] }, { id: 'P2', j: [45, 10, -20, 0, 30, 0], tcp: [800, 100, 500] }];
+    e.exec('set_program', { node: rb, points: pts, lines: [{ op: 'MOVJ', point: 'P1', speed: 50 }, { op: 'GRIP', on: true }, { op: 'MOVL', point: 'P2', speed: 300 }, { op: 'WAIT', tag: 'RB1_START', value: true }, { op: 'DELAY', s: 1 }] });
+    expect(e.doc.programs).toHaveLength(1); expect(e.doc.programs[0]!.lines).toHaveLength(5);
+    expect(() => e.exec('set_program', { node: rb, points: pts, lines: [{ op: 'MOVJ', point: 'P9', speed: 50 }] })).toThrow(/unknown point/);
+    expect(() => e.exec('set_program', { node: rb, points: pts, lines: [{ op: 'SET', tag: 'RB1_DONE', value: true }] })).toThrow(/PLC input/);
+    e.exec('delete', { id: rb }); expect(e.doc.programs).toHaveLength(0);
+    e.undo(); expect(e.doc.programs).toHaveLength(1);
   });
 });

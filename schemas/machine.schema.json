@@ -761,6 +761,195 @@
         }
       }
     },
+    "programs": {
+      "default": [],
+      "description": "teach-pendant programs, one per robot node",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "default": "프로그램 1",
+            "type": "string"
+          },
+          "points": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "j": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "joint angles deg, J1…"
+                },
+                "tcp": {
+                  "description": "TCP x, y, z mm (machine frame) when taught",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "j"
+              ]
+            }
+          },
+          "lines": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "MOVJ"
+                    },
+                    "point": {
+                      "type": "string"
+                    },
+                    "speed": {
+                      "default": 50,
+                      "description": "% of joint vmax",
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 100
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "point"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "MOVL"
+                    },
+                    "point": {
+                      "type": "string"
+                    },
+                    "speed": {
+                      "default": 500,
+                      "description": "TCP mm/s",
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "point"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "GRIP"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "on"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "WAIT"
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "boolean",
+                        "number"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "tag",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "SET"
+                    },
+                    "tag": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": [
+                        "boolean",
+                        "number"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "tag",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "DELAY"
+                    },
+                    "s": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "s"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "node"
+        ]
+      }
+    },
     "process": {
       "default": null,
       "anyOf": [

@@ -418,8 +418,8 @@
   const robotIo = P => [out(`${P}_START`), out(`${P}_PROG`, 'int'), inn(`${P}_BUSY`, 'bool', { kind: 'process', target: `${P}_START` }), inn(`${P}_DONE`, 'bool', { kind: 'process', target: `${P}_START` })];
   bdef('robot-6axis', { cls: 'robot', name: '6축 다관절 로봇', cat: 'robot', code: 'RB', onTop: true, params: { reach: 1200, payload: 10, cycle: 4 }, fields: [num('reach', '도달 거리', 'mm', 50), num('payload', '가반 중량', 'kg', 1), num('cycle', '동작 시간', 's', 0.5)],
     joints: (P) => [J(`${P}_J1`, 'rot', [0, 0, 1], 'position', -170, 170, 180, 720)], io: robotIo,
-    build: p => { const g = new T.Group(); arm(g, mm(p.reach)); return g; },
-    pose: (g, p, v) => { const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'); const k = v.RUN || 0;
+    build: p => { const g = new T.Group(); arm(g, mm(p.reach)); g.userData.rig = rigOfArm(g); g.userData.kind = 'robot'; return g; },
+    pose: (g, p, v) => { if (g.userData.prog) return; const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'); const k = v.RUN || 0;
       if (j1) j1.rotation.y = Math.sin(k * Math.PI) * 1.4; if (j2) j2.rotation.z = -0.35 - Math.sin(k * Math.PI) * 0.4; if (j3) j3.rotation.z = 0.2 + Math.sin(k * Math.PI) * 0.5; } });
   bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
     io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
@@ -489,6 +489,34 @@
     return list.map((j, k) => { const i = kind === 'rotary' ? 0 : k, pq = new T.Quaternion(); if (j.parent) j.parent.getWorldQuaternion(pq);
       return { j, i, base: j.quaternion.clone(), axis: axisW(i).clone().applyQuaternion(pq.invert()).normalize() }; });
   }
+  /** The palette arm (arm()): j1 about the vertical, j2 / j3 about their local Z, the wrist as TCP. */
+  function rigOfArm(g) { const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'), w = g.getObjectByName('wrist'); if (!j1 || !j2 || !j3) return null;
+    const rig = [{ j: j1, i: 0, base: j1.quaternion.clone(), axis: new T.Vector3(0, 1, 0) }, { j: j2, i: 1, base: j2.quaternion.clone(), axis: new T.Vector3(0, 0, 1) }, { j: j3, i: 2, base: j3.quaternion.clone(), axis: new T.Vector3(0, 0, 1) }];
+    rig.tcp = w || j3; rig.limits = [[-170, 170], [-60, 60], [-70, 90]]; return rig; }
+  /* ------------------------------------------------------------- 티칭 (teach) kinematics: angles in, TCP out, and the inverse
+     rigSet: joint angles (deg) → pose. rigTcp: TCP position in world (scene m). rigIk: joint angles that put the TCP at a
+     target, by damped least squares on a numeric Jacobian (position only; the wrist keeps its taught orientation).
+     No dynamics, no collision: a trajectory through an object is reported by the design check, not prevented. */
+  const LIMITS6 = [[-170, 170], [-100, 135], [-150, 150], [-190, 190], [-120, 120], [-360, 360]];
+  const limitsOf = rig => rig.limits || LIMITS6;
+  function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, a * Math.PI / 180)); } }
+  function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
+  function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
+    const tmp = new T.Vector3(); const fk = ang => { rigSet(rig, ang); return rigTcp(rig, g).clone(); };
+    let cur = fk(a), err = target.clone().sub(cur);
+    for (let k = 0; k < it && err.length() > 0.0008; k++) {
+      // J in m per rad (numeric, h deg): (J Jᵀ + λ² I) y = err, 3×3; Δa = Jᵀ y (rad) → deg, at most 25° a step
+      const J = []; for (let i = 0; i < n; i++) { const b = a.slice(); b[i] += h; const q = fk(b); J.push([(q.x - cur.x) / h * R, (q.y - cur.y) / h * R, (q.z - cur.z) / h * R]); }
+      const A = [[lam2, 0, 0], [0, lam2, 0], [0, 0, lam2]]; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let i = 0; i < n; i++) A[r][c] += J[i][r] * J[i][c];
+      const e = [err.x, err.y, err.z], y = solve3(A, e); if (!y) break;
+      for (let i = 0; i < n; i++) { let d = (J[i][0] * y[0] + J[i][1] * y[1] + J[i][2] * y[2]) * R * 0.8; d = Math.max(-25, Math.min(25, d)); a[i] = Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, a[i] + d)); }
+      cur = fk(a); err = tmp.copy(target).sub(cur); }
+    return { deg: a, err: err.length() * 1000, tcp: cur }; }
+  /** Arm length along the joint chain (mm), the reach the pendant uses to look for pick / place targets. */
+  function rigReach(rig, g) { if (!rig || rig.length < 2) return 0; (g || rig[0].j).updateMatrixWorld(true); const wp = rig.map(r => r.j.getWorldPosition(new T.Vector3())); const t = rig.tcp ? rig.tcp.getWorldPosition(new T.Vector3()) : wp[wp.length - 1];
+    let d = 0; for (let i = 1; i < wp.length; i++) d += wp[i].distanceTo(wp[i - 1]); d += t.distanceTo(wp[wp.length - 1]); return Math.round(d * 1000); }
+  function solve3(A, b) { const m = A.map((r, i) => [...r, b[i]]); for (let c = 0; c < 3; c++) { let p = c; for (let r = c + 1; r < 3; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r; [m[c], m[p]] = [m[p], m[c]]; if (Math.abs(m[c][c]) < 1e-12) return null;
+    for (let r = 0; r < 3; r++) { if (r === c) continue; const f = m[r][c] / m[c][c]; for (let k = c; k < 4; k++) m[r][k] -= f * m[c][k]; } } return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]]; }
   // swing of joint i at k = 0…1 of the cycle (degrees): out and back, each joint its own way
   const SWING = [55, 22, -28, 70, 35, 90];
   const qa = new T.Quaternion();
@@ -570,7 +598,7 @@
       if (!p.src || !p.node) return g;
       if (GLB_READY[p.src]) attachModel(g, p, GLB_READY[p.src]); else plantGlb(p.src).then(sc => attachModel(g, p, sc)).catch(() => {});
       return g; },
-    pose: (g, p, v) => { poseRig(g.userData.rig, p.kind, v.RUN || 0); if (g.userData.fx) setFx(g, { state: v.RUN ? 'busy' : 'ready', k: v.RUN || 0, hit: (v.RUN || 0) > 0.05 && (v.RUN || 0) < 0.3 }); } });
+    pose: (g, p, v) => { if (!g.userData.prog) poseRig(g.userData.rig, p.kind, v.RUN || 0); if (g.userData.fx) setFx(g, { state: v.RUN ? 'busy' : 'ready', k: v.RUN || 0, hit: (v.RUN || 0) > 0.05 && (v.RUN || 0) < 0.3 }); } });
   // the same part placed on its own in Factory Builder (a factory block): a cell split into its objects
   fdef('model-part', { name: '모델 객체', group: 'model', kind: { cmd: 'add_block', type: 'model-part' }, params: B['model-part'].params, fields: B['model-part'].fields, build: p => B['model-part'].build(p),
     why: '셀을 이루는 객체 하나 · 크기와 위치를 따로 바꿉니다' });
@@ -587,5 +615,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { plantGlb, poseModel, setFx, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, poseModel, setFx, rigSet, rigTcp, rigIk, rigReach, limitsOf, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

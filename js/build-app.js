@@ -824,6 +824,129 @@
         for (const x of st.set) RUN.tags[x.tag] = x.value; log(`▶ ${st.name}`); AUTO.phase = 'delay'; AUTO.t = 0; AUTO.waited = 0; AUTO.warned = false; }
       AUTO.t += dt; dt = 0; if (AUTO.t < (st.delay || 0)) return;
       const nx = st.next?.[0]; AUTO.i = nx ? Math.max(0, steps.findIndex(q => q.id === nx)) : (AUTO.i + 1) % steps.length; AUTO.phase = 'wait'; drawSeq(); } }
+  /* ------------------------------------------------------------------ 티칭 패널 (teach pendant) and program run
+     A robot node's program (doc.programs, command set_program) runs on the signal table: RB_START rising (or ▶ on the
+     pendant) starts it, RB_BUSY while it runs, RB_DONE at the end. MOVJ moves in joint space, MOVL moves the TCP on a
+     straight line (inverse kinematics each frame), GRIP takes the nearest work along and puts it down, WAIT / SET use
+     tags, DELAY waits. No collision check: a path through an object shows in the design check later, it is not stopped. */
+  const ROB = { sel: null, deg: 5, mm: 50, run: {} };
+  const progOf = id => ED.machine.doc.programs.find(p => p.node === id);
+  const robObj = id => objs.get(id)?.obj;
+  const rigFor = id => { const o = robObj(id); return o && o.userData.rig && o.userData.kind === 'robot' ? o.userData.rig : null; };
+  const robotNodes = () => ED.machine.doc.nodes.filter(n => rigFor(n.id));
+  const zeros = rig => rig.map(() => 0);
+  const robState = id => { const rig = rigFor(id); if (!rig) return null; return ROB.run[id] || (ROB.run[id] = { line: -1, on: false, deg: robObj(id).userData.deg || zeros(rig), grip: null, prev: false }); };
+  function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
+  function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
+  const VJ = 150; // joint speed deg/s at 100 %
+  function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(); return true; }
+  function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; } drawPend(); }
+  function fkStored(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); L.rigSet(rig, deg); const t = fromS(L.rigTcp(rig, o)); L.rigSet(rig, r.deg); return t; }
+  function stepRobots(dt) {
+    const doc = ED.machine.doc, tags = RUN.tags;
+    for (const n of doc.nodes) { const rig = rigFor(n.id); if (!rig) continue; const P = nodeCode(n), o = robObj(n.id), p = progOf(n.id), r = robState(n.id);
+      if (!p) { if (o.userData.prog && !r.on && !ROB.sel) o.userData.prog = false; if (o.userData.prog) L.rigSet(rig, r.deg); continue; }
+      o.userData.prog = true; const st = !!tags[`${P}_START`];
+      if (st && !r.prev) { startProg(n.id, `${P}_START`); if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; } if (!st && r.prev && `${P}_DONE` in tags && !r.on) tags[`${P}_DONE`] = false; r.prev = st;
+      if (r.on) { let budget = dt; for (let g = 0; g < 8 && budget > 0 && r.on; g++) budget = progStep(n, P, r, p, rig, o, budget, tags); }
+      if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = r.on; if (RUN.procs[P]) RUN.procs[P].busy = r.on;
+      L.rigSet(rig, r.deg); o.userData.deg = r.deg;
+      if (r.grip && RUN.works[r.grip]) { const t = tcpOf(n.id), w = RUN.works[r.grip]; w.p = [t[0], t[1]]; w.z = t[2]; w.held = n.id; }
+    } }
+  /* one program line, or part of it, within `dt` seconds; returns the time left over (a line that ends mid-frame hands the rest to the next) */
+  function progStep(n, P, r, p, rig, o, dt, tags) {
+    if (!r.seg) { L.rigSet(rig, r.deg); r.line++; const l = p.lines[r.line]; // pose first: a line that starts in the frame the last one ended reads the true TCP
+      if (!l) { r.on = false; r.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 프로그램 끝 · DONE`); drawPend(); return 0; }
+      const pt = l.point && p.points.find(q => q.id === l.point);
+      if (l.op === 'MOVJ') { const to = pt.j.slice(0, rig.length); while (to.length < rig.length) to.push(0); const dmax = Math.max(1e-6, ...to.map((v, i) => Math.abs(v - (r.deg[i] || 0)))); r.seg = { kind: 'J', from: r.deg.slice(), to, t: 0, dur: dmax / (VJ * (l.speed || 50) / 100) }; }
+      else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, d / (l.speed || 500)), lastJ: pt.j }; }
+      else if (l.op === 'GRIP') { if (l.on) { const t = tcpOf(n.id); let best = null, bd = 400; for (const id in RUN.works) { const w = RUN.works[id]; if (w.held && w.held !== n.id) continue; const d = Math.hypot(w.p[0] - t[0], w.p[1] - t[1], w.z - t[2]); if (d < bd) { bd = d; best = id; } }
+          if (best) { r.grip = best; log(`${P} 그리퍼 닫힘 · 워크 집음`); } else log(`${P} 그리퍼 닫힘 · 400 mm 안에 워크가 없습니다`); }
+        else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
+        r.seg = { kind: 'D', t: 0, dur: 0.3 }; }
+      else if (l.op === 'WAIT') r.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
+      else if (l.op === 'SET') { tags[l.tag] = l.value; r.seg = { kind: 'D', t: 0, dur: 0 }; }
+      else if (l.op === 'DELAY') r.seg = { kind: 'D', t: 0, dur: l.s || 0 };
+      drawPend(); }
+    const sg = r.seg;
+    if (sg.kind === 'W') { if (cmp(tags[sg.tag], '==', sg.value)) { r.seg = null; return dt; } sg.t += dt; if (sg.t > 20 && !sg.warned) { sg.warned = true; log(`${P} ${sg.tag} ${valTxt(sg.tag, sg.value)} 20초째 기다립니다`); } return 0; }
+    const left = Math.max(0, sg.t + dt - sg.dur); sg.t = Math.min(sg.dur, sg.t + dt); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
+    if (sg.kind === 'J') r.deg = sg.from.map((a, i) => a + (sg.to[i] - a) * e);
+    else if (sg.kind === 'L') { const tgt = toS([sg.t0[0] + (sg.t1[0] - sg.t0[0]) * e, sg.t0[1] + (sg.t1[1] - sg.t0[1]) * e, sg.t0[2] + (sg.t1[2] - sg.t0[2]) * e]);
+      const ik = L.rigIk(rig, o, tgt, r.deg, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
+    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); r.seg = null; }
+    return left; }
+  /** Where a released work lands: the highest block top under it that is not above the hand, else the floor. */
+  function landZ(p, z) { const doc = ED.machine.doc; let best = 0; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work) continue; const top = nodeTop(b); if (top > z + 50 || top <= best) continue;
+      const o = objs.get(b.id)?.obj; if (!o) continue; tmpBox.setFromObject(o); const s = toS([p[0], p[1], 0]); if (s.x >= tmpBox.min.x - 0.05 && s.x <= tmpBox.max.x + 0.05 && s.z >= tmpBox.min.z - 0.05 && s.z <= tmpBox.max.z + 0.05) best = top; } return best; }
+  // jogging: by joint (deg) or by TCP axis (mm, inverse kinematics)
+  function jogJ(i, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id); if (!r) return; const lim = L.limitsOf(rig)[i] || [-180, 180]; const deg = r.deg.slice(); deg[i] = Math.max(lim[0], Math.min(lim[1], (deg[i] || 0) + d)); setDeg(id, deg); drawPend(true); }
+  function jogXYZ(ax, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const t = tcpOf(id); t[ax] += d; const ik = L.rigIk(rig, o, toS(t), r.deg, { iters: 30 });
+    if (!ik) return; if (ik.err > 20) { toast(`도달 거리 밖입니다 (${Math.round(ik.err)} mm 못 미침)`, true); L.rigSet(rig, r.deg); return; } setDeg(id, ik.deg); drawPend(true); }
+  const prog = id => { const p = progOf(id); return p ? JSON.parse(JSON.stringify(p)) : { node: id, name: '프로그램 1', points: [], lines: [] }; };
+  const saveProg = p => { exec('set_program', { node: p.node, name: p.name, points: p.points, lines: p.lines }, true); drawPend(); };
+  function recordPoint() { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id); let k = p.points.length + 1; while (p.points.some(q => q.id === `P${k}`)) k++;
+    p.points.push({ id: `P${k}`, j: r.deg.map(v => Math.round(v * 10) / 10), tcp: tcpOf(id) }); saveProg(p); toast(`P${k} 기록 · ${p.points[p.points.length - 1].tcp.join(', ')} mm`); }
+  /* 픽 앤 플레이스 만들기: from the structure rules the robot's targets in reach are known; the nearest tray is the pick,
+     the nearest jig / index table the place; approach points 150 mm above each; the program waits for START and sets DONE itself. */
+  function genPickPlace() { const id = ROB.sel, n = ED.machine.doc.nodes.find(x => x.id === id), r = robState(id), rig = rigFor(id), o = robObj(id); if (!n) return;
+    const parts = slotParts(ED.machine.doc), me = parts.find(x => x.id === id), reach = L.rigReach(rig, o) || (me ? C.reachOf(me) : 1200), dist = x => Math.hypot(x.pos[0] - n.transform.position[0], x.pos[1] - n.transform.position[1]);
+    const near = cls => parts.filter(x => x.id !== id && cls.includes(x.cls) && dist(x) <= reach * 1.5).sort((a, b) => dist(a) - dist(b) || b.pos[2] - a.pos[2]);
+    // pick from a tray (top of a stack first); place on a jig, rotary table or desk, else on a rail / conveyor to the next station
+    const picks = near(['tray', 'work', 'rail']), places = [...near(['jig', 'rotary', 'desk']), ...near(['rail'])]; if (!picks.length || !places.length) { toast(`도달 거리 ${reach} mm 안에 트레이(집을 곳)와 지그·회전 테이블(놓을 곳)이 있어야 합니다`, true); return; }
+    const top = x => [x.pos[0], x.pos[1], x.pos[2] + x.size[2]], ikTo = (t, seed) => L.rigIk(rig, o, toS(t), seed, { iters: 40 });
+    const home = r.deg.slice(); let pts = [], pick = null, place = null; const add = (name, t, seed) => { const ik = ikTo(t, seed); if (!ik || ik.err > 30) return null; pts.push({ id: `P${pts.length + 1}`, name, j: ik.deg.map(v => Math.round(v * 10) / 10), tcp: t.map(Math.round) }); return ik.deg; };
+    // the nearest tray and jig the arm really reaches (IK must close within 30 mm), tried in distance order
+    let s2 = null, s4 = null; for (const pk of picks) { pts = []; const a = top(pk), a1 = [a[0], a[1], a[2] + 150]; const s1 = add('집기 위', a1, home); s2 = s1 && add('집기', a, s1); if (s2) { pick = pk; break; } }
+    if (s2) for (const pl of places) { if (pl === pick) continue; pts.length = 2; const b = top(pl), b1 = [b[0], b[1], b[2] + 150]; const s3 = add('놓기 위', b1, s2); s4 = s3 && add('놓기', b, s3); if (s4) { place = pl; break; } }
+    L.rigSet(rig, r.deg);
+    if (!s4) { toast(`${!s2 ? picks[0].name : places[0].name}에 손이 닿지 않습니다 (팔 길이 ${reach} mm) · 로봇을 가까이 두거나 받침을 낮추세요 · 레일 주행축은 아직 프로그램에 넣지 않습니다`, true); return; }
+    pts.unshift({ id: 'P0', name: '홈', j: home.map(v => Math.round(v * 10) / 10), tcp: tcpOf(id) });
+    const P = nodeCode(n), has = t => ED.machine.doc.io.some(x => x.tag === t), lines = [];
+    lines.push({ op: 'MOVJ', point: 'P1', speed: 60 }, { op: 'MOVL', point: 'P2', speed: 300 }, { op: 'GRIP', on: true }, { op: 'MOVL', point: 'P1', speed: 300 }, { op: 'MOVJ', point: 'P3', speed: 60 }, { op: 'MOVL', point: 'P4', speed: 300 }, { op: 'GRIP', on: false }, { op: 'MOVL', point: 'P3', speed: 300 }, { op: 'MOVJ', point: 'P0', speed: 60 });
+    saveProg({ node: id, name: '픽 앤 플레이스', points: pts, lines }); log(`${P} 픽 앤 플레이스 생성 · ${pick.name} → ${place.name}`); toast(`${pick.name}에서 집어 ${place.name}에 놓는 프로그램을 만들었습니다 · ▶ 실행으로 확인`); }
+  const OPK = { MOVJ: '관절 이동', MOVL: '직선 이동', GRIP: '그리퍼', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
+  function drawPend(light) { const box = $('pend'); if (!box) return; const rs = robotNodes(); if (mode !== 'run' || !rs.length) { box.hidden = true; return; } box.hidden = false;
+    if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id), lim = L.limitsOf(rig);
+    if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; } const e = box.querySelector('#pTcp'); if (e) e.textContent = t.join(', '); return; }
+    const io = ED.machine.doc.io, pSel = cur => `<select data-f="point">${p.points.map(q => `<option value="${q.id}"${q.id === cur ? ' selected' : ''}>${q.id}${q.name ? ' ' + esc(q.name) : ''}</option>`).join('')}</select>`;
+    const line = (l, i) => { const on = r.on && r.line === i; let body = '';
+      if (l.op === 'MOVJ') body = `${pSel(l.point)} 속도 <input data-f="speed" type="number" min="1" max="100" value="${l.speed ?? 50}"> %`;
+      else if (l.op === 'MOVL') body = `${pSel(l.point)} 속도 <input data-f="speed" type="number" min="10" step="10" value="${l.speed ?? 500}"> mm/s`;
+      else if (l.op === 'GRIP') body = `<select data-f="on"><option value="true"${l.on ? ' selected' : ''}>닫기 (집기)</option><option value="false"${!l.on ? ' selected' : ''}>열기 (놓기)</option></select>`;
+      else if (l.op === 'WAIT' || l.op === 'SET') { const tg = io.find(x => x.tag === l.tag); body = `${tagSel(l.tag, l.op === 'SET')}${valSel(tg, l.value, l.op === 'SET' ? 'set' : 'wait')}`; }
+      else if (l.op === 'DELAY') body = `<input data-f="s" type="number" min="0" step="0.1" value="${l.s ?? 1}"> s`;
+      return `<div class="pline${on ? ' on' : ''}" data-li="${i}"><b>${i + 1}</b><span class="op">${OPK[l.op]}</span>${body}<button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
+    const tagsOut = io.filter(x => x.dir === 'out'), tagsAny = io;
+    box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select>
+        <small>${r.on ? `▶ ${r.line + 1}줄 실행 중` : r.grip ? '워크 쥠' : '대기'}</small>
+        <button class="btn${r.on ? ' pri' : ''}" id="pRun" style="margin-left:auto">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pGen" title="도달 거리 안의 트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스 만들기</button></div>
+      <div class="pbody">
+        <div class="pjog"><h5>조그 <em>관절</em> <select id="pStepJ">${[1, 5, 15].map(v => `<option${ROB.deg === v ? ' selected' : ''}>${v}</option>`).join('')}</select>°</h5>
+          ${rig.map((_, i) => `<div class="jrow"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}°</b><button data-jog="${i}:1">+</button><small>${lim[i] ? `${lim[i][0]}~${lim[i][1]}` : ''}</small></div>`).join('')}
+          <h5>조그 <em>TCP</em> <select id="pStepM">${[10, 50, 200].map(v => `<option${ROB.mm === v ? ' selected' : ''}>${v}</option>`).join('')}</select> mm</h5>
+          <div class="jrow"><span>X</span><button data-xyz="0:-1">−</button><b></b><button data-xyz="0:1">+</button><span>Y</span><button data-xyz="1:-1">−</button><b></b><button data-xyz="1:1">+</button><span>Z</span><button data-xyz="2:-1">−</button><b></b><button data-xyz="2:1">+</button></div>
+          <p class="tcp">TCP <b id="pTcp">${t.join(', ')}</b> mm · 설비 원점 기준</p>
+          <button class="btn pri" id="pRec">● 점 기록</button>
+          <div class="ppts">${p.points.map(q => `<div class="ppt" data-pt="${q.id}"><b>${q.id}</b><input data-f="pname" value="${esc(q.name || '')}" placeholder="이름"><small>${(q.tcp || []).join(', ')}</small><button data-pa="go" title="이 자세로">↷</button><button data-pa="re" title="지금 자세로 다시 기록">●</button><button data-pa="del">×</button></div>`).join('') || '<p class="why">조그로 자세를 잡고 ● 점 기록을 누르면 P1, P2…가 쌓입니다</p>'}</div></div>
+        <div class="plines"><h5>프로그램 <em>${p.lines.length}줄</em> <span class="padd">+ <button data-add="MOVJ">관절 이동</button><button data-add="MOVL">직선 이동</button><button data-add="GRIP">그리퍼</button><button data-add="WAIT">신호 대기</button><button data-add="SET">신호 출력</button><button data-add="DELAY">기다림</button></span></h5>
+          ${p.lines.map(line).join('') || '<p class="why">줄을 더해 프로그램을 만들거나, 픽 앤 플레이스 만들기를 누르세요. RB_START 신호나 ▶ 실행으로 돕니다</p>'}</div></div>`;
+    box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; drawPend(); };
+    box.querySelector('#pStepJ').onchange = e => { ROB.deg = +e.target.value; }; box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
+    box.querySelector('#pRun').onclick = () => { if (r.on) stopProg(id); else if (!startProg(id, '티칭 패널')) toast('프로그램에 줄이 없습니다', true); };
+    box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = recordPoint;
+    box.onclick = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); jogJ(+i, +d * ROB.deg); return; }
+      const x = e.target.closest('[data-xyz]'); if (x) { const [a, d] = x.dataset.xyz.split(':'); jogXYZ(+a, +d * ROB.mm); return; }
+      const ad = e.target.closest('[data-add]'); if (ad) { const q = prog(id), op = ad.dataset.add, first = q.points[0]?.id; if ((op === 'MOVJ' || op === 'MOVL') && !first) { toast('먼저 점을 기록하세요', true); return; }
+        q.lines.push(op === 'MOVJ' ? { op, point: first, speed: 50 } : op === 'MOVL' ? { op, point: first, speed: 500 } : op === 'GRIP' ? { op, on: true } : op === 'WAIT' ? { op, tag: tagsAny[0]?.tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0]?.tag, value: true } : { op, s: 1 });
+        if ((op === 'WAIT' && !tagsAny.length) || (op === 'SET' && !tagsOut.length)) { toast('신호가 없습니다', true); return; } saveProg(q); return; }
+      const pa = e.target.closest('[data-pa]'); if (pa) { const q = prog(id), pid = pa.closest('[data-pt]').dataset.pt, k = q.points.findIndex(z => z.id === pid), pt = q.points[k];
+        if (pa.dataset.pa === 'go') { setDeg(id, pt.j); drawPend(true); } else if (pa.dataset.pa === 're') { pt.j = r.deg.map(v => Math.round(v * 10) / 10); pt.tcp = tcpOf(id); saveProg(q); } else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
+      const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') q.lines.splice(i, 1); else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); return; } };
+    box.onchange = e => { const f = e.target.dataset.f; if (!f) return; const q = prog(id);
+      const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q); return; }
+      const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 'speed' || f === 's') v = +v;
+      l[f] = v; saveProg(q); }; }
   function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;
     if (on && doc.io.some(x => /_ESTOP$/.test(x.tag) && RUN.tags[x.tag])) { toast('비상정지가 눌려 있습니다 · 먼저 비상정지를 해제하세요', true); return; }
     if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
@@ -963,7 +1086,7 @@
       else if (b.kind === 'sensor') { const [jid, end] = b.target.split(':'), j = doc.joints.find(x => x.id === jid); if (!j) continue; const v = RUN.v[jid];
         tags[t.tag] = end === 'max' ? Math.abs(v - j.max) < 0.5 : end === 'min' ? Math.abs(v - j.min) < 0.5 : Math.abs(v - (RUN.v[jid + ':target'] ?? v)) < 0.5; }
     }
-    for (const n of doc.nodes) { const P = nodeCode(n), d = nodeDef(n); if (!d) continue; const start = doc.io.find(t => t.tag === `${P}_START` || t.tag === `${P}_TRIG` || t.tag === `${P}_ON` && t.dir === 'out' || (t.tag === `${P}_RUN` || t.tag === `${P}_NEXT`) && !d.conveyor && !d.corner); if (!start) continue;
+    for (const n of doc.nodes) { const P = nodeCode(n), d = nodeDef(n); if (!d || progOf(n.id)) continue; const start = doc.io.find(t => t.tag === `${P}_START` || t.tag === `${P}_TRIG` || t.tag === `${P}_ON` && t.dir === 'out' || (t.tag === `${P}_RUN` || t.tag === `${P}_NEXT`) && !d.conveyor && !d.corner); if (!start) continue;
       const pr = RUN.procs[P] || (RUN.procs[P] = { busy: false, t0: 0, prev: false }), on = !!tags[start.tag], cyc = Math.max(0.2, +(n.params.cycle || d.params.cycle || (start.tag.endsWith('_TRIG') ? 0.5 : 1)));
       if (on && !pr.prev) { pr.busy = true; pr.t0 = RUN.t; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; }
       if (!on) { pr.busy = false; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; }
@@ -977,7 +1100,7 @@
       if (d.pose) d.pose(o, Object.assign({}, d.params, n.params), vals, tg => !!tags[tg], P);
       if (RUN.works[n.id]) placeObj(o, [RUN.works[n.id].p[0], RUN.works[n.id].p[1], RUN.works[n.id].z], n.transform.rotation[2]); }
   }
-  function setMode(m) {
+  function setMode(m) { setTimeout(drawPend, 0);
     if (tab !== 'machine') m = 'edit'; mode = m; if (AUTO.on) setAuto(false); document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
     if (m === 'run') { resetRun(); log('동작 시험 시작 · Control Panel의 ON / OFF로 켜고 끄거나 ▶ 자동 운전을 누릅니다');
       // tall blocks that never move (cabinets, panels, guards) turn see-through so the work and stoppers stay in view
@@ -1356,7 +1479,7 @@
     if (tab !== 'machine' || !originMark || !showOrigin || xray || mode === 'run') originLbl.style.display = 'none';
     else { const v = originMark.position.clone().project(camera); originLbl.style.display = ''; originLbl.style.left = ((v.x + 1) / 2 * r.width + 10) + 'px'; originLbl.style.top = ((1 - v.y) / 2 * r.height + 12) + 'px'; } for (const k of ['in', 'out']) { const a = portAnchors.find(x => x[0] === k), el = portLbl[k]; if (!a || xray || mode === 'run') { el.style.display = 'none'; continue; }
       const v = a[1].clone().project(camera); el.style.display = ''; el.style.left = ((v.x + 1) / 2 * r.width) + 'px'; el.style.top = ((1 - v.y) / 2 * r.height) + 'px'; } }
-  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); else { cellPlate.visible = false; $('cellWarn').hidden = true; } if (tab === 'machine') drawIo(); updateCheck(); }
+  function refresh() { syncScene(); drawPorts(); drawTree(); drawObjSel(); drawProps(); drawBar(); drawCrumb(); updateSelMark(); if (tab === 'machine') updateEnvelope(); else { cellPlate.visible = false; $('cellWarn').hidden = true; } if (tab === 'machine') { drawIo(); drawPend(); } updateCheck(); }
   function switchTab(t, fit) {
     if (mode === 'run') setMode('edit');
     tab = t; LS.set(KEY.tab, t); originChip(); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
@@ -1419,7 +1542,7 @@
     for (const o of moving) if (!next.has(o)) L.poseModel(o, 0); moving = next; }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
+    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); stepRobots(dt); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
     animateSelected(now); stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 
@@ -1447,5 +1570,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, objs, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, get objs() { return objs; }, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
 })();

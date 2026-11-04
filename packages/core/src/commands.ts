@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 import {
-  Vec2, Vec3, Params, Transform, GRID_FACTORY_MM, GRID_MACHINE_MM, snap, roundMm, Joint, Io, Socket, isTagPath, SequenceStep,
+  Vec2, Vec3, Params, Transform, GRID_FACTORY_MM, GRID_MACHINE_MM, snap, roundMm, Joint, Io, Socket, isTagPath, SequenceStep, RobotPoint, RobotLine,
   type Factory, type Machine,
 } from '@one-twin/schema';
 import { locate } from './locate';
@@ -367,6 +367,22 @@ export const machineCommands = {
       m.sequence.steps = a.steps;
     },
   }),
+  set_program: def({
+    scope: 'machine', description: '로봇 티칭 프로그램 바꾸기 (노드 하나의 점과 줄 전체를 교체 · 줄이 없으면 프로그램 삭제)',
+    args: z.object({ node: z.string(), name: z.string().optional(), points: z.array(RobotPoint), lines: z.array(RobotLine) }),
+    run: (m: Machine, a) => {
+      if (!m.nodes.some(n => n.id === a.node)) throw new CommandError(`unknown node ${a.node}`);
+      const pts = new Set<string>(), tags = new Map(m.io.map(t => [t.tag, t]));
+      for (const p of a.points) { if (pts.has(p.id)) throw new CommandError(`duplicate point ${p.id}`); pts.add(p.id); }
+      a.lines.forEach((l, i) => {
+        if ((l.op === 'MOVJ' || l.op === 'MOVL') && !pts.has(l.point)) throw new CommandError(`line ${i + 1}: unknown point ${l.point}`);
+        if (l.op === 'WAIT' && !tags.has(l.tag)) throw new CommandError(`line ${i + 1}: unknown tag ${l.tag}`);
+        if (l.op === 'SET') { const t = tags.get(l.tag); if (!t) throw new CommandError(`line ${i + 1}: unknown tag ${l.tag}`); if (t.dir !== 'out') throw new CommandError(`line ${i + 1}: ${l.tag} is a PLC input; only outputs can be set`); }
+      });
+      const rest = m.programs.filter(p => p.node !== a.node);
+      m.programs = a.lines.length || a.points.length ? [...rest, { node: a.node, name: a.name ?? (m.programs.find(p => p.node === a.node)?.name || '프로그램 1'), points: a.points, lines: a.lines }] : rest;
+    },
+  }),
   set_param: def({
     scope: 'machine', description: '블록 파라미터 변경',
     args: z.object({ id: z.string(), key: z.string().min(1), value: z.unknown() }),
@@ -405,6 +421,7 @@ export const machineCommands = {
       m.joints = m.joints.filter(j => !joints.has(j.id));
       m.io = m.io.filter(t => !dead.has(t.tag) && !(t.binding && t.binding.kind !== 'joint' && dead.has(t.binding.target)));
       for (const st of m.sequence.steps) { st.wait = st.wait.filter(w => !dead.has(w.tag)); st.set = st.set.filter(x => !dead.has(x.tag)); }
+      m.programs = m.programs.filter(p => !gone.has(p.node)); for (const p of m.programs) p.lines = p.lines.filter(l => !('tag' in l) || !dead.has(l.tag));
     },
   }),
 };
