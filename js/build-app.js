@@ -413,7 +413,7 @@
           for (const [k, lb, v] of [['area_w', '영역 가로', A.w], ['area_d', '영역 세로', A.d], ['area_x', '중심 이동 X', A.x], ['area_y', '중심 이동 Y', A.y]]) html += field(num(k, lb, 'mm', 100), v, 'p.' + k); }
         const cell = it.path === 'blocks' && x.params?.cell && doc.machines.find(m => m.id === x.params.cell);
         if (cell) html += `<span class="k">셀</span><span class="v" style="font-family:var(--sans)">${esc(cell.tagPrefix.split('.').pop())} ${esc(cell.name)}</span><span class="k">동작</span><span class="v" style="font-family:var(--sans)">${x.params.kind === 'robot' ? '로봇 팔 (셀 공정 중 한 사이클 움직임)' : x.params.kind === 'rotary' ? '인덱스 회전 (사이클마다 90°)' : '고정 객체'}</span>`;
-        html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다.</p>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'machines' || it.path === 'storage' ? flowSec(x.id) : ''}${it.path === 'building.slabs' ? '' : teleop(true)}`;
+        html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다. Machine Builder에서 이 설비를 고치면 새 버전이 되고, 새로 놓는 셀부터 반영됩니다(이미 나눈 객체는 그대로).</p><div class="acts"><button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'machines' || it.path === 'storage' ? flowSec(x.id) : ''}${it.path === 'building.slabs' ? '' : teleop(true)}`;
       } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
         ${window.OnePlant ? `<p class="why" style="margin-top:10px">예시 공정: 감마 라인 (1 조립 → 2 페이스트 도포 → 3 브레이징 → 4 검사)</p><div class="acts"><button class="btn" data-act="example">예시 공정 불러오기</button></div>` : ''}</div>`;
     } else {
@@ -428,7 +428,7 @@
         html += `</div>${teleop(false)}`;
       } else {
         const ct = doc.card;
-        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">${doc.meta.cellFixed ? '작업 칸' : '외곽 (블록 따라)'}</span><span class="v">${(doc.meta.cellFixed ? doc.meta.bbox : contentSize() || doc.meta.bbox).join(' × ')} mm</span>
+        html = `<div class="sec"><h2>설비 <small>${doc.meta.fidelity}</small></h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">${doc.meta.cellFixed ? '작업 칸' : '외곽 (블록 기준)'}</span><span class="v">${(doc.meta.cellFixed ? doc.meta.bbox : contentSize() || doc.meta.bbox).join(' × ')} mm</span>
           ${field(num('cycle_time', '사이클', 's', 0.5), ct.cycle_time ?? '', 'card.cycle_time')}${field(num('ok_rate', '양품률', '0~1', 0.01), ct.ok_rate ?? '', 'card.ok_rate')}${field(num('operators', '작업자', '명', 1), ct.operators, 'card.operators')}
           <span class="k">입구</span>${portSelect('inlet')}<span class="k">출구</span>${portSelect('outlet')}
           <span class="k">카드</span><span class="v">사이클 ${ct.cycle_time ?? '–'} s · 양품률 ${ct.ok_rate != null ? (ct.ok_rate * 100).toFixed(1) + '%' : '–'}</span></div></div>`;
@@ -597,6 +597,7 @@
   const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
   function updateCheck() { const on = tab === 'machine' && mode !== 'run'; issues = on ? designIssues(ED.machine.doc) : []; chkG.clear();
     for (const it of issues) { const m = new T.Mesh(chkGeo, chkMat[it.lv]), p = toS(it.at); m.position.set(p.x, p.y + 0.015, p.z); m.renderOrder = 10; chkG.add(m); }
+    if (!on) $('chkList').hidden = true; // the check is a Machine Builder tool: its list closes in Factory Builder and in 동작 시험
     const b = $('chkChip'), ne = issues.filter(i => i.lv === 'err').length; b.hidden = !on; b.textContent = issues.length ? `설계 검사 ⚠ ${issues.length}` : '설계 검사 ✓'; b.classList.toggle('bad', ne > 0); b.classList.toggle('warn', !ne && issues.length > 0);
     if (!$('chkList').hidden) drawCheck(); }
   function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침을 봤습니다</p>'; }
@@ -1100,7 +1101,16 @@
   });
   $('bUndo').onclick = () => mode === 'edit' && ed().undo();
   $('bRedo').onclick = () => mode === 'edit' && ed().redo();
-  $('cellSeg').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b || tab !== 'machine') return; const fx = b.dataset.c === 'fixed', doc = ED.machine.doc; if (fx === !!doc.meta.cellFixed) return;
+  // 공장 영역: the work cell = the area this machine has in Factory Builder (셀 영역 of its placed copy), so what is built
+  // here can be checked against the room it really has in the factory
+  function factoryArea() { const doc = ED.machine.doc, fdoc = ED.factory.doc, inst = fdoc.machines.find(m => m.ref.startsWith(`local:${doc.meta.id}@`));
+    if (!inst) { toast('이 설비는 아직 공장에 놓이지 않았습니다 · Factory Builder에 놓은 뒤 셀 영역을 불러옵니다', true); return; }
+    const A = SCN.cellArea(doc, inst.params || {}), H = doc.meta.cellFixed ? doc.meta.bbox[2] : (contentSize() || doc.meta.bbox)[2];
+    exec('set_meta', { cellFixed: true, bbox: [Math.round(A.w), Math.round(A.d), Math.max(500, Math.round(H))] }); fitAll();
+    toast(`공장의 셀 영역을 작업 칸으로 불러왔습니다 · ${Math.round(A.w)} × ${Math.round(A.d)} mm (${inst.tagPrefix.split('.').pop()})${outOfCell() ? ' · 빨간 선 = 영역 밖 블록' : ''}`, outOfCell()); }
+  $('cellSeg').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (!b || tab !== 'machine') return;
+    if (b.dataset.c === 'factory') { factoryArea(); return; }
+    const fx = b.dataset.c === 'fixed', doc = ED.machine.doc; if (fx === !!doc.meta.cellFixed && !doc.meta.areaFrom) return;
     if (fx) { const c = contentSize(), up = v => Math.ceil(v / 100) * 100; exec('set_meta', { cellFixed: true, bbox: c ? [up(c[0] + 200), up(c[1] + 200), up(c[2] + 100)] : doc.meta.bbox }); toast('작업 칸을 고정했습니다 · 크기를 바꾸면 그 안에 놓입니다'); }
     else exec('set_meta', { cellFixed: false }); fitAll(); });
   // 블록에 맞추기: the cell stays centred on the machine origin, so it grows to the farthest block on each side (+100 mm)
@@ -1180,7 +1190,7 @@
   function drawBar() {
     const doc = ed().doc;
     if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('cellSeg').hidden = true; $('cellFit').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
-    else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = fx ? '작업 칸' : '작업 칸 (블록 따라)'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('cellFit').hidden = !fx; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
+    else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = '작업 칸'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('cellFit').hidden = !fx; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
     if (tab === 'factory') { const its = factoryItems(doc); $('chipCount').innerHTML = `객체 <b>${its.length}</b> · 설비 <b>${doc.machines.length}</b>`; $('chipOrigin').hidden = true; }
     else { $('chipCount').innerHTML = `블록 <b>${doc.nodes.length}</b> · 관절 <b>${doc.joints.length}</b> · 태그 <b>${doc.io.length}</b>`; $('chipOrigin').hidden = true; }
