@@ -174,12 +174,14 @@
     const placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${id}@`)).length, raw = LS.get(KEY.lib, {});
     const box = document.createElement('div'); box.className = 'mine-menu';
     box.innerHTML = `<b>${esc(m.name)}</b><small>버전 ${Object.keys(m.versions).join(', ')}${placed ? ` · 공장에 ${placed}대` : ''}</small>`
-      + [['open', 'Machine Builder에서 열기'], ['rename', '이름 바꾸기'], ['dup', '복제'], m.builtin ? (raw[id] ? ['reset', '원래대로 (저장한 버전 지우기)'] : null) : ['del', '삭제']].filter(Boolean).map(([k, t]) => `<button data-mineact="${k}" data-id="${esc(id)}"${k === 'del' || k === 'reset' ? ' class="warn"' : ''}>${t}</button>`).join('');
+      + Object.keys(m.versions).map(Number).sort((a, b) => b - a).slice(0, 12).map(v => `<button data-mineact="open@${v}" data-id="${esc(id)}">v${v} 열기${v === Math.max(...Object.keys(m.versions).map(Number)) ? ' (최신)' : ''}</button>`).join('')
+      + [ ['rename', '이름 바꾸기'], ['dup', '복제'], m.builtin ? (raw[id] ? ['reset', '원래대로 (저장한 버전 지우기)'] : null) : ['del', '삭제']].filter(Boolean).map(([k, t]) => `<button data-mineact="${k}" data-id="${esc(id)}"${k === 'del' || k === 'reset' ? ' class="warn"' : ''}>${t}</button>`).join('');
     at.closest('.item').after(box); setTimeout(() => addEventListener('click', function off(ev) { if (!box.contains(ev.target)) { box.remove(); removeEventListener('click', off, true); } }, true), 0); }
   function mineAct(k, id) { document.querySelectorAll('.mine-menu').forEach(x => x.remove()); const all = LS.get(KEY.lib, {}), m = lib()[id]; if (!m) return;
     const latest = Math.max(...Object.keys(m.versions).map(Number)), placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${id}@`));
+    let ver = latest; if (k.startsWith('open@')) { ver = +k.slice(5); k = 'open'; }
     if (k === 'open') { if (dirty.machine && !confirm('Machine Builder에서 저장하지 않은 변경이 있습니다. 버리고 이 설비를 열까요?')) return;
-      openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(m.versions[latest])))); dirty.machine = false; switchTab('machine', true); toast(`${m.name} v${latest}를 열었습니다`); return; }
+      openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(m.versions[ver])))); dirty.machine = false; switchTab('machine', true); toast(`${m.name} v${ver}를 열었습니다 · 고친 뒤 저장하면 v${latest + 1}이 됩니다`); return; }
     if (k === 'rename') { const n = (prompt('설비 이름', m.name) || '').trim(); if (!n || n === m.name) return;
       const e_ = all[id] || { name: m.name, builtin: !!m.builtin, versions: {} }; e_.name = n; for (const d of Object.values(e_.versions)) d.meta.name = n; all[id] = e_; LS.set(KEY.lib, all);
       if (ED.machine.doc.meta.id === id) exec('set_meta', { name: n }); toast(`이름을 '${n}'(으)로 바꿨습니다`); drawPalette(); refresh(); return; }
@@ -205,6 +207,9 @@
       if (!mine.length && !q) html += '<p class="why">Machine Builder에서 만든 설비를 저장하면 여기에 나옵니다.</p>';
     } else {
       $('palTitle').innerHTML = '블록 팔레트';
+      // 내 설비 불러오기: open a saved machine (any version) to keep editing it
+      const mineM = Object.entries(lib()).map(([id, m]) => ({ key: 'o:' + id, mine: id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: '눌러서 불러오기 · ⋯ = 버전 고르기·이름·복제·삭제' }));
+      sec('open', '내 설비 불러오기 (저장한 설비 편집)', mineM);
       for (const c of L.MACHINE_CATS) { sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
         if (c.id === 'transport') sec('shapes', '컨베이어 레이아웃 (전환·회송·2단)', Object.entries(SHAPES).map(([id, x]) => ({ key: 's:' + id, name: x.name, code: x.code, why: x.why }))); }
     }
@@ -216,6 +221,7 @@
     const mm = e.target.closest('[data-mineact]'); if (mm) { mineAct(mm.dataset.mineact, mm.dataset.id); return; }
     const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit'); if (xray) setXray(false);
     const [k, id] = b.dataset.add.split(/:(.*)/s);
+    if (k === 'o') { mineAct('open', id); return; }
     if (k === 'f' && ['slab', 'add_roof'].includes(L.FACTORY[id]?.kind.cmd)) { addFactory(id); return; }
     startPlace(k, id);
   });
@@ -341,7 +347,7 @@
     if (!keep) endPlace();
     ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else if (k === 's') addShape(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
   // drag straight from the palette onto the canvas works too
-  $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
+  $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); if (k === 'o') { e.preventDefault(); return; } e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
   $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
   renderer.domElement.addEventListener('dragover', e => { if (!placing) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; trackPlace(e); });
   renderer.domElement.addEventListener('dragleave', () => { if (placing) placing.obj.visible = false; });
