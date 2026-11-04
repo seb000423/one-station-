@@ -332,7 +332,7 @@
     top: p => mm(p.h), build: p => { const g = new T.Group(); bx(g, 'frame', mm(p.s), mm(p.h), mm(p.s)); return g; } });
   bdef('cover', { cls: 'guard', name: '커버·안전 가드', cat: 'structure', code: 'GD', params: { w: 1200, h: 1200 }, fields: [num('w', '가로'), num('h', '높이')], onTop: true,
     build: p => { const g = new T.Group(); bx(g, 'glass', mm(p.w), mm(p.h), 0.01); bx(g, 'frame', mm(p.w), 0.03, 0.03, 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.03, 0.03); for (const s of [-1, 1]) bx(g, 'frame', 0.03, mm(p.h), 0.03, s * mm(p.w) / 2); return g; } });
-  bdef('control-cabinet', { cls: 'control', name: '제어반 외함', cat: 'structure', code: 'CP', params: { w: 600, d: 400, h: 1800 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이')], build: p => cabinet(mm(p.w), mm(p.d), mm(p.h)) });
+  bdef('control-cabinet', { cls: 'utility', name: '제어반 외함', cat: 'structure', code: 'CP', params: { w: 600, d: 400, h: 1800 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이')], build: p => cabinet(mm(p.w), mm(p.d), mm(p.h)) });
   bdef('op-panel', { cls: 'monitor', name: 'OP 조작반', cat: 'structure', code: 'OP', build: () => opPanel(),
     io: P => [inn(`${P}_START_PB`), inn(`${P}_STOP_PB`), inn(`${P}_ESTOP`)] });
   bdef('tower-lamp', { cls: 'lamp', name: '타워램프', cat: 'structure', code: 'TL', onTop: true, build: () => { const g = new T.Group(); cy(g, 'frame', 0.012, 0.3); lampStack(g, 0, 0.3, 0, 1.2); return g; },

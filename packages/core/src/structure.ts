@@ -26,9 +26,9 @@ export const CLASSES: { cls: string; label: string; words: string[]; role: Role;
   { cls: 'furnace', label: '로 · 대형 장비', words: ['브레이징로', '진공로', '열처리로'], role: 'floor', host: { top: false, side: true } },
   { cls: 'rotary', label: '회전 테이블', words: ['회전 테이블', '턴테이블'], role: 'floor', host: { top: true, side: false } },
   { cls: 'desk', label: '작업대', words: ['작업대', '테이블'], role: 'floor', host: { top: true, side: true, front: true } },
-  { cls: 'frame', label: '프레임', words: ['프레임', 'frame'], role: 'floor', host: { top: true, side: true, inside: true } },
-  { cls: 'rail', label: '레일', words: ['레일', 'rail'], role: 'floor', host: { top: true, side: true } },
-  { cls: 'shelf', label: '선반', words: ['선반', '랙', 'shelf'], role: 'floor', host: { top: true, side: true, inside: true } },
+  { cls: 'frame', label: '프레임', words: ['프레임', 'frame'], role: 'floor', host: { top: true, side: true, inside: true } , needs: ['floor', 'top', 'inside'] },
+  { cls: 'rail', label: '레일', words: ['레일', 'rail'], role: 'floor', host: { top: true, side: true } , needs: ['floor', 'top', 'inside'] },
+  { cls: 'shelf', label: '선반', words: ['선반', '랙', 'shelf'], role: 'floor', host: { top: true, side: true, inside: true } , needs: ['floor', 'top', 'inside'] },
   { cls: 'lamp', label: '경광등', words: ['경광등', '타워램프', 'lamp'], role: 'top', host: { top: false, side: false } },
   { cls: 'jig', label: '지그', words: ['지그', 'jig'], role: 'top', host: { top: true, side: false }, needs: ['top', 'inside', 'floor'] },
   { cls: 'tray', label: '트레이', words: ['트레이', 'tray'], role: 'top', host: { top: true, side: false, stack: 315 }, needs: ['top', 'inside', 'floor'] },
@@ -221,7 +221,7 @@ function nearestFace(h: Part, x: number, y: number): { n: [number, number]; d: n
  */
 export function placePart(parts0: Part[], part0: Part, drop: Drop): Placement {
   const parts = withRoles(parts0.filter(p => p.id !== part0.id)), part = withRoles([part0])[0]!, P = new Map(parts.map(p => [p.id, p]));
-  const needs = needsOf(part.cls, part.role), host = drop.host ? P.get(drop.host) || null : null, cap = hostCap(host?.cls);
+  const needs = needsOf(part.cls, (part.cls && byCls.get(part.cls)?.role) || part.role), host = drop.host ? P.get(drop.host) || null : null, cap = hostCap(host?.cls);
   const no = (why: string, pos: [number, number, number] = [drop.at[0], drop.at[1], 0]): Placement => ({ ok: false, pos, yaw: part.yaw || 0, host: null, rel: 'floor', why, lv: 'err' });
   let face: SlotKind = drop.face; if (face === 'floor' || !host) face = 'floor';
   // a desk's top under the pointer with a seat in hand: the seat goes in front of the desk
