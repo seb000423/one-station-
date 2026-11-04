@@ -1277,9 +1277,14 @@
     return out.sort((a, b) => (isSlab(a) ? 1 : 0) - (isSlab(b) ? 1 : 0)); }
   // clicking the same spot again steps to the object behind the one already selected
   let lastPick = null;
-  function pick(e) { const all = pickAll(e); if (!all.length) { lastPick = null; return null; }
-    let id = all[0]; if (lastPick && Math.hypot(e.clientX - lastPick.x, e.clientY - lastPick.y) < 5 && all.includes(sel) && all.length > 1) { id = all[(all.indexOf(sel) + 1) % all.length]; if (id !== all[0]) toast(`뒤에 있는 객체: ${objLabel(id)} · 같은 자리를 다시 누르면 다음`); }
-    lastPick = { x: e.clientX, y: e.clientY }; return id; }
+  /* what a press grabs: the selected object when it is under the cursor (so pressing it again drags it, not the one behind);
+     a click (no drag) on the same spot again then steps to the object behind it (pickBehind, on release) */
+  function pick(e) { const all = pickAll(e); pickList = all; if (!all.length) { lastPick = null; return null; }
+    const same = lastPick && Math.hypot(e.clientX - lastPick.x, e.clientY - lastPick.y) < 5; lastPick = { x: e.clientX, y: e.clientY, same };
+    return sel && selIds().length === 1 && all.includes(sel) ? sel : all[0]; }
+  let pickList = [];
+  function pickBehind() { const all = pickList; if (!lastPick?.same || !sel || all.length < 2 || !all.includes(sel)) return false; const id = all[(all.indexOf(sel) + 1) % all.length]; if (id === sel) return false;
+    select(id); toast(`뒤에 있는 객체: ${objLabel(id)} · 같은 자리를 다시 누르면 다음`); return true; }
   function objLabel(id) { if (tab === 'machine') { const n = ED.machine.doc.nodes.find(x => x.id === id); return n ? `${nodeCode(n)} ${n.name}` : ''; } const it = factoryItems(ED.factory.doc).find(x => x.id === id); return it ? `${itemCode(it) || ''} ${itemName(it)}`.trim() : ''; }
 
   /* object list (객체 목록): pick anything by name, also what is hard to click */
@@ -1337,7 +1342,11 @@
       if (d && !n.parent && (d.conveyor || d.curve || d.corner)) { const chain = [...joinedConveyors(doc, [id])], cur = selIds();
         if (chain.length > 1 && !(cur.length === 1 && cur[0] === id)) { if (cur.length === chain.length && chain.every(x => cur.includes(x))) drill = id;
           else { selectMany([id, ...chain.filter(x => x !== id)]); toast(`이어진 컨베이어 ${chain.length}개를 한 덩어리로 골랐습니다 · 한 번 더 누르면 그 조각만`); } } } }
-    const group = selIds().includes(id) && selIds().length > 1; if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
+    /* a member of a group (a cell with its objects, a joined line, several picked): a press without moving picks that member
+       alone, the next drag moves only it; Ctrl (⌘) + drag moves only it straight away */
+    let group = selIds().includes(id) && selIds().length > 1; if (group && !drill && id !== sel) drill = id;
+    if (group && (e.ctrlKey || e.metaKey) && mode === 'edit') { group = false; drill = null; selectOnly(id); }
+    if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
     plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
     const ids = group ? selIds().filter(x => !isSlab(x)) : [id], os = ids.map(x => objs.get(x)?.obj).filter(Boolean);
     drag = { drill, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
@@ -1365,7 +1374,7 @@
       const p = n.transform.position; ed().batch('move', () => { if ((n.parent || null) !== slotR.host) exec('set_parent', { id: slotId, parent: slotR.host }, true); moveNode(slotId, [slotR.pos[0] - p[0], slotR.pos[1] - p[1], slotR.pos[2] - p[2]]);
         if (slotR.yaw !== (n.transform.rotation[2] || 0)) exec('move', { id: slotId, rotation: [0, 0, slotR.yaw] }, true); });
       toast(slotR.host ? `${n.name}: ${ED.machine.doc.nodes.find(x => x.id === slotR.host)?.name || '받침'}에 결합${slotR.why ? ` · ▲ ${slotR.why}` : ''}` : `${n.name}: 바닥에 놓음${slotR.why ? ` · ▲ ${slotR.why}` : ''}`); return; }
-    if (!moved || !d) { if (drill) { select(drill); toast('조각 하나만 골랐습니다 · 빈 곳을 눌렀다가 다시 누르면 라인 전체'); } return; }
+    if (!moved || !d) { if (!drill && pickBehind()) return; if (drill) { selectOnly(drill); toast(`${objLabel(drill) || '객체'} 하나만 골랐습니다 · 이제 끌면 이것만 움직입니다 · 빈 곳을 누르면 다시 전체 (Ctrl+끌기 = 바로 하나만)`); } return; }
     const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
   // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
@@ -1393,6 +1402,8 @@
   /** The ids to hand to a factory command: a cell carries its objects itself (core move / delete / duplicate), so its objects are dropped when their cell is in the set. */
   const ownIds = ids => { if (tab !== 'factory') return ids; const set = new Set(ids), doc = ED.factory.doc; return ids.filter(id => { const b = doc.blocks.find(x => x.id === id); return !(b && blockCell(b) && set.has(blockCell(b))); }); };
   function select(id, focus) { const kids = cellParts(id); if (kids.length) { selectMany([id, ...kids]); if (focus) focusSel(); return; } multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
+  // one object alone, even a cell (whose plain select takes its objects along)
+  function selectOnly(id) { multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
   function fitAll() {
     const doc = ed().doc;
