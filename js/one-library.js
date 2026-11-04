@@ -509,9 +509,16 @@
   function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
   /* rigIk: a stretched arm sits on a singular pose (pulling the hand in needs the elbow to bend first, the gradient alone
      never does it): when the first try stays short, retry from seeds with the elbow / shoulder bent and keep the best */
-  function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const r0 = ikOnce(rig, g, target, deg0, opt); if (!r0 || r0.err <= 3 || rig.length < 3) return r0;
+  function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const r0 = ikOnce(rig, g, target, deg0, opt); if (!r0 || rig.length < 3) return r0;
+    const lim = opt.lim || limitsOf(rig), pinned = d => d.filter((v, i) => i < 3 && lim[i] && (v <= lim[i][0] + 0.5 || v >= lim[i][1] - 0.5)).length;
+    if (r0.err <= 3 && pinned(r0.deg) < 2) return r0;
     let best = r0; const d0 = (deg0 || []).slice(); while (d0.length < rig.length) d0.push(0);
-    for (const [i, d] of [[2, 35], [2, -35], [1, -25], [1, 25], [2, 70]]) { const s0 = d0.slice(); s0[i] += d; if (i === 1) s0[2] += d * 1.6; const r = ikOnce(rig, g, target, s0, { ...opt, a0: d0 }); if (r && r.err < best.err - 2) best = r; if (best.err <= 3) break; }
+    // relative seeds (bend the elbow / shoulder from here), then absolute ones: J1 turned to face the target and the arm in a
+    // plain pose — a pose pinned against its limits (J2 and J3 both at the end) is a dead end the gradient cannot leave
+    rigSet(rig, d0); const p0 = rig[0].j.getWorldPosition(new T.Vector3()), c = rigTcp(rig, g), yaw = (Math.atan2(-(target.z - p0.z), target.x - p0.x) - Math.atan2(-(c.z - p0.z), c.x - p0.x)) * 180 / Math.PI;
+    const j1 = d0[0] + ((yaw + 540) % 360) - 180, seeds = [[2, 35], [2, -35], [1, -25], [1, 25], [2, 70]].map(([i, d]) => { const s0 = d0.slice(); s0[i] += d; if (i === 1) s0[2] += d * 1.6; return s0; });
+    if (rig.length >= 3 && rig[0].axis.y > 0.9) for (const [a2, a3] of [[0, 0], [-30, 40], [20, -40], [-50, 90], [30, 60]]) { const s0 = d0.map(() => 0); s0[0] = j1; s0[1] = a2; s0[2] = a3; seeds.push(s0); }
+    for (const s0 of seeds) { const r = ikOnce(rig, g, target, s0, { ...opt, a0: d0 }); if (r && (r.err < best.err - 2 || (r.err <= best.err + 1 && pinned(r.deg) < pinned(best.deg)))) best = r; if (best.err <= 3 && pinned(best.deg) < 2) break; }
     if (best !== r0) rigSet(rig, best.deg); return best; }
   function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = opt.lim || limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
     const tmp = new T.Vector3(), m = rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
