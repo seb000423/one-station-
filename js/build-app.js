@@ -875,7 +875,7 @@
       if (!l) { r.on = false; r.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 프로그램 끝 · DONE`); drawPend(true); return 0; }
       const pt = l.point && p.points.find(q => q.id === l.point);
       if (l.op === 'MOVJ') { const to = pt.j.slice(0, rig.length); while (to.length < rig.length) to.push(0); const dmax = Math.max(1e-6, ...to.map((v, i) => Math.abs(v - (r.deg[i] || 0)))); r.seg = { kind: 'J', from: r.deg.slice(), to, t: 0, dur: dmax / (VJ * (l.speed || 50) / 100) }; }
-      else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, d / (l.speed || 500)), lastJ: pt.j }; }
+      else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); const j1 = pt.j.slice(0, rig.length); while (j1.length < rig.length) j1.push(0); r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, d / (l.speed || 500)), j0: r.deg.slice(), j1 }; }
       else if (l.op === 'GRIP') { if (l.on) { const t = tcpOf(n.id); let best = null, bd = 400; for (const id in RUN.works) { const w = RUN.works[id]; if (w.held && w.held !== n.id) continue; const d = Math.hypot(w.p[0] - t[0], w.p[1] - t[1], w.z - t[2]); if (d < bd) { bd = d; best = id; } }
           if (best) { r.grip = best; log(`${P} 그리퍼 닫힘 · 워크 집음`); } else log(`${P} 그리퍼 닫힘 · 400 mm 안에 워크가 없습니다`); }
         else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
@@ -889,8 +889,10 @@
     const f = sg.kind === 'J' || sg.kind === 'L' ? ROB.ovr / 100 : 1, adv = dt * f, left = Math.max(0, sg.t + adv - sg.dur) / f; sg.t = Math.min(sg.dur, sg.t + adv); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
     if (sg.kind === 'J') r.deg = sg.from.map((a, i) => a + (sg.to[i] - a) * e);
     else if (sg.kind === 'L') { const tgt = toS([sg.t0[0] + (sg.t1[0] - sg.t0[0]) * e, sg.t0[1] + (sg.t1[1] - sg.t0[1]) * e, sg.t0[2] + (sg.t1[2] - sg.t0[2]) * e]);
-      const ik = ikR(rig, o, tgt, r.deg, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
-    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); r.seg = null; if (hold()) return 0; }
+      // the taught tool angle travels with the line: wrist roll / flange roll and the tool pitch (J2 + J3 + J5) blend start → point
+      const seed = r.deg.slice(); if (rig.hold && rig.length >= 6) { const { j0, j1 } = sg; for (const i of [3, 5]) seed[i] = j0[i] + (j1[i] - j0[i]) * e; const S0 = j0[1] + j0[2] + j0[4], S1 = j1[1] + j1[2] + j1[4]; seed[4] = S0 + (S1 - S0) * e - seed[1] - seed[2]; }
+      const ik = ikR(rig, o, tgt, seed, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
+    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); if (sg.kind === 'L' && rig.hold && Math.hypot(...tcpOf(n.id).map((v, i) => v - sg.t1[i])) < 5) r.deg = sg.j1.slice(); r.seg = null; if (hold()) return 0; }
     return left; }
   /** Where a released work lands: the highest block top under it that is not above the hand, else the floor. */
   function landZ(p, z) { const doc = ED.machine.doc; let best = 0; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work) continue; const top = nodeTop(b); if (top > z + 50 || top <= best) continue;
@@ -905,6 +907,15 @@
   function jogJ(i, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id); if (!r) return; const lim = limOf(rig)[i] || [-180, 180]; const deg = r.deg.slice(); deg[i] = Math.max(lim[0], Math.min(lim[1], (deg[i] || 0) + d)); setDeg(id, deg); drawPend(true); }
   function jogXYZ(ax, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const t = tcpOf(id); t[ax] += d; if (ax === 2 && d < 0 && t[2] < 0) { toast('손끝은 바닥(Z 0) 아래로 내려가지 않습니다', true); return; } const ik = ikR(rig, o, toS(t), r.deg, { iters: 30 });
     if (!ik) return; if (ik.err > 20) { toast(`더 못 갑니다 (${Math.round(ik.err)} mm 못 미침)${stuckWhy(rig, ik.deg)}`, true); L.rigSet(rig, r.deg); return; } setDeg(id, ik.deg); drawPend(true); }
+  /* tool jog: 기울기 tilts the tool up / down about the wrist (J5) while J1–J3 keep the TCP where it is; 회전 turns the flange (J6) */
+  function jogTool(kind, d) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r || rig.length < 6) return; const lim = limOf(rig), deg = r.deg.slice(); while (deg.length < rig.length) deg.push(0);
+    if (kind === 'r') { deg[5] = Math.max(lim[5][0], Math.min(lim[5][1], deg[5] + d)); setDeg(id, deg); drawPend(true); return; }
+    const t = L.rigTcp(rig, o).clone(); deg[4] += d; if (deg[4] < lim[4][0] || deg[4] > lim[4][1]) { toast(`J5 한계 (${lim[4][0]}° ~ ${lim[4][1]}°)`, true); return; }
+    const ik = ikR(rig, o, t, deg, { iters: 30, ikN: 3 }); if (!ik || ik.err > 20) { L.rigSet(rig, r.deg); toast(`이 자리에서 그만큼 기울일 수 없습니다 (${Math.round(ik?.err ?? 0)} mm 벗어남)${ik ? stuckWhy(rig, ik.deg) : ''}`, true); return; } setDeg(id, ik.deg); drawPend(true); }
+  // tool angle for the panel: tilt from straight down (0° = 수직 아래) and the flange turn
+  function toolAngle(id) { const o = robObj(id), rig = rigFor(id); if (!rig || rig.length < 6 || !rig.tcp) return null; const a = rig[4].j.getWorldPosition(new T.Vector3()), b = L.rigTcp(rig, o), dir = b.sub(a); if (dir.lengthSq() < 1e-8) return null;
+    dir.normalize(); const fwd = new T.Vector3(1, 0, 0).applyQuaternion(rig[0].j.getWorldQuaternion(new T.Quaternion())); // + = tipped away from the robot, − = toward it
+    return { tilt: Math.round(Math.acos(Math.max(-1, Math.min(1, -dir.y))) * 180 / Math.PI) * (dir.dot(fwd) < 0 ? -1 : 1), roll: Math.round(robState(id).deg[5] || 0) }; }
   const prog = id => { const p = progOf(id); return p ? JSON.parse(JSON.stringify(p)) : { node: id, name: '프로그램 1', points: [], lines: [] }; };
   /* light: a name / speed / point field changed: the panel keeps its DOM (and the field being typed in), only the path redraws */
   let pendLight = false;
@@ -955,7 +966,7 @@
     if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = limOf(rig);
     placeTcpBall();
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; const lm = lim[i]; if (e) e.classList.toggle('lim', !!lm && ((r.deg[i] || 0) <= lm[0] + 0.5 || (r.deg[i] || 0) >= lm[1] - 0.5)); }
-      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
+      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const ta = toolAngle(id); if (ta) for (const k of ['p', 'r']) { const e = box.querySelector(`[data-tl="${k}"]`); if (e) e.textContent = `${k === 'p' ? ta.tilt : ta.roll}°`; } const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
       const rb = box.querySelector('#pRun'); if (rb) { rb.textContent = r.on ? '■ 정지' : '▶ 실행'; rb.classList.toggle('pri', r.on); }
       box.querySelectorAll('.pline').forEach((el, i) => el.classList.toggle('on', r.on && r.line === i)); return; }
     const ae = document.activeElement, fk = ae && box.contains(ae) && ae.matches('input,select') ? { id: ae.id, f: ae.dataset.f, h: ae.closest('[data-pt],[data-li]'), s: ae.selectionStart } : null, fh = fk?.h ? (fk.h.dataset.pt ? `[data-pt="${fk.h.dataset.pt}"]` : `[data-li="${fk.h.dataset.li}"]`) : '';
@@ -979,6 +990,8 @@
           ${rig.map((_, i) => jrow(i)).join('')}
           <h5>TCP 조그 <select id="pStepM">${[10, 50, 200].map(v => `<option${ROB.mm === v ? ' selected' : ''}>${v}</option>`).join('')}</select> mm <em>설비 원점 기준</em></h5>
           ${['X', 'Y', 'Z'].map(trow).join('')}
+          ${rig.length >= 6 ? `<div class="jrow" title="끝단(그리퍼)을 위아래로 기울입니다 · 손끝 위치는 그대로 · 0° = 수직 아래, + = 로봇 바깥쪽, − = 로봇 쪽"><span style="width:auto">기울기</span><button data-tool="p:-1">−</button><b class="tv" data-tl="p">${toolAngle(id)?.tilt ?? 0}°</b><button data-tool="p:1">+</button></div>
+          <div class="jrow" title="끝단(플랜지, J6)을 돌립니다"><span style="width:auto">회전</span><button data-tool="r:-1">−</button><b class="tv" data-tl="r">${toolAngle(id)?.roll ?? 0}°</b><button data-tool="r:1">+</button></div>` : ''}
           <p class="tcp">TELEOP · 3D의 주황 구슬(손끝)을 끌면 로봇이 따라옵니다 (Shift: 높이) · 방향키 X·Y, PgUp/PgDn Z</p>
         </div>
         <div class="pprog">
@@ -997,9 +1010,10 @@
     box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
     if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
     box.onpointerdown = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
+      const tl = e.target.closest('[data-tool]'); if (tl) { const [k, d] = tl.dataset.tool.split(':'); holdJog(() => jogTool(k, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
       const x = e.target.closest('[data-xyz]'); if (x) { const [a, d] = x.dataset.xyz.split(':'); holdJog(() => jogXYZ(+a, +d * (JOG_HOLD.iv ? Math.min(ROB.mm, 10) : ROB.mm))); e.preventDefault(); } };
     box.oninput = e => { const sl = e.target.closest('[data-js]'); if (!sl) return; const deg = robState(id).deg.slice(); deg[+sl.dataset.js] = +sl.value; setDeg(id, deg); drawPend(true); };
-    box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz]')) return;
+    box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz],[data-tool]')) return;
       const gp = e.target.closest('[data-grip]'); if (gp) { addGrip(gp.dataset.grip === '1'); return; }
       const ch = e.target.closest('[data-chain]'); if (ch) { const q = prog(id); if (q.lines.length && !confirm('지금 프로그램 줄을 지우고 점을 순서대로 이을까요? (실행 취소 가능)')) return; q.lines = linesFromPoints(q); saveProg(q); return; }
       const ad = e.target.closest('[data-add]'); if (ad) { const q = prog(id), op = ad.dataset.add, first = q.points[0]?.id; if ((op === 'MOVJ' || op === 'MOVL') && !first) { toast('먼저 점을 기록하세요', true); return; }

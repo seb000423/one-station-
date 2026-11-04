@@ -57,7 +57,7 @@
     const j2 = grp(j1, 'j2', 0, 0.36 * s, 0); cy(j2, 'dark', 0.1 * s, 0.26 * s, 0, 0, 0, 'z'); bx(j2, 'light', 0.16 * s, 0.62 * s, 0.16 * s, 0, 0, 0);
     const j3 = grp(j2, 'j3', 0, 0.62 * s, 0); cy(j3, 'dark', 0.08 * s, 0.22 * s, 0, 0, 0, 'z'); bx(j3, 'light', 0.27 * s, 0.13 * s, 0.13 * s, 0.1 * s, -0.065 * s, 0);
     const j4 = grp(j3, 'j4', 0.235 * s, 0, 0); cy(j4, 'dark', 0.07 * s, 0.03 * s, 0.015 * s, 0, 0, 'x'); bx(j4, 'light', 0.25 * s, 0.1 * s, 0.1 * s, 0.155 * s, -0.05 * s, 0);
-    const j5 = grp(j4, 'j5', 0.285 * s, 0, 0); cy(j5, 'dark', 0.055 * s, 0.13 * s, 0, 0, 0, 'z'); j5.rotation.z = -Math.PI / 2;
+    const j5 = grp(j4, 'j5', 0.285 * s, 0, 0); cy(j5, 'dark', 0.055 * s, 0.13 * s, 0, 0, 0, 'z'); j5.rotation.z = -Math.PI / 2 + 0.15; // + J2 / J3 home bend (−0.35 + 0.2): the tool points straight down at 0°
     const j6 = grp(j5, 'j6', 0.06 * s, 0, 0); cy(j6, 'steel', 0.045 * s, 0.025 * s, 0.0125 * s, 0, 0, 'x');
     bx(j6, 'steel', 0.07 * s, 0.05 * s, 0.09 * s, 0.06 * s, -0.025 * s, 0); for (const k of [-1, 1]) bx(j6, 'dark', 0.06 * s, 0.03 * s, 0.015 * s, 0.125 * s, -0.015 * s, k * 0.03 * s);
     grp(j6, 'wrist', 0.155 * s, 0, 0);
@@ -425,7 +425,7 @@
     joints: (P) => [J(`${P}_J1`, 'rot', [0, 0, 1], 'position', -170, 170, 180, 720)], io: robotIo,
     build: p => { const g = new T.Group(); arm(g, mm(p.reach)); g.userData.rig = rigOfArm(g); g.userData.kind = 'robot'; return g; },
     pose: (g, p, v) => { if (g.userData.prog) return; const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'), j5 = g.getObjectByName('j5'), k = Math.sin((v.RUN || 0) * Math.PI);
-      if (j1) j1.rotation.y = k * 1.4; if (j2) j2.rotation.z = -0.35 - k * 0.4; if (j3) j3.rotation.z = 0.2 + k * 0.5; if (j5) j5.rotation.z = -Math.PI / 2 - k * 0.1; /* the wrist keeps the gripper pointing down */ } });
+      if (j1) j1.rotation.y = k * 1.4; if (j2) j2.rotation.z = -0.35 - k * 0.4; if (j3) j3.rotation.z = 0.2 + k * 0.5; if (j5) j5.rotation.z = -Math.PI / 2 + 0.15 - k * 0.1; /* the wrist keeps the gripper pointing down */ } });
   bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
     io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
     pose: (g, p, v) => { const k = v.RUN || 0, a1 = g.getObjectByName('j1'), a2 = g.getObjectByName('j2'); if (a1) a1.rotation.y = Math.sin(k * Math.PI) * 1.2; if (a2) a2.rotation.y = -Math.sin(k * Math.PI) * 1.6; } });
@@ -521,7 +521,7 @@
     for (const s0 of seeds) { const r = ikOnce(rig, g, target, s0, { ...opt, a0: d0 }); if (r && (r.err < best.err - 2 || (r.err <= best.err + 1 && pinned(r.deg) < pinned(best.deg)))) best = r; if (best.err <= 3 && pinned(best.deg) < 2) break; }
     if (best !== r0) rigSet(rig, best.deg); return best; }
   function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = opt.lim || limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
-    const tmp = new T.Vector3(), m = rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
+    const tmp = new T.Vector3(), m = opt.ikN || rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
     const fk = ang => { if (rig.hold) { rig.hold(ang, a0); ang[4] = clamp(ang[4], 4); } rigSet(rig, ang); return rigTcp(rig, g).clone(); };
     let cur = fk(a), err = target.clone().sub(cur);
     for (let k = 0; k < it && err.length() > 0.0008; k++) {
