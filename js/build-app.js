@@ -1106,7 +1106,7 @@
           ${['X', 'Y', 'Z'].map(trow).join('')}
           ${rig.length >= 6 ? `<div class="jrow" title="끝단(그리퍼)을 위아래로 기울입니다 · 손끝 위치는 그대로 · 0° = 수직 아래, + = 로봇 바깥쪽, − = 로봇 쪽"><span style="width:auto">기울기</span><button data-tool="p:-1">−</button><b class="tv" data-tl="p">${toolAngle(id)?.tilt ?? 0}°</b><button data-tool="p:1">+</button></div>
           <div class="jrow" title="끝단(플랜지, J6)을 돌립니다"><span style="width:auto">회전</span><button data-tool="r:-1">−</button><b class="tv" data-tl="r">${toolAngle(id)?.roll ?? 0}°</b><button data-tool="r:1">+</button></div>` : ''}
-          <p class="tcp">TELEOP · 3D의 주황 구슬(손끝)을 끌면 로봇이 따라옵니다 (Shift: 높이) · 방향키 X·Y, PgUp/PgDn Z</p>
+          <p class="tcp">TELEOP · 3D의 주황 구슬(손끝)을 끌면 로봇이 따라옵니다 (Ctrl 누른 채 끌면 위아래) · 방향키 X·Y, PgUp/PgDn Z</p>
         </div>
         <div class="pprog">
           <h5>점 <em>${p.points.length}</em></h5>
@@ -1180,11 +1180,22 @@
   function teleopStart(e) { if (mode !== 'run' || !tcpBall.visible || !ROB.sel) return false; setNdc(e); let pt = null;
     if (!ray.intersectObject(tcpBall, false).length) { const h = ray.intersectObjects(pathGrp.children.filter(c => c.userData.pt), false)[0]; if (!h) return false;
       const r = robState(ROB.sel); if (r.on) stopProg(ROB.sel); pt = h.object.userData.pt; const q = progOf(ROB.sel).points.find(x => x.id === pt); setDeg(ROB.sel, q.j); placeTcpBall(); drawPend(true); }
-    const c = tcpBall.position.clone(); let nrm; if (e.shiftKey) { nrm = new T.Vector3(); camera.getWorldDirection(nrm); nrm.y = 0; if (nrm.lengthSq() < 1e-6) nrm.set(0, 0, 1); nrm.normalize(); } else nrm = new T.Vector3(0, 1, 0);
-    tele = { plane: new T.Plane().setFromNormalAndCoplanarPoint(nrm, c), off: new T.Vector3(), vertical: !!e.shiftKey, pt }; const hit0 = new T.Vector3(); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0);
-    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 0.5; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Shift: 높이)` : 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
-  function teleopMove(e) { if (!tele) return; setNdc(e); const hit1 = new T.Vector3(); if (!ray.ray.intersectPlane(tele.plane, hit1)) return; hit1.add(tele.off);
-    const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; if (hit1.y < 0) hit1.y = 0; const ik = ikR(rig, o, hit1, r.deg, { iters: 16 }); if (!ik) return; setDeg(id, ik.deg); drawPend(true);
+    tele = { pt }; teleAnchor(e);
+    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 0.5; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Ctrl: 위아래)` : 'TELEOP · 끌어서 손끝을 옮깁니다 · Ctrl을 누르고 있으면 위아래로만'; return true; }
+  /* Ctrl (or ⌘ / Shift) held = up/down only: a vertical plane facing the camera, X·Y stay where they were. Pressing or letting go
+     of the key while dragging switches mode on the spot (the plane is re-anchored at the hand, so nothing jumps) */
+  const teleVert = e => !!(e.ctrlKey || e.metaKey || e.shiftKey);
+  function teleAnchor(e) { const c = tcpBall.position.clone(), v = teleVert(e); let nrm;
+    if (v) { nrm = new T.Vector3(); camera.getWorldDirection(nrm); nrm.y = 0; if (nrm.lengthSq() < 1e-6) nrm.set(0, 0, 1); nrm.normalize(); } else nrm = new T.Vector3(0, 1, 0);
+    tele.plane = new T.Plane().setFromNormalAndCoplanarPoint(nrm, c); tele.off = new T.Vector3(); tele.vertical = v; tele.at = c.clone();
+    const hit0 = new T.Vector3(); setNdc(e); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0); }
+  function teleopMove(e) { if (!tele) return; if (teleVert(e) !== tele.vertical) teleAnchor(e); setNdc(e); const hit1 = new T.Vector3(); if (!ray.ray.intersectPlane(tele.plane, hit1)) return; hit1.add(tele.off);
+    if (tele.vertical) { hit1.x = tele.at.x; hit1.z = tele.at.z; } // up/down only
+    const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; if (hit1.y < 0) hit1.y = 0;
+    // a long drag is solved in short steps from the current pose, so the joints follow the hand smoothly instead of jumping to another arm pose
+    const from = L.rigTcp(rig, o), n = Math.min(12, Math.max(1, Math.ceil(from.distanceTo(hit1) / 0.04))); let ik = null, deg = r.deg;
+    for (let i = 1; i <= n; i++) { const q = ikR(rig, o, from.clone().lerp(hit1, i / n), deg, { iters: 16 }); if (!q) break; ik = q; deg = q.deg; }
+    if (!ik) return; setDeg(id, ik.deg); drawPend(true);
     if (tele.pt) { const b = pathGrp.children.find(c => c.userData.pt === tele.pt); if (b) b.position.copy(L.rigTcp(rig, o)); }
     $('hint').textContent = `${tele.pt ? tele.pt + ' 고치기' : 'TELEOP'} · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · ${Math.round(ik.err)} mm 못 미침${stuckWhy(rig, ik.deg)}` : ''}`; }
   function teleopEnd() { if (!tele) return; const pt = tele.pt; tele = null;
@@ -1865,5 +1876,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, get objs() { return objs; }, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; }, logLines: () => logLines.map(x => x.txt), runStep: dt => { if (mode !== 'run' || tab !== 'machine') return; stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); }, WK, ROB };
+  window.ONE_BUILD = { ED, stage, get tcpBall() { return tcpBall; }, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, get objs() { return objs; }, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; }, logLines: () => logLines.map(x => x.txt), runStep: dt => { if (mode !== 'run' || tab !== 'machine') return; stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); }, WK, ROB };
 })();
