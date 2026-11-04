@@ -498,7 +498,7 @@
       tilt (J4 / J6 stay as jogged), the way a pendant's linear jog keeps the tool orientation. */
   function rigOfArm(g) { const n = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6'].map(k => g.getObjectByName(k)), w = g.getObjectByName('wrist'); if (!n[0] || !n[1] || !n[2]) return null;
     const ax = [[0, 1, 0], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 0, 1], [1, 0, 0]], rig = n.map((j, i) => j && { j, i, base: j.quaternion.clone(), axis: new T.Vector3(...ax[i]) }).filter(Boolean);
-    rig.tcp = w || n[2]; rig.limits = [[-170, 170], [-60, 60], [-70, 90], [-190, 190], [-120, 120], [-360, 360]]; if (rig.length === 6) { rig.ikN = 3; rig.hold = (a, a0) => { a[4] = a0[4] - (a[1] - a0[1]) - (a[2] - a0[2]); }; } return rig; }
+    rig.tcp = w || n[2]; rig.limits = [[-170, 170], [-90, 80], [-110, 140], [-190, 190], [-130, 130], [-360, 360]]; if (rig.length === 6) { rig.ikN = 3; rig.hold = (a, a0) => { a[4] = a0[4] - (a[1] - a0[1]) - (a[2] - a0[2]); }; } return rig; }
   /* ------------------------------------------------------------- 티칭 (teach) kinematics: angles in, TCP out, and the inverse
      rigSet: joint angles (deg) → pose. rigTcp: TCP position in world (scene m). rigIk: joint angles that put the TCP at a
      target, by damped least squares on a numeric Jacobian (position only; the wrist keeps its taught orientation).
@@ -507,8 +507,14 @@
   const limitsOf = rig => rig.limits || LIMITS6;
   function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, a * Math.PI / 180)); } }
   function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
-  function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
-    const tmp = new T.Vector3(), m = rig.ikN || n, a0 = a.slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
+  /* rigIk: a stretched arm sits on a singular pose (pulling the hand in needs the elbow to bend first, the gradient alone
+     never does it): when the first try stays short, retry from seeds with the elbow / shoulder bent and keep the best */
+  function rigIk(rig, g, target, deg0, opt = {}) { if (!rig) return null; const r0 = ikOnce(rig, g, target, deg0, opt); if (!r0 || r0.err <= 3 || rig.length < 3) return r0;
+    let best = r0; const d0 = (deg0 || []).slice(); while (d0.length < rig.length) d0.push(0);
+    for (const [i, d] of [[2, 35], [2, -35], [1, -25], [1, 25], [2, 70]]) { const s0 = d0.slice(); s0[i] += d; if (i === 1) s0[2] += d * 1.6; const r = ikOnce(rig, g, target, s0, { ...opt, a0: d0 }); if (r && r.err < best.err - 2) best = r; if (best.err <= 3) break; }
+    if (best !== r0) rigSet(rig, best.deg); return best; }
+  function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
+    const tmp = new T.Vector3(), m = rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
     const fk = ang => { if (rig.hold) { rig.hold(ang, a0); ang[4] = clamp(ang[4], 4); } rigSet(rig, ang); return rigTcp(rig, g).clone(); };
     let cur = fk(a), err = target.clone().sub(cur);
     for (let k = 0; k < it && err.length() > 0.0008; k++) {

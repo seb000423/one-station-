@@ -906,8 +906,8 @@
   const newPid = p => { let k = p.points.length + 1; while (p.points.some(q => q.id === `P${k}`)) k++; return `P${k}`; };
   const round1 = deg => deg.map(v => Math.round(v * 10) / 10);
   /* ● 점 기록 = a point and the line to it: straight down / up over the last point (same X·Y) = 직선 이동, else 관절 이동 */
-  function recordPoint() { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id), pid = newPid(p), tcp = tcpOf(id), last = p.points[p.points.length - 1];
-    p.points.push({ id: pid, j: round1(r.deg), tcp }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
+  function recordPoint(name) { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id), pid = newPid(p), tcp = tcpOf(id), last = p.points[p.points.length - 1];
+    p.points.push({ id: pid, ...(typeof name === 'string' && name ? { name } : {}), j: round1(r.deg), tcp }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
     p.lines.push(lin ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }); saveProg(p);
     toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${p.lines.length}줄 ${lin ? '직선 이동' : '관절 이동'} 추가`); }
   // 집기 / 놓기 block: above (150 mm up, 관절 이동) → down (직선) → gripper → back up (직선)
@@ -945,7 +945,7 @@
   const stateTxt = r => r.on ? (r.pause ? `⏸ ${r.line + 1}줄 끝 · ▷ 한 줄로 다음` : `▶ ${r.line + 1}줄 실행 중`) : r.grip ? '워크 쥠' : '대기';
   const linesFromPoints = p => p.points.map(q => ({ op: 'MOVJ', point: q.id, speed: 50 }));
   function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = robotNodes(), show = mode === 'run' && rs.length > 0;
-    const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; return; }
+    const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; if (ROB.pick) setPick(false); return; }
     if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = L.limitsOf(rig);
     placeTcpBall();
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; }
@@ -965,7 +965,7 @@
     const jrow = (i) => `<div class="jrow"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><input type="range" data-js="${i}" min="${lim[i]?.[0] ?? -180}" max="${lim[i]?.[1] ?? 180}" step="0.5" value="${r.deg[i] || 0}"><button data-jog="${i}:1">+</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}°</b></div>`;
     const trow = (k, i) => `<div class="jrow"><span>${k}</span><button data-xyz="${i}:-1">−</button><b class="tv" data-tv="${i}">${t[i]}</b><button data-xyz="${i}:1">+</button><small>mm</small></div>`;
     box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select><small id="pState">${stateTxt(r)}</small>
-        <div class="pbtns"><button class="btn pri" id="pRec" title="지금 자세를 점으로 기록 (P1, P2 …)">● 점 기록</button><button class="btn${r.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 · 줄이 없으면 기록한 점을 순서대로 잇습니다">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pNext" title="한 줄만 실행하고 멈춥니다 (누를 때마다 다음 줄)">▷ 한 줄</button><label class="povr" title="움직임 속도 배율 (관절·직선 이동에만)">속도 <select id="pOvr">${[10, 25, 50, 100].map(v => `<option value="${v}"${ROB.ovr === v ? ' selected' : ''}>${v}%</option>`).join('')}</select></label><button class="btn" id="pGen" title="도달 거리 안의 제품·트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스</button></div></div>
+        <div class="pbtns"><button class="btn pri" id="pRec" title="지금 자세를 점으로 기록 (P1, P2 …)">● 점 기록</button><button class="btn${ROB.pick ? ' pri' : ''}" id="pPick" title="3D에서 물체(제품·트레이·지그 윗면 등)를 누르면 손끝이 그 자리로 가고 점으로 기록됩니다 · 작은 물체(800 mm 이하)는 윗면 가운데에 맞추고, Alt+클릭은 누른 그 자리 · Esc로 끝">◎ 3D에서 찍기</button><button class="btn${r.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 · 줄이 없으면 기록한 점을 순서대로 잇습니다">${r.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pNext" title="한 줄만 실행하고 멈춥니다 (누를 때마다 다음 줄)">▷ 한 줄</button><label class="povr" title="움직임 속도 배율 (관절·직선 이동에만)">속도 <select id="pOvr">${[10, 25, 50, 100].map(v => `<option value="${v}"${ROB.ovr === v ? ' selected' : ''}>${v}%</option>`).join('')}</select></label><button class="btn" id="pGen" title="도달 거리 안의 제품·트레이에서 집어 지그·회전 테이블에 놓는 프로그램을 만듭니다 (지금 프로그램은 바뀜, 실행 취소 가능)">픽 앤 플레이스</button></div></div>
       <div class="pbody">
         <div class="pjog">
           <h5>관절 조그 <select id="pStepJ">${[1, 5, 15].map(v => `<option${ROB.deg === v ? ' selected' : ''}>${v}</option>`).join('')}</select>° <em>슬라이더를 끌거나 −/+를 누르고 있으면 계속 움직입니다</em></h5>
@@ -984,7 +984,7 @@
     box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; drawPend(); };
     box.querySelector('#pStepJ').onchange = e => { ROB.deg = +e.target.value; }; box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
     box.querySelector('#pRun').onclick = () => { const r = robState(id); ROB.step = false; if (r.on && r.pause) { r.pause = false; return; } if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, '티칭 패널')) toast('점을 기록하거나 줄을 더해 주세요', true); };
-    box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = recordPoint; box.querySelector('#pOvr').onchange = e => { ROB.ovr = +e.target.value; };
+    box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pRec').onclick = () => recordPoint(); box.querySelector('#pPick').onclick = () => setPick(!ROB.pick); box.querySelector('#pOvr').onchange = e => { ROB.ovr = +e.target.value; };
     box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
     if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
     box.onpointerdown = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
@@ -1004,36 +1004,53 @@
       const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 'speed' || f === 's') v = +v;
       l[f] = v; saveProg(q, ['speed', 's', 'point', 'on'].includes(f)); }; }
   // TELEOP: the TCP ball of the selected robot; dragging it moves the TCP on the plane at its height (Shift: a vertical plane facing the camera)
-  const tcpBall = new T.Mesh(new T.SphereGeometry(0.045, 20, 14), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.85, depthTest: false })); tcpBall.visible = false; tcpBall.renderOrder = 20; ov.add(tcpBall);
+  const tcpBall = new T.Mesh(new T.SphereGeometry(0.045, 20, 14), new T.MeshBasicMaterial({ color: 0xffae42, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false })); tcpBall.visible = false; tcpBall.renderOrder = 20; ov.add(tcpBall);
+  { const dot = new T.Mesh(new T.SphereGeometry(0.009, 12, 8), new T.MeshBasicMaterial({ color: 0xffae42, depthTest: false })); dot.renderOrder = 22; dot.raycast = () => {}; tcpBall.add(dot); } // the exact TCP
   function placeTcpBall() { if (!tcpBall.visible || !ROB.sel) return; const o = robObj(ROB.sel), rig = rigFor(ROB.sel); if (!o || !rig) { tcpBall.visible = false; return; } tcpBall.position.copy(L.rigTcp(rig, o)); }
   /* the program in 3D: a blue bead per taught point (with its name), a line along the moves in program order (solid =
      직선 이동, dashed = 관절 이동, the real joint path curves). Drag a bead to move that point (the robot follows; on release the
      point is re-taught there). */
   const pathGrp = new T.Group(); pathGrp.renderOrder = 19; ov.add(pathGrp);
-  const beadMat = new T.MeshBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.9, depthTest: false }), beadGeo = new T.SphereGeometry(0.03, 16, 12);
+  const beadMat = new T.MeshBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.22, depthTest: false, depthWrite: false }), beadGeo = new T.SphereGeometry(0.032, 16, 12), dotMat = new T.MeshBasicMaterial({ color: 0x9fd4ff, depthTest: false }), dotGeo = new T.SphereGeometry(0.008, 10, 8);
+  const dropMat = new T.LineDashedMaterial({ color: 0x4fb3ff, dashSize: 0.03, gapSize: 0.03, transparent: true, opacity: 0.45, depthTest: false });
   const pathL = new T.LineBasicMaterial({ color: 0x4fb3ff, transparent: true, opacity: 0.9, depthTest: false }), pathJ = new T.LineDashedMaterial({ color: 0x4fb3ff, dashSize: 0.05, gapSize: 0.04, transparent: true, opacity: 0.7, depthTest: false });
   const labelOf = txt => { const c = document.createElement('canvas'); c.width = 128; c.height = 48; const g = c.getContext('2d'); g.fillStyle = 'rgba(14,22,34,.82)'; g.fillRect(0, 0, 128, 48); g.fillStyle = '#9fd4ff'; g.font = 'bold 26px sans-serif'; g.textBaseline = 'middle'; g.fillText(txt, 10, 25);
     const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(c), depthTest: false, transparent: true })); sp.scale.set(0.16, 0.06, 1); sp.renderOrder = 21; return sp; };
-  function drawPath() { for (const c of [...pathGrp.children]) { pathGrp.remove(c); c.geometry?.dispose?.(); if (c.material?.map) { c.material.map.dispose(); c.material.dispose(); } }
+  function drawPath() { for (const c of [...pathGrp.children]) { pathGrp.remove(c); if (c.geometry && c.geometry !== beadGeo) c.geometry.dispose(); for (const k of c.children) if (k.geometry && k.geometry !== dotGeo) k.geometry.dispose(); if (c.material?.map) { c.material.map.dispose(); c.material.dispose(); } }
     pathGrp.visible = tcpBall.visible && !!ROB.sel; if (!pathGrp.visible) return; const id = ROB.sel, p = progOf(id); if (!p || !p.points.length) return;
     const at = q => toS(q.tcp || fkStored(id, q.j)), pos = new Map(p.points.map(q => [q.id, at(q)]));
     for (const q of p.points) { const b = new T.Mesh(beadGeo, beadMat); b.position.copy(pos.get(q.id)); b.renderOrder = 20; b.userData.pt = q.id; pathGrp.add(b);
+      const dot = new T.Mesh(dotGeo, dotMat); dot.renderOrder = 22; dot.raycast = () => {}; b.add(dot);
+      const drop = new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3(0, -b.position.y, 0)]), dropMat); drop.computeLineDistances(); drop.raycast = () => {}; drop.renderOrder = 19; b.add(drop);
       const lb = labelOf(q.id + (q.name ? ' ' + q.name : '')); lb.position.copy(b.position).add(new T.Vector3(0, 0.07, 0)); lb.raycast = () => {}; pathGrp.add(lb); }
     let prev = null; for (const l of p.lines) { const v = l.point && pos.get(l.point); if (!v) continue;
       if (prev) { const ln = new T.Line(new T.BufferGeometry().setFromPoints([prev, v]), l.op === 'MOVL' ? pathL : pathJ); ln.renderOrder = 19; ln.raycast = () => {}; if (l.op !== 'MOVL') ln.computeLineDistances(); pathGrp.add(ln); } prev = v; } }
+  /* ◎ 3D에서 찍기: a click on an object puts the TCP there (joints by inverse kinematics) and records it as a point named after
+     the object. A small object (work, tray, jig … up to 800 mm) snaps to its top centre (the grip point); a larger one or Alt+click
+     takes the exact surface point. Stays on until pressed again or Esc. */
+  function setPick(on) { ROB.pick = !!on && mode === 'run'; const b = $('pPick'); if (b) b.classList.toggle('pri', ROB.pick); renderer.domElement.style.cursor = ROB.pick ? 'crosshair' : ''; if (ROB.pick) $('hint').textContent = '점 찍기 · 3D에서 물체를 누르면 손끝이 그 자리로 가고 점이 기록됩니다 (Esc: 끝)'; else updateHint(); }
+  function pickPoint(e) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; setNdc(e);
+    const me = new Set(); o.traverse(x => me.add(x)); const hits = ray.intersectObjects([...objs.values()].map(v => v.obj), true).filter(h => !me.has(h.object) && h.object.visible !== false && !h.object.isSprite);
+    let tgt = null, name = '', h = hits[0];
+    if (h) { let n = h.object; while (n && !n.userData.node) n = n.parent; const node = n?.userData.node, bb = new T.Box3().setFromObject(n || h.object), sz = bb.getSize(new T.Vector3());
+      name = node?.name || '';
+      if (!e.altKey && Math.max(sz.x, sz.z) <= 0.8) { tgt = new T.Vector3((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2); name = name ? `${name} 위` : ''; } else tgt = h.point.clone(); }
+    else { plane.constant = 0; const p0 = new T.Vector3(); if (!ray.ray.intersectPlane(plane, p0)) return; tgt = p0; name = '바닥'; }
+    const ik = L.rigIk(rig, o, tgt, r.deg, { iters: 40 }); if (!ik || ik.err > 20) { L.rigSet(rig, r.deg); toast(`${name || '그 자리'}에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 로봇 가까이를 찍어 주세요`, true); return; }
+    setDeg(id, ik.deg); drawPend(true); recordPoint(name); }
   let tele = null;
   function teleopStart(e) { if (mode !== 'run' || !tcpBall.visible || !ROB.sel) return false; setNdc(e); let pt = null;
     if (!ray.intersectObject(tcpBall, false).length) { const h = ray.intersectObjects(pathGrp.children.filter(c => c.userData.pt), false)[0]; if (!h) return false;
       const r = robState(ROB.sel); if (r.on) stopProg(ROB.sel); pt = h.object.userData.pt; const q = progOf(ROB.sel).points.find(x => x.id === pt); setDeg(ROB.sel, q.j); placeTcpBall(); drawPend(true); }
     const c = tcpBall.position.clone(); let nrm; if (e.shiftKey) { nrm = new T.Vector3(); camera.getWorldDirection(nrm); nrm.y = 0; if (nrm.lengthSq() < 1e-6) nrm.set(0, 0, 1); nrm.normalize(); } else nrm = new T.Vector3(0, 1, 0);
     tele = { plane: new T.Plane().setFromNormalAndCoplanarPoint(nrm, c), off: new T.Vector3(), vertical: !!e.shiftKey, pt }; const hit0 = new T.Vector3(); if (ray.ray.intersectPlane(tele.plane, hit0)) tele.off.copy(c).sub(hit0);
-    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 1; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Shift: 높이)` : 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
+    controls.enabled = false; try { renderer.domElement.setPointerCapture(e.pointerId); } catch {} tcpBall.material.opacity = 0.5; $('hint').textContent = pt ? `${pt} 고치기 · 끌어서 옮기고 놓으면 그 자리로 다시 기록 (Shift: 높이)` : 'TELEOP · 끌어서 손끝을 옮깁니다 (Shift: 높이)'; return true; }
   function teleopMove(e) { if (!tele) return; setNdc(e); const hit1 = new T.Vector3(); if (!ray.ray.intersectPlane(tele.plane, hit1)) return; hit1.add(tele.off);
     const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const ik = L.rigIk(rig, o, hit1, r.deg, { iters: 16 }); if (!ik) return; setDeg(id, ik.deg); drawPend(true);
     if (tele.pt) { const b = pathGrp.children.find(c => c.userData.pt === tele.pt); if (b) b.position.copy(L.rigTcp(rig, o)); }
     $('hint').textContent = `${tele.pt ? tele.pt + ' 고치기' : 'TELEOP'} · TCP ${tcpOf(id).join(', ')} mm${ik.err > 20 ? ` · 도달 거리 밖 (${Math.round(ik.err)} mm 못 미침)` : ''}`; }
   function teleopEnd() { if (!tele) return; const pt = tele.pt; tele = null;
-    if (pt && ROB.sel) { const id = ROB.sel, q = prog(id), z = q.points.find(x => x.id === pt); if (z) { z.j = round1(robState(id).deg); z.tcp = tcpOf(id); saveProg(q, true); toast(`${pt} 고침 · ${z.tcp.join(', ')} mm`); } } controls.enabled = true; tcpBall.material.opacity = 0.85; updateHint(); }
+    if (pt && ROB.sel) { const id = ROB.sel, q = prog(id), z = q.points.find(x => x.id === pt); if (z) { z.j = round1(robState(id).deg); z.tcp = tcpOf(id); saveProg(q, true); toast(`${pt} 고침 · ${z.tcp.join(', ')} mm`); } } controls.enabled = true; tcpBall.material.opacity = 0.3; updateHint(); }
   function setAuto(on) { if (on && mode !== 'run') return; const doc = ED.machine.doc;
     if (on && doc.io.some(x => /_ESTOP$/.test(x.tag) && RUN.tags[x.tag])) { toast('비상정지가 눌려 있습니다 · 먼저 비상정지를 해제하세요', true); return; }
     if (on && !doc.sequence.steps.length) { const r = exec('set_sequence', { steps: genSequence(doc) }, true); if (r === undefined && !ED.machine.doc.sequence.steps.length) return; log('동작 순서를 블록에서 자동으로 만들었습니다'); }
@@ -1279,6 +1296,7 @@
   $('olList').addEventListener('click', e => { const b = e.target.closest('[data-oid]'); if (!b) return; if (e.shiftKey || e.ctrlKey || e.metaKey) toggleSel(b.dataset.oid); else select(b.dataset.oid); drawObjList(); focusSel(); });
   renderer.domElement.addEventListener('pointerdown', e => {
     if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
+    if (e.button === 0 && ROB.pick && mode === 'run' && tab === 'machine') { pickPoint(e); return; }
     if (e.button === 0 && teleopStart(e)) return;
     if (e.button === 0 && !xray && tab === 'factory' && mode === 'edit') { const port = pickPort(e); if (port && port.kind === 'outlet' && startLink(e, port)) return; }
     if (e.button !== 0 || xray) return; let id = pick(e); // X-ray is a view-only mode: dragging only turns the view
@@ -1379,7 +1397,7 @@
     else if (k === 'r' && !mod) { if (placing) { placing.yaw = (placing.yaw + 90) % 360; if (placing.at) placeObj(placing.obj, [placing.at[0], placing.at[1], placing.obj.position.y * 1000], placing.yaw); } else rotateSel(); }
     else if (k === 'delete' || k === 'backspace') deleteSel();
     else if (k.startsWith('arrow') && sel) { e.preventDefault(); nudge(k.slice(5), e.shiftKey); }
-    else if (k === 'escape') { if (placing) endPlace(); else select(null); }
+    else if (k === 'escape') { if (ROB.pick) setPick(false); else if (placing) endPlace(); else select(null); }
     else if (k === 'f') sel ? focusSel() : fitAll();
     else if (k === 'x' && !mod) setXray(!xray);
     else if (k === 'l' && !mod) { e.preventDefault(); toggleObjList(); }
