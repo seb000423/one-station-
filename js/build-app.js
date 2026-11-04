@@ -1736,6 +1736,14 @@
     if (ED.factory.doc.building.walls.length || ED.factory.doc.machines.length) LS.set(KEY.factory + '.before-plant', ED.factory.doc);
     LS.set(KEY.factory + '.plant', true); LS.set(KEY.factory + '.seeded', true); openDoc('factory', window.OnePlant.defaultFactory());
   }
+  /* once: the products that were set out in advance on the example stations go (they enter and travel through the process
+     instead) — from the stored versions of the built-in stations, the factory's split cells and the open machine */
+  if (!LS.get(KEY.factory + '.noprod', false)) { const isProd = x => x?.params?.src === 'product';
+    const all = LS.get(KEY.lib, {}); let n = 0; for (const [id, m] of Object.entries(all)) { if (!id.startsWith('plant-')) continue; for (const d of Object.values(m.versions || {})) { const k = d.nodes.length; d.nodes = d.nodes.filter(x => !isProd(x)); n += k - d.nodes.length; } }
+    if (n) LS.set(KEY.lib, all);
+    for (const s of ['factory', 'machine']) { const list = s === 'factory' ? ED.factory.doc.blocks : ED.machine.doc.nodes, ids = list.filter(isProd).map(x => x.id);
+      if (ids.length) ED[s].batch(`제품 ${ids.length}개 지움`, () => { for (const id of ids) { try { ED[s].exec('delete', { id }); } catch {} } }); }
+    LS.set(KEY.factory + '.noprod', true); }
   L.onModel(g => { updateSelMark(); if (xray) stage.addTwin(g); if (mode === 'run' && g.userData.rig && $('pend')?.hidden) drawPend(); }); // a robot that arrives after 동작 시험 began opens the pendant
   dirty = { factory: false, machine: false };
   switchTab(tab);

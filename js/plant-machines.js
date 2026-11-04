@@ -8,13 +8,10 @@
   // its own GLB so it can be set on trays and jigs one by one, picked by robots and carried by conveyors
   D.product = { size: [404, 240, 163], parts: [['P_product', '제품', 'static', [404, 240, 163], [0, 0, 0]]] };
   const PRODUCT = D.product.parts[0], TRAY_GRID = (() => { const out = []; for (const dx of [-505, 0, 505]) for (const dy of [813, 543, 270, -3, -274, -550, -814]) out.push([dx, dy]); return out; })();
-  /** The products a station holds beyond its converted parts: [node, label, kind, size, pos, src] with the product GLB. */
-  function products(src) { const put = (x, y, z) => [PRODUCT[0], '제품', 'static', PRODUCT[3], [x, y, z], 'product'], out = [];
-    if (src === 'inspection') for (const [dx, dy] of TRAY_GRID) out.push(put(-7739 + dx, 1275 + dy, 969)); // the finished goods on OP140 배출 트레이, as they were
-    if (src === 'assembly') { for (const [dx, dy] of TRAY_GRID) out.push(put(7491 + dx, 1017 + dy, 2164)); // a full tray on top of the C6 tray stack
-      for (const [x, z] of [[3175, 2658], [1572, 2658], [2522, 2663], [918, 2663], [-518, 2663], [-2039, 2663], [-1257, 2663], [-2778, 2663]]) out.push(put(x, 1627, z)); } // one on each blue tray
-    return out; }
-  const SKIP = new Set(['P_OP140_products']); // the merged finished-goods mesh, replaced by the 21 products
+  /** No products are set out in advance (user 2026-11-04): a product enters the line and travels through the process; the
+      single product (제품 낱개, palette) is the work that is fed in. Kept as a hook for the station's own extra parts. */
+  function products() { return []; }
+  const SKIP = new Set(['P_OP140_products']); // the merged finished-goods mesh (products are not set out in advance)
   // in the order the work goes through them
   const STATIONS = [
     { id: 'plant-assembly', src: 'assembly', name: '1. 감마 조립 셀', cycle: 55, ok: 0.995, ops: 1 },
