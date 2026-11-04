@@ -25,6 +25,8 @@ class CommandError extends Error { constructor(msg: string) { super(msg); this.n
 export { CommandError };
 
 const Yaw = z.number().describe('yaw, deg, counter-clockwise seen from above');
+/** The blocks a cell (machine instance) carries: parent = the cell (params.cell on documents saved before the parent link). */
+const childrenOf = (doc: Factory, cellId: string) => doc.blocks.filter(b => (b.parent ?? b.params.cell) === cellId);
 const need = (doc: Factory, id: string) => {
   const hit = locate(doc, id);
   if (!hit) throw new CommandError(`no object with id ${id}`);
@@ -58,8 +60,9 @@ export const factoryCommands = {
   }),
   add_block: def({
     scope: 'factory', description: '공장 블록(펜스·계단·안돈·용기 …) 배치. 반환: 새 id',
-    args: z.object({ type: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/), name: z.string().optional(), position: z.union([Vec2, Vec3]), yaw: Yaw.optional(), params: Params.optional() }),
-    run: (d: Factory, a, ctx) => { const id = ctx.newId(); d.blocks.push({ id, type: a.type, name: a.name ?? '', transform: tf(a.position, a.yaw), params: a.params ?? {} }); return id; },
+    args: z.object({ type: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/), name: z.string().optional(), position: z.union([Vec2, Vec3]), yaw: Yaw.optional(), params: Params.optional(), parent: z.string().nullable().optional().describe('the cell (machine instance) that carries the block') }),
+    run: (d: Factory, a, ctx) => { const id = ctx.newId(); if (a.parent && !d.machines.some(m => m.id === a.parent)) throw new CommandError(`no machine ${a.parent} to carry the block`);
+      d.blocks.push({ id, type: a.type, name: a.name ?? '', transform: tf(a.position, a.yaw), params: a.params ?? {}, parent: a.parent ?? null }); return id; },
   }),
   draw_wall: def({
     scope: 'factory', description: '벽을 선으로 그림 (from → to, mm). 반환: 새 id',
@@ -193,10 +196,15 @@ export const factoryCommands = {
         return;
       }
       if (path === 'nav.paths' || path === 'flows' || path === 'building.slabs') throw new CommandError(`${path} objects are edited point by point, not moved`);
-      const t = (item as unknown as { transform: Transform }).transform;
+      const t = (item as unknown as { transform: Transform }).transform, p0: [number, number, number] = [t.position[0], t.position[1], t.position[2]], yaw0 = t.rotation[2];
       if (a.position) t.position = [roundMm(a.position[0]), roundMm(a.position[1]), roundMm(a.position[2] ?? t.position[2])];
       if (a.by) t.position = [roundMm(t.position[0] + a.by[0]), roundMm(t.position[1] + a.by[1]), roundMm(t.position[2] + (a.by[2] ?? 0))];
       if (a.yaw !== undefined) t.rotation = [t.rotation[0], t.rotation[1], a.yaw];
+      // a cell carries its objects: they make the same move and turn about the cell's origin, so their places in the cell never change
+      if (path === 'machines') { const dyaw = t.rotation[2] - yaw0, r = (dyaw * Math.PI) / 180, c = Math.cos(r), sn = Math.sin(r);
+        for (const b of childrenOf(d, a.id)) { const q = b.transform.position, dx = q[0] - p0[0], dy = q[1] - p0[1];
+          b.transform.position = [roundMm(t.position[0] + dx * c - dy * sn), roundMm(t.position[1] + dx * sn + dy * c), roundMm(q[2] + t.position[2] - p0[2])];
+          if (dyaw) b.transform.rotation = [b.transform.rotation[0], b.transform.rotation[1], ((b.transform.rotation[2] + dyaw) % 360 + 360) % 360]; } }
     },
   }),
   snap: def({
@@ -233,7 +241,8 @@ export const factoryCommands = {
     scope: 'factory', description: '객체 삭제 (그 객체에 연결된 자재 흐름도 함께 삭제)',
     args: z.object({ id: z.string() }),
     run: (d: Factory, a) => {
-      const { list, index } = need(d, a.id); list.splice(index, 1);
+      const { list, index, path } = need(d, a.id); list.splice(index, 1);
+      if (path === 'machines') { const kids = new Set(childrenOf(d, a.id).map(b => b.id)); d.blocks = d.blocks.filter(b => !kids.has(b.id)); } // the cell's objects go with it
       d.flows = d.flows.filter(f => f.from.split('.')[0] !== a.id && f.to.split('.')[0] !== a.id);
       d.building.openings.forEach(o => { if (o.wall === a.id) o.wall = null; });
     },
@@ -252,6 +261,7 @@ export const factoryCommands = {
       if (Array.isArray(c.points)) c.points = (c.points as number[][]).map(sh);
       if (path === 'machines') c.tagPrefix = nextPrefix(d);
       list.push(c);
+      if (path === 'machines') for (const b of childrenOf(d, a.id)) { const k = JSON.parse(JSON.stringify(b)) as Factory['blocks'][number]; k.id = ctx.newId(); k.parent = c.id; if (k.params.cell) k.params.cell = c.id; k.transform.position = sh(k.transform.position) as never; d.blocks.push(k); }
       return c.id;
     },
   }),

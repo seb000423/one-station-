@@ -73,7 +73,7 @@
     const t = m.transform, yaw = t.rotation[2] || 0, a = yaw * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), out = [];
     for (const n of doc.nodes) { if (n.blockType !== 'model-part') continue; const q = n.transform.position;
       const params = Object.assign({}, n.params, { cell: machineId }); delete params.tag;
-      out.push(e.exec('add_block', { type: 'model-part', name: n.name, position: [t.position[0] + q[0] * c - q[1] * sn, t.position[1] + q[0] * sn + q[1] * c, (t.position[2] || 0) + q[2]], yaw: yaw + (n.transform.rotation[2] || 0), params })); }
+      out.push(e.exec('add_block', { type: 'model-part', name: n.name, parent: machineId, position: [t.position[0] + q[0] * c - q[1] * sn, t.position[1] + q[0] * sn + q[1] * c, (t.position[2] || 0) + q[2]], yaw: yaw + (n.transform.rotation[2] || 0), params })); }
     e.exec('set_param', { id: machineId, key: 'exploded', value: true });
     return out;
   }

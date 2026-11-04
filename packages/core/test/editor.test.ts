@@ -273,3 +273,24 @@ describe('robot teach program', () => {
     e.undo(); expect(e.doc.programs).toHaveLength(1);
   });
 });
+
+describe('a split cell carries its objects', () => {
+  it('move / turn / delete / duplicate of the cell take its blocks along; a block of its own does not move', () => {
+    const e = new Editor('factory', blank(), { newId: ids() });
+    const m = e.exec('place_machine', { ref: 'local:cell@1', position: [10000, 5000] }) as string;
+    const a = e.exec('add_block', { type: 'model-part', name: '로봇', position: [11000, 5000, 0], parent: m }) as string;
+    const b = e.exec('add_block', { type: 'model-part', name: '지그', position: [10000, 6000, 700], yaw: 90, params: { cell: m } }) as string; // saved before the parent link
+    const free = e.exec('add_block', { type: 'fence', position: [0, 0, 0] }) as string;
+    const B = (id: string) => e.doc.blocks.find(x => x.id === id)!;
+    e.exec('move', { id: m, by: [500, -500] });
+    expect(B(a).transform.position).toEqual([11500, 4500, 0]); expect(B(b).transform.position).toEqual([10500, 5500, 700]); expect(B(free).transform.position).toEqual([0, 0, 0]);
+    e.exec('move', { id: m, yaw: 90 }); // about the cell origin (10500, 4500): the robot 1000 mm ahead goes 1000 mm to the left
+    expect(B(a).transform.position).toEqual([10500, 5500, 0]); expect(B(a).transform.rotation[2]).toBe(90); expect(B(b).transform.position).toEqual([9500, 4500, 700]); expect(B(b).transform.rotation[2]).toBe(180);
+    const m2 = e.exec('duplicate', { id: m, offset: [20000, 0] }) as string;
+    const kids = e.doc.blocks.filter(x => x.parent === m2); expect(kids.length).toBe(2); expect(kids[0]!.transform.position).toEqual([30500, 5500, 0]); expect(kids[1]!.params.cell).toBe(m2);
+    e.exec('delete', { id: m });
+    expect(e.doc.blocks.map(x => x.id).sort()).toEqual([free, ...kids.map(k => k.id)].sort());
+    e.undo(); expect(e.doc.blocks.length).toBe(5);
+    expect(() => e.exec('add_block', { type: 'model-part', position: [0, 0], parent: 'nope' })).toThrow(CommandError);
+  });
+});

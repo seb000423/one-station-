@@ -57,7 +57,9 @@ export const Utilities = z.object({
   supply: z.array(z.object({ ...Placed, kind: z.string() })).default([]),
 });
 /** Other factory blocks of the 팩토리빌더 블록 목록 (fence, stairs, andon board, containers …). */
-export const FactoryBlock = z.object({ ...Placed, type: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/) });
+/** A factory block. `parent` = the machine instance (a cell split into its objects) that carries it: the block moves, turns and goes
+ *  with that cell (the `move` / `delete` / `duplicate` commands carry it along); its transform stays in factory mm. */
+export const FactoryBlock = z.object({ ...Placed, type: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/), parent: Id.nullable().default(null) });
 
 export const Factory = z.object({
   schema: z.literal(FACTORY_SCHEMA),

@@ -449,7 +449,7 @@
         const ldoc = it.local && SCN.localDoc(it.local), split = !!x.params?.exploded;
         if (split) { const A = SCN.cellArea(ldoc, x.params); html += `<span class="k" style="grid-column:1/-1;margin-top:6px;color:var(--amber)">셀 영역 · 입구는 −X 변, 출구는 +X 변</span>`;
           for (const [k, lb, v] of [['area_w', '영역 가로', A.w], ['area_d', '영역 세로', A.d], ['area_x', '중심 이동 X', A.x], ['area_y', '중심 이동 Y', A.y]]) html += field(num(k, lb, 'mm', 100), v, 'p.' + k); }
-        const cell = it.path === 'blocks' && x.params?.cell && doc.machines.find(m => m.id === x.params.cell);
+        const cell = it.path === 'blocks' && blockCell(x) && doc.machines.find(m => m.id === blockCell(x));
         if (cell) html += `<span class="k">셀</span><span class="v" style="font-family:var(--sans)">${esc(cell.tagPrefix.split('.').pop())} ${esc(cell.name)}</span><span class="k">동작</span><span class="v" style="font-family:var(--sans)">${x.params.kind === 'robot' ? '로봇 팔 (셀 공정 중 한 사이클 움직임)' : x.params.kind === 'rotary' ? '인덱스 회전 (사이클마다 90°)' : '고정 객체'}</span>`;
         html += `</div>${cell && x.params.kind !== 'static' ? `<p class="why" style="margin-top:10px">고른 동안 동작을 미리 보여 줍니다. 시뮬레이션에서는 셀이 일할 때 움직입니다.</p>` : ''}${split ? `<p class="why" style="margin-top:10px">이 셀은 객체 ${cellParts(x.id).length}개로 나뉘어 있습니다. 객체를 눌러 하나씩 크기·위치·동작 시간을 바꿉니다. 셀을 고르면 객체가 함께 움직입니다. Machine Builder에서 이 설비를 고치면 새 버전이 되고, 새로 놓는 셀부터 반영됩니다(이미 나눈 객체는 그대로).</p><div class="acts"><button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : it.local ? `<p class="why" style="margin-top:10px">${window.OnePlant?.splittable(ldoc) ? '객체로 나누면 공장 안에서 객체 하나하나를 바로 고르고 고칩니다. ' : ''}Machine Builder에서 고치면 새 버전이 되고 이 공장의 같은 설비가 그 버전을 씁니다.</p><div class="acts">${window.OnePlant?.splittable(ldoc) ? '<button class="btn" data-act="split">객체로 나누기</button>' : ''}<button class="btn" data-act="editLocal">Machine Builder에서 편집</button></div>` : ''}</div>${it.path === 'machines' || it.path === 'storage' ? flowSec(x.id) : ''}${it.path === 'building.slabs' ? '' : teleop(true)}`;
       } else html = `<div class="sec"><h2>공장</h2><div class="props"><span class="k">이름</span><input data-k="meta.name" value="${esc(doc.meta.name)}"><span class="k">배치 현황</span><span class="v">${factoryItems(doc).length}개 · 설비 ${doc.machines.length}대</span></div>
@@ -530,7 +530,7 @@
   // move every selected object by the same amount, as one undo step (children ride along with their parent)
   function moveSelBy(by) { const ids = selIds().filter(x => !isSlab(x)); if (!ids.length) return;
     ed().batch(ids.length > 1 ? `move ${ids.length}` : 'move', () => {
-      if (tab === 'factory') { for (const id of ids) exec('move', { id, by: [by[0], by[1]] }, true); autoLink(ids); }
+      if (tab === 'factory') { for (const id of ownIds(ids)) exec('move', { id, by: [by[0], by[1]] }, true); autoLink(ids); }
       else { const doc = ED.machine.doc, set = new Set(ids), up = n => { for (let p = n.parent; p; p = doc.nodes.find(x => x.id === p)?.parent) if (set.has(p)) return true; return false; };
         for (const id of ids) { const n = doc.nodes.find(x => x.id === id); if (n && !up(n)) moveNode(id, [...by]); }
         if (ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]), p = n.transform.position, sn = conveyorSnap(n, p, new Set());
@@ -657,7 +657,7 @@
     const aisles = doc.markings.filter(m => m.kind === 'aisle' && m.polygon && m.polygon.length >= 3).map(m => ({ id: m.id, name: m.name || '', poly: m.polygon }));
     const slab = doc.building.slabs[0] && doc.building.slabs[0].polygon && doc.building.slabs[0].polygon.length >= 3 ? doc.building.slabs[0].polygon : null;
     return C.checkLayout(cells, doc.flows, { gap: 600, aisles, slab }).map(it => { if (!it.fix) return it; const moves = it.fix.moves;
-      return Object.assign(it, { fix: { label: it.fix.label, run: () => { for (const m of moves) for (const id of [m.id, ...cellParts(m.id)]) exec('move', { id, by: [m.by[0], m.by[1]] }, true); autoLink(moves.map(m => m.id)); } } }); }); }
+      return Object.assign(it, { fix: { label: it.fix.label, run: () => { for (const m of moves) exec('move', { id: m.id, by: [m.by[0], m.by[1]] }, true); autoLink(moves.map(m => m.id)); } } }); }); }
   const chkG = new T.Group(); ov.add(chkG); let issues = [];
   const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
   function updateCheck() { const on = mode !== 'run'; issues = !on ? [] : tab === 'machine' ? designIssues(ED.machine.doc) : factoryIssues(ED.factory.doc); chkG.clear();
@@ -681,7 +681,7 @@
     const ids = selIds().filter(x => !isSlab(x));
     if (ids.length > 1) { // turn the whole selection about its centre
       const posOf = id => { if (tab === 'factory') { const it = factoryItems(doc).find(x => x.id === id); const x = it.item; return x.transform ? x.transform.position : [(x.from[0] + x.to[0]) / 2, (x.from[1] + x.to[1]) / 2, 0]; } return doc.nodes.find(x => x.id === id).transform.position; };
-      let all = ids; if (tab === 'machine') { const set = new Set(ids); const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { if (!set.has(k.id)) { set.add(k.id); } walk(k.id); } }; ids.forEach(walk); all = [...set]; }
+      let all = ownIds(ids); if (tab === 'machine') { const set = new Set(ids); const walk = pid => { for (const k of doc.nodes.filter(x => x.parent === pid)) { if (!set.has(k.id)) { set.add(k.id); } walk(k.id); } }; ids.forEach(walk); all = [...set]; }
       const ps = all.map(posOf), cx = ps.reduce((a, p) => a + p[0], 0) / ps.length, cy = ps.reduce((a, p) => a + p[1], 0) / ps.length, r = deg * Math.PI / 180, c = Math.cos(r), sn = Math.sin(r);
       const snapStep = tab === 'factory' ? 10 : 5;
       ed().batch(`turn ${ids.length}`, () => all.forEach((id, i) => { const p = ps[i], dx = p[0] - cx, dy = p[1] - cy, np = [S.snap(cx + dx * c - dy * sn, snapStep), S.snap(cy + dx * sn + dy * c, snapStep), p[2] || 0];
@@ -728,9 +728,9 @@
     const ids = selIds(); ed().batch(ids.length > 1 ? `delete ${ids.length}` : 'delete', () => { for (const id of ids) if (tab === 'factory' ? factoryItems(ed().doc).some(x => x.id === id) || ed().doc.flows.some(x => x.id === id) : ed().doc.nodes.some(x => x.id === id)) exec('delete', { id }, true); });
     if (ids.length > 1) toast(`${ids.length}개 삭제 · Ctrl+Z로 되돌립니다`); select(null); }
   function dupSel() { if (!sel || tab !== 'factory' || isSlab(sel)) return; const ids = selIds(), out = [], map = {};
-    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ids) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); map[id] = nid; if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } }
+    ed().batch(ids.length > 1 ? `duplicate ${ids.length}` : 'duplicate', () => { for (const id of ownIds(ids)) { const src = factoryItems(ed().doc).find(x => x.id === id), nid = exec('duplicate', { id }, true); if (nid) { out.push(nid); map[id] = nid; if (src) exec('rename', { id: nid, name: nextName(ed().doc, (src.item.name || itemName(src)).replace(/ \d+$/, '')) }, true); } }
       // a copied cell takes its copied objects along
-      for (const nid of out) { const b = ed().doc.blocks.find(x => x.id === nid); if (b && map[b.params.cell]) exec('set_param', { id: nid, key: 'cell', value: map[b.params.cell] }, true); } }); selectMany(out); }
+      for (const nid of out) { const b = ed().doc.blocks.find(x => x.id === nid); if (b && map[blockCell(b)]) exec('set_param', { id: nid, key: 'cell', value: map[blockCell(b)] }, true); } }); selectMany(out); }
   function selectAll() { const doc = ed().doc; selectMany(tab === 'factory' ? factoryItems(doc).map(x => x.id) : doc.nodes.filter(n => !n.parent).map(n => n.id)); }
 
   /* ------------------------------------------------------------------ signals table and run mode (machine) */
@@ -1267,7 +1267,10 @@
     drawTree(); drawProps(); updateSelMark(); }
   function selectMany(ids) { ids = ids.filter(x => !isSlab(x)); multi = new Set(ids.slice(1)); sel = ids[0] || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); }
   // a cell split into its objects: picking the cell picks its objects with it, so they move, turn, copy and delete together
-  const cellParts = id => tab === 'factory' && id && ED.factory.doc.machines.some(m => m.id === id && m.params?.exploded) ? ED.factory.doc.blocks.filter(b => b.params?.cell === id).map(b => b.id) : [];
+  const blockCell = b => b.parent ?? b.params?.cell ?? null; // the cell a factory block belongs to (params.cell on saves before the parent link)
+  const cellParts = id => tab === 'factory' && id && ED.factory.doc.machines.some(m => m.id === id && m.params?.exploded) ? ED.factory.doc.blocks.filter(b => blockCell(b) === id).map(b => b.id) : [];
+  /** The ids to hand to a factory command: a cell carries its objects itself (core move / delete / duplicate), so its objects are dropped when their cell is in the set. */
+  const ownIds = ids => { if (tab !== 'factory') return ids; const set = new Set(ids), doc = ED.factory.doc; return ids.filter(id => { const b = doc.blocks.find(x => x.id === id); return !(b && blockCell(b) && set.has(blockCell(b))); }); };
   function select(id, focus) { const kids = cellParts(id); if (kids.length) { selectMany([id, ...kids]); if (focus) focusSel(); return; } multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
   function focusSel() { const o = sel && objs.get(sel)?.obj; if (!o) return; tmpBox.setFromObject(o); if (!tmpBox.isEmpty()) stage.fit(tmpBox.clone().expandByScalar(tab === 'factory' ? 2 : 0.4), 1.2); }
   function fitAll() {

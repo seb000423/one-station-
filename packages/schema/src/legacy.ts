@@ -92,7 +92,7 @@ export function legacyToFactory(doc: LegacyDoc, opts: { id?: string; name?: stri
           m++;
           out.machines.push({ ...base, ref: `legacy:${o.type}${typeof p.model === 'string' ? ':' + p.model : ''}`, tagPrefix: `ST01.M${String(m).padStart(2, '0')}`, cardOverride: {} });
         } else {
-          out.blocks.push({ ...base, type: o.type.replace(/[^a-z0-9]+/gi, '-').toLowerCase() });
+          out.blocks.push({ ...base, type: o.type.replace(/[^a-z0-9]+/gi, '-').toLowerCase(), parent: null });
         }
     }
   }

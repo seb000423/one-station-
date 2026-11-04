@@ -88,7 +88,7 @@
     // conveyors inside a Machine Builder machine run while it works
     // robots and index tables of the cell (its own objects when it is split, else its 모델 객체 blocks) move while it works
     s.rigs = []; s.mt = 0;
-    if (it.local && it.item.params?.exploded) { for (const [, v] of objs) if (v.it.path === 'blocks' && v.it.item.params?.cell === id) s.rigs.push(v.o); }
+    if (it.local && it.item.params?.exploded) { for (const [, v] of objs) if (v.it.path === 'blocks' && (v.it.item.parent ?? v.it.item.params?.cell) === id) s.rigs.push(v.o); }
     else if (it.local) o.traverse(x => { if (x.name === 'model-part') s.rigs.push(x); });
     if (it.local) { const doc = SC.localDoc(it.local); if (doc) doc.nodes.forEach((n, i) => { const bd = L.BLOCKS[n.blockType]; if (bd?.conveyor && o.children[i]) s.belts.push({ g: o.children[i], bd, p: n.params, v: 0 }); }); }
     st.set(id, s); return s; }
