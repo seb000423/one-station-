@@ -10,8 +10,8 @@
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   // no factory saved in ONE BUILDER yet: the default partner plant line (js/plant-machines.js)
-  // a stored factory that is still an older copy of the example (before .plant4) is replaced by the current example
-  const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant4');
+  // a stored factory that is still an older copy of the example (before .plant5) is replaced by the current example
+  const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant5');
   const fdoc = (!oldEx && saved) || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
 
   // header: this page now shows the builder's factory

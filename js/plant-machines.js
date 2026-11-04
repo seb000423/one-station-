@@ -4,6 +4,17 @@
 (() => {
   'use strict';
   const D = window.ONE_PLANT_DATA, L = window.OneLibrary;
+  // the work piece (작업 대상): one product taken out of the inspection cell's finished-goods tray (tools/plant-assets, 21 on a tray),
+  // its own GLB so it can be set on trays and jigs one by one, picked by robots and carried by conveyors
+  D.product = { size: [404, 240, 163], parts: [['P_product', '제품', 'static', [404, 240, 163], [0, 0, 0]]] };
+  const PRODUCT = D.product.parts[0], TRAY_GRID = (() => { const out = []; for (const dx of [-505, 0, 505]) for (const dy of [813, 543, 270, -3, -274, -550, -814]) out.push([dx, dy]); return out; })();
+  /** The products a station holds beyond its converted parts: [node, label, kind, size, pos, src] with the product GLB. */
+  function products(src) { const put = (x, y, z) => [PRODUCT[0], '제품', 'static', PRODUCT[3], [x, y, z], 'product'], out = [];
+    if (src === 'inspection') for (const [dx, dy] of TRAY_GRID) out.push(put(-7739 + dx, 1275 + dy, 969)); // the finished goods on OP140 배출 트레이, as they were
+    if (src === 'assembly') { for (const [dx, dy] of TRAY_GRID) out.push(put(7491 + dx, 1017 + dy, 2164)); // a full tray on top of the C6 tray stack
+      for (const [x, z] of [[3175, 2658], [1572, 2658], [2522, 2663], [918, 2663], [-518, 2663], [-2039, 2663], [-1257, 2663], [-2778, 2663]]) out.push(put(x, 1627, z)); } // one on each blue tray
+    return out; }
+  const SKIP = new Set(['P_OP140_products']); // the merged finished-goods mesh, replaced by the 21 products
   // in the order the work goes through them
   const STATIONS = [
     { id: 'plant-assembly', src: 'assembly', name: '1. 감마 조립 셀', cycle: 55, ok: 0.995, ops: 1 },
@@ -15,9 +26,9 @@
   let built = null;
   function machineDoc(S, st) {
     const d = D[st.src], n = {}, nodes = [], io = [];
-    d.parts.forEach(([node, label, kind, size, pos], i) => {
+    d.parts.filter(p => !SKIP.has(p[0])).concat(products(st.src)).forEach(([node, label, kind, size, pos, src], i) => {
       const k = kind === 'robot' || kind === 'rotary' ? kind : 'static', code = CODE[k], tag = code + (n[code] = (n[code] || 0) + 1);
-      const params = { tag, src: st.src, node, kind: k, cls: window.OneTwin.core.classify(label, k, pos[2]).cls, w0: size[0], d0: size[1], h0: size[2], w: size[0], d: size[1], h: size[2], ...(k === 'static' ? {} : { cycle: k === 'robot' ? 6 : 4 }) };
+      const params = { tag, src: src || st.src, node, kind: k, cls: window.OneTwin.core.classify(label, k, pos[2]).cls, w0: size[0], d0: size[1], h0: size[2], w: size[0], d: size[1], h: size[2], ...(k === 'static' ? {} : { cycle: k === 'robot' ? 6 : 4 }) };
       nodes.push({ id: `${st.src}-${String(i + 1).padStart(3, '0')}`, type: 'block', blockType: 'model-part', name: label, params, transform: { position: pos, rotation: [0, 0, 0] }, parent: null });
       io.push(...L.BLOCKS['model-part'].io(tag, params));
     });
@@ -70,6 +81,7 @@
   function partsCatalog() { const out = []; for (const st of STATIONS) { const seen = new Set();
     D[st.src].parts.forEach(([node, label, kind, size, pos], i) => { const key = label.replace(/^OP\d+ /, ''); if (seen.has(key)) return; seen.add(key);
       const k = kind === 'robot' || kind === 'rotary' ? kind : 'static'; out.push({ key: `${st.src}:${i}`, src: st.src, node, kind: k, name: key, station: st.name, size, cls: window.OneTwin.core.classify(label, k, pos[2]).cls }); }); }
+    out.unshift({ key: 'product:0', src: 'product', node: PRODUCT[0], kind: 'static', name: '제품 (낱개)', station: '작업 대상', size: PRODUCT[3], cls: 'work' });
     return out; }
   const splittable = doc => !!doc && doc.nodes.length > 0 && doc.nodes.every(n => n.blockType === 'model-part');
   window.OnePlant = { STATIONS, withPlant, builtins, defaultFactory, explode, splittable, partsCatalog, size: src => D[src].size };

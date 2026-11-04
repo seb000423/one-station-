@@ -73,7 +73,8 @@
   const itemCode = it => it.path === 'machines' ? it.item.tagPrefix.split('.').pop() : '';
 
   /* ------------------------------------------------------------------ machine: block prefixes and placement */
-  const nodeDef = n => L.BLOCKS[n.blockType];
+  const WORK_PART = {}; // a 모델 객체 classed 제품 (a product on a tray) is a work: picked by robots, carried by conveyors, counted by sensors
+  const nodeDef = n => { const d = L.BLOCKS[n.blockType]; if (d && n.blockType === 'model-part' && n.params?.cls === 'work') return WORK_PART[n.blockType] || (WORK_PART[n.blockType] = Object.assign(Object.create(d), { work: true })); return d; };
   const nodeCode = n => n.params.tag || '';
   const nextCode = (doc, code) => { const used = new Set([...doc.nodes.map(nodeCode), ...(doc.io || []).map(t => t.tag.split('_')[0])]); for (let i = 1; ; i++) if (!used.has(code + i)) return code + i; };
   const nodeTop = n => { const d = nodeDef(n); return n.transform.position[2] + (d ? d.top(Object.assign({}, d.params, n.params)) * 1000 : 0); };
@@ -1569,9 +1570,9 @@
   }
   // the default factory is the partner plant line (js/plant-machines.js), shown once to every browser; a factory made
   // before it is kept under one.build.factory.before-plant
-  if (window.OnePlant && !LS.get(KEY.factory + '.plant4', false)) {
-    // .plant4: the example with its cells split into objects, in process order, equipment only; a factory that is still the earlier example is simply replaced
-    const ex = ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(ED.factory.doc.meta.name); LS.set(KEY.factory + '.plant4', true);
+  if (window.OnePlant && !LS.get(KEY.factory + '.plant5', false)) {
+    // .plant5: the example with its cells split into objects, in process order, equipment + products on the trays; a factory that is still the earlier example is simply replaced
+    const ex = ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(ED.factory.doc.meta.name); LS.set(KEY.factory + '.plant5', true);
     if (ex) LS.set(KEY.factory + '.plant', false);
   }
   if (window.OnePlant && !LS.get(KEY.factory + '.plant', false)) {
