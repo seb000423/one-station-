@@ -428,7 +428,7 @@
       if (j1) j1.rotation.y = k * 1.4; if (j2) j2.rotation.z = -0.35 - k * 0.4; if (j3) j3.rotation.z = 0.2 + k * 0.5; if (j5) j5.rotation.z = -Math.PI / 2 + 0.15 - k * 0.1; /* the wrist keeps the gripper pointing down */ } });
   /* 작업자: a person who walks, reaches and carries works in 동작 시험 (a program like a robot's: MOVJ walks to a point,
      MOVL reaches the hand to it, GRIP takes / puts down a work). Arms hang from shoulder pivots so a reach shows. */
-  const workerIo = P => [out(`${P}_START`), inn(`${P}_BUSY`, 'bool', { kind: 'process', target: `${P}_START` }), inn(`${P}_DONE`, 'bool', { kind: 'process', target: `${P}_START` })];
+  const workerIo = P => [out(`${P}_START`), inn(`${P}_BUSY`, 'bool', { kind: 'process', target: `${P}_START` }), inn(`${P}_DONE`, 'bool', { kind: 'process', target: `${P}_START` }), out(`${P}_PASS`)]; // PASS: a work handed on (put where the next person takes it)
   function operatorFig(h) { const g = new T.Group(), s = h / 1.75; g.name = 'operator';
     for (const k of [-1, 1]) bx(g, 'dark', 0.13 * s, 0.84 * s, 0.15 * s, 0, 0, k * 0.1 * s);
     bx(g, 'accent', 0.26 * s, 0.56 * s, 0.44 * s, 0, 0.84 * s, 0);
@@ -623,13 +623,17 @@
     params: { src: '', node: '', kind: 'static', cls: '', w0: 1000, d0: 1000, h0: 1000, w: 1000, d: 1000, h: 1000, cycle: 6 },
     fields: p => [num('w', '가로', 'mm', 10, 1), num('d', '세로', 'mm', 10, 1), num('h', '높이', 'mm', 10, 1), ...(p.kind === 'robot' || p.kind === 'rotary' ? [num('cycle', p.kind === 'robot' ? '동작 시간 (속도)' : '인덱스 시간 (속도)', 's', 0.5, 0.5)] : [])],
     top: p => mm(p.h), heightKey: null,
-    io: (P, p) => p.kind === 'robot' ? robotIo(P) : p.kind === 'rotary' ? procIo(P) : [],
+    // a part that does a timed job (도포 · 검사 · 각인: params.proc) starts on _START like a process unit; a conveyor rail
+    // (params.convey) reports a work at its end; a jig (params.jig) has 클램프 (loaded) and 작업 끝 signals
+    io: (P, p) => p.kind === 'robot' ? robotIo(P) : p.kind === 'rotary' || p.proc ? procIo(P) : p.convey ? [inn(`${P}_PRESENT`)] : p.jig ? [out(`${P}_CLAMP`), out(`${P}_FIN`)] : [],
     build: p => { const g = new T.Group(); g.name = 'model-part';
       const ph = bx(g, 'glass', Math.max(0.02, mm(p.w)), Math.max(0.02, mm(p.h)), Math.max(0.02, mm(p.d))); ph.name = 'placeholder'; ph.castShadow = false;
       if (!p.src || !p.node) return g;
       if (GLB_READY[p.src]) attachModel(g, p, GLB_READY[p.src]); else plantGlb(p.src).then(sc => attachModel(g, p, sc)).catch(() => {});
       return g; },
-    pose: (g, p, v) => { if (!g.userData.prog) poseRig(g.userData.rig, p.kind, v.RUN || 0); if (g.userData.fx) setFx(g, { state: v.RUN ? 'busy' : 'ready', k: v.RUN || 0, hit: (v.RUN || 0) > 0.05 && (v.RUN || 0) < 0.3 }); } });
+    pose: (g, p, v) => { if (!g.userData.prog) poseRig(g.userData.rig, p.kind, v.RUN || 0);
+      if (p.proc === 'dispense') { const k = Math.sin(Math.PI * Math.min(1, v.RUN || 0)); g.traverse(m => { if (!m.isMesh || !/mohno_dispenser$/.test(m.material?.name || '')) return; if (m.userData.y0 === undefined) m.userData.y0 = m.position.y; m.position.y = m.userData.y0 - 0.055 * Math.min(1, k * 1.6); }); } // the pump and needle come down onto the work, dwell, go back up
+      if (g.userData.fx) setFx(g, { state: v.RUN ? 'busy' : 'ready', k: v.RUN || 0, hit: (v.RUN || 0) > 0.05 && (v.RUN || 0) < 0.3 }); } });
   // the same part placed on its own in Factory Builder (a factory block): a cell split into its objects
   fdef('model-part', { name: '모델 객체', group: 'model', kind: { cmd: 'add_block', type: 'model-part' }, params: B['model-part'].params, fields: B['model-part'].fields, build: p => B['model-part'].build(p),
     why: '셀을 이루는 객체 하나 · 크기와 위치를 따로 바꿉니다' });

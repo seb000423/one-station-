@@ -746,7 +746,7 @@
   }
   const fmtVal = (t, v) => t.type === 'bool' ? (v ? '켜짐' : '꺼짐') : (+v).toFixed(t.type === 'int' ? 0 : 1);
   // plain meaning of a signal from its suffix (PLC view: 명령 = PLC → 설비, 상태 = 설비 → PLC)
-  const MEAN = { PRESENT: '워크 있음', RUN: '운전', DIR: '역방향', SPEED: '속도 지정 (mm/s)', FAULT: '이상', UP: '올리기', IS_UP: '올라감', IS_DOWN: '내려감', ON: '감지됨 / 켜기', EXT: '전진', IS_EXT: '전진 끝', IS_RET: '후진 끝',
+  const MEAN = { CLAMP: '클램프 · 워크 실음', FIN: '작업 끝', PASS: '다음 작업자에게 넘김', PRESENT: '워크 있음', RUN: '운전', DIR: '역방향', SPEED: '속도 지정 (mm/s)', FAULT: '이상', UP: '올리기', IS_UP: '올라감', IS_DOWN: '내려감', ON: '감지됨 / 켜기', EXT: '전진', IS_EXT: '전진 끝', IS_RET: '후진 끝',
     CLOSE: '잡기', IS_CLOSED: '잡음', IS_OPEN: '벌림', OK: '양품 / 정상', NG: '불량', START: '시작', BUSY: '작업 중', DONE: '완료', READY: '준비됨', TRIG: '촬영', SERVO_ON: '서보 켜기', POS: '위치 지정 (mm)',
     INPOS: '위치 도착', ALARM: '알람', INDEX: '회전 각도 지정 (°)', PROG: '프로그램 번호', START_PB: '시작 버튼', STOP_PB: '정지 버튼', ESTOP: '비상정지 버튼', RED: '빨간 램프', YEL: '노란 램프', GRN: '초록 램프', NEXT: '다음 트레이', EMPTY: '비었음' };
   const meaning = (t, P) => { const k = t.tag.slice(P.length + 1); return MEAN[k] || (k === 'ON' && t.dir === 'in' ? '감지됨' : k); };
@@ -856,7 +856,7 @@
      robot's footprint on the rail. Travel moves the robot object itself (run only: leaving 동작 시험 rebuilds the scene). */
   const RAILV = 1000; // mm/s at 100 %
   function railOf(id) { if (!RUN.rails) RUN.rails = {}; if (id in RUN.rails) return RUN.rails[id]; const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), o = robObj(id); let out = null;
-    if (n && o) { const q = n.transform.position;
+    if (n && o && n.params.rail) { const q = n.transform.position; // only a robot set to ride a rail (params.rail): a rail beside a robot is usually a conveyor
       for (const b of doc.nodes) { if (b === n || !(b.params?.cls === 'rail' || /레일|rail/i.test(b.name || ''))) continue; const c = b.transform.position, yaw = (b.transform.rotation[2] || 0) * Math.PI / 180, w = +b.params.w || 0, d = +b.params.d || 0;
         const ax = w >= d ? [Math.cos(yaw), Math.sin(yaw)] : [-Math.sin(yaw), Math.cos(yaw)], L = Math.max(w, d), W = Math.min(w, d), dx = q[0] - c[0], dy = q[1] - c[1], u = dx * ax[0] + dy * ax[1], v = -dx * ax[1] + dy * ax[0];
         if (Math.abs(u) > L / 2 || Math.abs(v) > W / 2 + 1200) continue; const m = Math.min(+n.params.w || 900, +n.params.d || 900) / 2;
@@ -868,7 +868,13 @@
   function solvePoint(id, pt, seed) { const rig = rigFor(id), o = robObj(id), r = robState(id), R = railOf(id);
     const keep = r.rail || 0; let rail = pt.rail ?? (R && !(pt.j && pt.j.length) && pt.tcp ? null : keep);
     if (pt.j && pt.j.length) { const j = pt.j.slice(0, rig.length); while (j.length < rig.length) j.push(0); return { deg: j, rail: rail ?? keep, err: 0 }; }
-    const at = s => { setRail(id, s); const ik = ikR(rig, o, toS(pt.tcp), seed || r.deg, { iters: 40 }); return { deg: ik ? ik.deg : r.deg.slice(), rail: s, err: ik ? ik.err : 1e9 }; };
+    // IK from the current pose first (keeps the arm in the same elbow/wrist configuration); only if that cannot reach, try other start poses and keep the reaching one nearest the current pose
+    const SEEDS = [[0, 0, 0, 0, 0, 0], [0, 45, -90, 0, 45, 0], [0, -45, -90, 0, 90, 0], [90, 0, -90, 0, 60, 0], [-90, 0, -90, 0, 60, 0], [90, 100, -90, 0, 60, 0], [-90, 100, -90, 0, 60, 0], [180, 30, -140, 0, 70, 0], [0, 120, -100, 0, 70, 0], [135, 20, -140, 0, 80, 0], [-135, 20, -140, 0, 80, 0]];
+    const jd = d => d.reduce((a, v, i) => a + Math.abs(v - (r.deg[i] || 0)), 0);
+    const at = s => { setRail(id, s); const s0 = seed || r.deg; let ik = ikR(rig, o, toS(pt.tcp), s0, { iters: 60 }); let best = ik ? { deg: ik.deg, err: ik.err } : null;
+      if (!best || best.err > 8) for (const sd of SEEDS) { const q = ikR(rig, o, toS(pt.tcp), sd.slice(0, rig.length).concat(Array(Math.max(0, rig.length - 6)).fill(0)), { iters: 60 }); if (!q) continue;
+        const ok = q.err < 8, bok = best && best.err < 8; if (!best || (ok && !bok) || (ok && bok && jd(q.deg) < jd(best.deg)) || (!ok && !bok && q.err < best.err)) best = { deg: q.deg, err: q.err }; }
+      return { deg: best ? best.deg : r.deg.slice(), rail: s, err: best ? best.err : 1e9 }; };
     let best;
     if (rail !== null) best = at(rail);
     else { // on a rail: the travel nearest to where the robot is that lets the arm reach the point (too close to the base is as bad as too far)
@@ -942,7 +948,17 @@
   const fwdOf = w => { const a = w.yaw * Math.PI / 180; return [Math.cos(a), Math.sin(a)]; };
   function wkHand(w, h) { const f = fwdOf(w), rest = [w.pos[0] + f[0] * 380, w.pos[1] + f[1] * 380, Math.min(1050, h * 0.6)]; if (!w.tgt || w.k <= 0) return rest; return rest.map((v, i) => v + (w.tgt[i] - v) * w.k); }
   const angTo = (a, b) => { let d = ((b - a) % 360 + 540) % 360 - 180; return d; };
-  function stepWorkers(dt) { const tags = RUN.tags;
+  /* 반송 레일 (a model part with params.convey = { speed }): a work lying on it travels along its long side to the
+     end it points to (params.convey.dir 1 / -1 along the axis), stops there or behind the work ahead; _PRESENT = a work at the end */
+  function stepConveyRails(dt) { const doc = ED.machine.doc, tags = RUN.tags;
+    for (const b of doc.nodes) { const cv = b.params?.convey; if (!cv || b.blockType !== 'model-part') continue; const P = nodeCode(b), c = b.transform.position, yaw = (b.transform.rotation[2] || 0) * Math.PI / 180, w = +b.params.w, d = +b.params.d, h = +b.params.h;
+      const ax = w >= d ? [Math.cos(yaw), Math.sin(yaw)] : [-Math.sin(yaw), Math.cos(yaw)], Lh = Math.max(w, d) / 2, Wh = Math.min(w, d) / 2, top = c[2] + h, dir = cv.dir || 1, sp = +cv.speed || 250;
+      const on = []; for (const id in RUN.works) { const q = RUN.works[id]; if (q.held) continue; const dx = q.p[0] - c[0], dy = q.p[1] - c[1], u = dx * ax[0] + dy * ax[1], v = -dx * ax[1] + dy * ax[0]; if (Math.abs(u) <= Lh && Math.abs(v) <= Wh && q.z > top - 120 && q.z < top + 40) on.push({ id, q, u, v }); }
+      on.sort((a, b2) => (b2.u - a.u) * dir); let lim = dir * (Lh - 140); let present = false;
+      for (const x of on) { const wn = doc.nodes.find(n => n.id === x.id), half = wn ? Math.min(+wn.params.w || 300, +wn.params.d || 300) / 2 + 10 : 150; const stop = lim; let u = x.u + dir * sp * dt; if ((u - stop) * dir > 0) u = stop; if (Math.abs(u - (dir * (Lh - 140))) < 2) present = true;
+        x.q.p = [c[0] + ax[0] * u - ax[1] * x.v, c[1] + ax[1] * u + ax[0] * x.v]; lim = u - dir * (2 * half + 20); }
+      if (`${P}_PRESENT` in tags) tags[`${P}_PRESENT`] = present; } }
+  function stepWorkers(dt) { const tags = RUN.tags; stepConveyRails(dt);
     for (const n of workerNodes()) { const P = nodeCode(n), w = wkState(n), p = progOf(n.id), o = objs.get(n.id)?.obj; if (!o) continue;
       const st = !!tags[`${P}_START`]; if (st && !w.prev && p && p.lines.length && !w.on) { w.on = true; w.line = -1; w.seg = null; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; log(`${P} 작업 시작 · ${P}_START`); }
       if (!st && w.prev && !w.on && `${P}_DONE` in tags) tags[`${P}_DONE`] = false; w.prev = st;
@@ -968,7 +984,7 @@
         if (l.on) { let best = null, bd = 450; for (const id in RUN.works) { const q = RUN.works[id]; if (q.held && q.held !== n.id) continue; const d = Math.hypot(q.p[0] - hand[0], q.p[1] - hand[1], q.z - hand[2]); if (d < bd) { bd = d; best = id; } }
           if (!best) { log(`${P} 손 닿는 곳에 워크가 없습니다 · 작업을 멈춥니다 (↺ 워크 다시 투입)`); w.on = false; w.line = -1; if (AUTO.on) setAuto(false); return 0; }
           w.carry = best; w.gdz = RUN.works[best].z - hand[2]; log(`${P} 워크 집음`); }
-        else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, q.z, w.carry); } log(`${P} 워크 놓음`); w.carry = null; }
+        else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, Math.max(q.z, hand[2]), w.carry); } log(`${P} 워크 놓음`); w.carry = null; }
         w.seg = { kind: 'back', k0: w.k, t: 0, dur: 0.6, wait: 0.25 }; }
       else if (l.op === 'WAIT') w.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
       else if (l.op === 'SET') { tags[l.tag] = l.value; w.seg = { kind: 'D', t: 0, dur: 0 }; }
