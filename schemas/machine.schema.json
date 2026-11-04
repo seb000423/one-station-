@@ -794,7 +794,7 @@
                   "items": {
                     "type": "number"
                   },
-                  "description": "joint angles deg, J1…"
+                  "description": "joint angles deg, J1… (empty: solved from tcp)"
                 },
                 "tcp": {
                   "description": "TCP x, y, z mm (machine frame) when taught",
@@ -804,6 +804,10 @@
                   "items": {
                     "type": "number"
                   }
+                },
+                "rail": {
+                  "description": "travel on the rail (7th axis) mm from where the robot is placed; robots on a rail only",
+                  "type": "number"
                 }
               },
               "required": [
@@ -877,6 +881,23 @@
                     "op",
                     "on"
                   ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "ARC"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "on"
+                  ],
+                  "description": "welding arc on / off at the TCP"
                 },
                 {
                   "type": "object",

@@ -426,6 +426,17 @@
     build: p => { const g = new T.Group(); arm(g, mm(p.reach)); g.userData.rig = rigOfArm(g); g.userData.kind = 'robot'; return g; },
     pose: (g, p, v) => { if (g.userData.prog) return; const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'), j5 = g.getObjectByName('j5'), k = Math.sin((v.RUN || 0) * Math.PI);
       if (j1) j1.rotation.y = k * 1.4; if (j2) j2.rotation.z = -0.35 - k * 0.4; if (j3) j3.rotation.z = 0.2 + k * 0.5; if (j5) j5.rotation.z = -Math.PI / 2 + 0.15 - k * 0.1; /* the wrist keeps the gripper pointing down */ } });
+  /* 작업자: a person who walks, reaches and carries works in 동작 시험 (a program like a robot's: MOVJ walks to a point,
+     MOVL reaches the hand to it, GRIP takes / puts down a work). Arms hang from shoulder pivots so a reach shows. */
+  const workerIo = P => [out(`${P}_START`), inn(`${P}_BUSY`, 'bool', { kind: 'process', target: `${P}_START` }), inn(`${P}_DONE`, 'bool', { kind: 'process', target: `${P}_START` })];
+  function operatorFig(h) { const g = new T.Group(), s = h / 1.75; g.name = 'operator';
+    for (const k of [-1, 1]) bx(g, 'dark', 0.13 * s, 0.84 * s, 0.15 * s, 0, 0, k * 0.1 * s);
+    bx(g, 'accent', 0.26 * s, 0.56 * s, 0.44 * s, 0, 0.84 * s, 0);
+    sp(g, 'body', 0.105 * s, 0, 1.56 * s, 0); const cap = sp(g, 'light', 0.115 * s, 0, 1.62 * s, 0); cap.scale.y = 0.55;
+    for (const k of [-1, 1]) { const a = grp(g, k < 0 ? 'armL' : 'armR', 0, 1.36 * s, k * 0.27 * s); bx(a, 'accent', 0.09 * s, 0.34 * s, 0.09 * s, 0, -0.34 * s, 0); bx(a, 'body', 0.08 * s, 0.3 * s, 0.08 * s, 0, -0.64 * s, 0); }
+    g.userData.shoulder = 1.36 * s; g.userData.armLen = 0.64 * s; return g; }
+  bdef('operator', { name: '작업자', cat: 'robot', code: 'WK', operator: true, params: { h: 1750 }, fields: [num('h', '키', 'mm', 10)],
+    io: workerIo, top: () => 0, build: p => { const g = new T.Group(); g.add(operatorFig(mm(p.h))); g.userData.kind = 'operator'; return g; } });
   bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
     io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
     pose: (g, p, v) => { const k = v.RUN || 0, a1 = g.getObjectByName('j1'), a2 = g.getObjectByName('j2'); if (a1) a1.rotation.y = Math.sin(k * Math.PI) * 1.2; if (a2) a2.rotation.y = -Math.sin(k * Math.PI) * 1.6; } });
