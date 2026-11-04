@@ -14,7 +14,7 @@
   const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant5');
   const fdoc = (!oldEx && saved) || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
   // products set out in advance on the example stations (before the builder removed them): not shown, products enter the line
-  if (!read('one.build.factory.noprod')) { const isProd = x => x?.params?.src === 'product' && !x.params.feed; if (fdoc) fdoc.blocks = fdoc.blocks.filter(b => !isProd(b));
+  if (!read('one.build.factory.noprod')) { const isProd = x => x?.params?.src === 'product'; if (fdoc) fdoc.blocks = fdoc.blocks.filter(b => !isProd(b));
     for (const [id, m] of Object.entries(lib)) if (id.startsWith('plant-')) for (const d of Object.values(m.versions || {})) d.nodes = d.nodes.filter(x => !isProd(x)); }
 
   // header: this page now shows the builder's factory

@@ -742,7 +742,6 @@
     for (const j of doc.joints) RUN.v[j.id] = j.home ?? j.min;
     for (const t of doc.io) RUN.tags[t.tag] = t.type === 'bool' ? false : 0;
     for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2] }; }
-    RUN.rails = {}; for (const r of Object.values(ROB.run)) { r.rail = 0; r.arc = false; r.grip = null; } WK.run = {}; for (const a of Object.values(ARC)) a.visible = false;
   }
   const fmtVal = (t, v) => t.type === 'bool' ? (v ? '켜짐' : '꺼짐') : (+v).toFixed(t.type === 'int' ? 0 : 1);
   // plain meaning of a signal from its suffix (PLC view: 명령 = PLC → 설비, 상태 = 설비 → PLC)
@@ -851,38 +850,7 @@
   const rigFor = id => { const o = robObj(id); return o && o.userData.rig && o.userData.kind === 'robot' ? o.userData.rig : null; };
   const robotNodes = () => ED.machine.doc.nodes.filter(n => rigFor(n.id));
   const zeros = rig => rig.map(() => 0);
-  const robState = id => { const rig = rigFor(id); if (!rig) return null; return ROB.run[id] || (ROB.run[id] = { line: -1, on: false, deg: robObj(id).userData.deg || zeros(rig), grip: null, prev: false, rail: 0 }); };
-  /* 레일 (7th axis): a robot standing on a rail block travels along it. The rail's long side is the axis; the travel keeps the
-     robot's footprint on the rail. Travel moves the robot object itself (run only: leaving 동작 시험 rebuilds the scene). */
-  const RAILV = 1000; // mm/s at 100 %
-  function railOf(id) { if (!RUN.rails) RUN.rails = {}; if (id in RUN.rails) return RUN.rails[id]; const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), o = robObj(id); let out = null;
-    if (n && o) { const q = n.transform.position;
-      for (const b of doc.nodes) { if (b === n || !(b.params?.cls === 'rail' || /레일|rail/i.test(b.name || ''))) continue; const c = b.transform.position, yaw = (b.transform.rotation[2] || 0) * Math.PI / 180, w = +b.params.w || 0, d = +b.params.d || 0;
-        const ax = w >= d ? [Math.cos(yaw), Math.sin(yaw)] : [-Math.sin(yaw), Math.cos(yaw)], L = Math.max(w, d), W = Math.min(w, d), dx = q[0] - c[0], dy = q[1] - c[1], u = dx * ax[0] + dy * ax[1], v = -dx * ax[1] + dy * ax[0];
-        if (Math.abs(u) > L / 2 || Math.abs(v) > W / 2 + 1200) continue; const m = Math.min(+n.params.w || 900, +n.params.d || 900) / 2;
-        out = { ax, min: Math.round(-L / 2 + m - u), max: Math.round(L / 2 - m - u), base0: o.position.clone(), rail: b.id }; break; } }
-    return (RUN.rails[id] = out); }
-  function setRail(id, s) { const R = railOf(id), o = robObj(id); if (!R || !o) return 0; s = Math.max(R.min, Math.min(R.max, s)); o.position.copy(R.base0).add(new T.Vector3(R.ax[0], 0, -R.ax[1]).multiplyScalar(s / 1000)); o.updateMatrixWorld(true); return s; }
-  /** joints (and rail travel) for a point: taught joint angles as they are, or (a target only point, j = []) solved for its TCP;
-      on a rail the robot first travels so its base stands beside the target */
-  function solvePoint(id, pt, seed) { const rig = rigFor(id), o = robObj(id), r = robState(id), R = railOf(id);
-    const keep = r.rail || 0; let rail = pt.rail ?? (R && !(pt.j && pt.j.length) && pt.tcp ? null : keep);
-    if (pt.j && pt.j.length) { const j = pt.j.slice(0, rig.length); while (j.length < rig.length) j.push(0); return { deg: j, rail: rail ?? keep, err: 0 }; }
-    const at = s => { setRail(id, s); const ik = ikR(rig, o, toS(pt.tcp), seed || r.deg, { iters: 40 }); return { deg: ik ? ik.deg : r.deg.slice(), rail: s, err: ik ? ik.err : 1e9 }; };
-    let best;
-    if (rail !== null) best = at(rail);
-    else { // on a rail: the travel nearest to where the robot is that lets the arm reach the point (too close to the base is as bad as too far)
-      const c = new Set([keep]); for (let d = 250; d <= R.max - R.min; d += 250) for (const sgn of [-1, 1]) { const v = keep + sgn * d; if (v >= R.min && v <= R.max) c.add(v); } c.add(R.min); c.add(R.max);
-      for (const sv of [...c].sort((x, y) => Math.abs(x - keep) - Math.abs(y - keep))) { const q = at(sv); if (!best || q.err < best.err) best = q; if (q.err < 8) break; } }
-    setRail(id, keep); L.rigSet(rig, r.deg); return best; }
-  /* 아크 (welding arc): a flickering blue-white spark and light at the TCP while ARC is on */
-  const ARC = {};
-  function arcAt(id, pos, on) { let a = ARC[id]; if (!a) { a = ARC[id] = new T.Group(); const sp = new T.Sprite(new T.SpriteMaterial({ map: arcTex(), color: 0xcfe6ff, transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
-      sp.scale.set(0.12, 0.12, 1); a.add(sp); const lt = new T.PointLight(0x9fd0ff, 2.5, 3); a.add(lt); a.userData.sp = sp; a.userData.lt = lt; ov.add(a); }
-    a.visible = !!on; if (!on) return; a.position.copy(pos); const k = 0.6 + Math.random() * 0.8; a.userData.sp.scale.set(0.12 * k, 0.12 * k, 1); a.userData.lt.intensity = 1.5 + Math.random() * 2.5; }
-  let arcTexC = null;
-  function arcTex() { if (arcTexC) return arcTexC; const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(190,225,255,0.9)'); gr.addColorStop(1, 'rgba(80,140,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return (arcTexC = new T.CanvasTexture(c)); }
+  const robState = id => { const rig = rigFor(id); if (!rig) return null; return ROB.run[id] || (ROB.run[id] = { line: -1, on: false, deg: robObj(id).userData.deg || zeros(rig), grip: null, prev: false }); };
   function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
   function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
   const VJ = 150; // joint speed deg/s at 100 %
@@ -897,9 +865,8 @@
       if (st && !r.prev) { startProg(n.id, `${P}_START`); if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; } if (!st && r.prev && `${P}_DONE` in tags && !r.on) tags[`${P}_DONE`] = false; r.prev = st;
       if (r.on) { let budget = dt; for (let g = 0; g < 8 && budget > 0 && r.on; g++) budget = progStep(n, P, r, p, rig, o, budget, tags); }
       if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = r.on; if (RUN.procs[P]) RUN.procs[P].busy = r.on;
-      if (railOf(n.id)) setRail(n.id, r.rail || 0); L.rigSet(rig, r.deg); o.userData.deg = r.deg;
-      if (r.grip && RUN.works[r.grip]) { const t = tcpOf(n.id), w = RUN.works[r.grip]; w.p = [t[0], t[1]]; w.z = t[2] + (r.gdz || 0); w.held = n.id; }
-      if (r.arc && !r.on) r.arc = false; if (r.arc || ARC[n.id]) arcAt(n.id, L.rigTcp(rig, o), r.arc);
+      L.rigSet(rig, r.deg); o.userData.deg = r.deg;
+      if (r.grip && RUN.works[r.grip]) { const t = tcpOf(n.id), w = RUN.works[r.grip]; w.p = [t[0], t[1]]; w.z = t[2]; w.held = n.id; }
     } }
   /* one program line, or part of it, within `dt` seconds; returns the time left over (a line that ends mid-frame hands the rest to the next) */
   function progStep(n, P, r, p, rig, o, dt, tags) {
@@ -907,15 +874,12 @@
     if (!r.seg) { L.rigSet(rig, r.deg); r.line++; const l = p.lines[r.line]; // pose first: a line that starts in the frame the last one ended reads the true TCP
       if (!l) { r.on = false; r.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 프로그램 끝 · DONE`); drawPend(true); return 0; }
       const pt = l.point && p.points.find(q => q.id === l.point);
-      if (l.op === 'MOVJ') { const sv = solvePoint(n.id, pt), to = sv.deg; if (sv.err > 30) log(`${P} ${pt.id}: 목표에 ${Math.round(sv.err)} mm 못 미칩니다 (도달 거리 밖)`);
-        const dmax = Math.max(1e-6, ...to.map((v, i) => Math.abs(v - (r.deg[i] || 0)))), dr = Math.abs((sv.rail || 0) - (r.rail || 0)); r.seg = { kind: 'J', from: r.deg.slice(), to, s0: r.rail || 0, s1: sv.rail || 0, t: 0, dur: Math.max(dmax / (VJ * (l.speed || 50) / 100), dr / (RAILV * (l.speed || 50) / 100)) }; }
-      else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); const sv = pt.j && pt.j.length ? { deg: pt.j.slice(0, rig.length), rail: pt.rail ?? r.rail } : solvePoint(n.id, pt), j1 = sv.deg.slice(); while (j1.length < rig.length) j1.push(0);
-        r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, Math.max(d / (l.speed || 500), Math.abs((sv.rail || 0) - (r.rail || 0)) / RAILV)), j0: r.deg.slice(), j1, s0: r.rail || 0, s1: sv.rail || 0 }; }
+      if (l.op === 'MOVJ') { const to = pt.j.slice(0, rig.length); while (to.length < rig.length) to.push(0); const dmax = Math.max(1e-6, ...to.map((v, i) => Math.abs(v - (r.deg[i] || 0)))); r.seg = { kind: 'J', from: r.deg.slice(), to, t: 0, dur: dmax / (VJ * (l.speed || 50) / 100) }; }
+      else if (l.op === 'MOVL') { const t0 = tcpOf(n.id), t1 = pt.tcp || fkStored(n.id, pt.j); const d = Math.hypot(t1[0] - t0[0], t1[1] - t0[1], t1[2] - t0[2]); const j1 = pt.j.slice(0, rig.length); while (j1.length < rig.length) j1.push(0); r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, d / (l.speed || 500)), j0: r.deg.slice(), j1 }; }
       else if (l.op === 'GRIP') { if (l.on) { const t = tcpOf(n.id); let best = null, bd = 400; for (const id in RUN.works) { const w = RUN.works[id]; if (w.held && w.held !== n.id) continue; const d = Math.hypot(w.p[0] - t[0], w.p[1] - t[1], w.z - t[2]); if (d < bd) { bd = d; best = id; } }
-          if (best) { r.grip = best; r.gdz = RUN.works[best].z - t[2]; log(`${P} 그리퍼 닫힘 · 워크 집음`); } else log(`${P} 그리퍼 닫힘 · 400 mm 안에 워크가 없습니다`); }
-        else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z, r.grip, n.id); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
+          if (best) { r.grip = best; log(`${P} 그리퍼 닫힘 · 워크 집음`); } else log(`${P} 그리퍼 닫힘 · 400 mm 안에 워크가 없습니다`); }
+        else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
         r.seg = { kind: 'D', t: 0, dur: 0.3 }; }
-      else if (l.op === 'ARC') { r.arc = !!l.on; log(`${P} 아크 ${l.on ? '켬 · 용접 시작' : '끔 · 용접 끝'}`); r.seg = { kind: 'D', t: 0, dur: 0.2 }; }
       else if (l.op === 'WAIT') r.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
       else if (l.op === 'SET') { tags[l.tag] = l.value; r.seg = { kind: 'D', t: 0, dur: 0 }; }
       else if (l.op === 'DELAY') r.seg = { kind: 'D', t: 0, dur: l.s || 0 };
@@ -923,76 +887,16 @@
     const sg = r.seg, more = r.line + 1 < p.lines.length, hold = () => { if (ROB.step && more) { r.pause = true; drawPend(true); return true; } return false; };
     if (sg.kind === 'W') { if (cmp(tags[sg.tag], '==', sg.value)) { r.seg = null; return hold() ? 0 : dt; } sg.t += dt; if (sg.t > 20 && !sg.warned) { sg.warned = true; log(`${P} ${sg.tag} ${valTxt(sg.tag, sg.value)} 20초째 기다립니다`); } return 0; }
     const f = sg.kind === 'J' || sg.kind === 'L' ? ROB.ovr / 100 : 1, adv = dt * f, left = Math.max(0, sg.t + adv - sg.dur) / f; sg.t = Math.min(sg.dur, sg.t + adv); const k = sg.dur > 0 ? sg.t / sg.dur : 1, e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // ease in/out = accelerate, cruise, decelerate
-    if ((sg.kind === 'J' || sg.kind === 'L') && sg.s1 !== sg.s0) { r.rail = sg.s0 + (sg.s1 - sg.s0) * e; setRail(n.id, r.rail); }
     if (sg.kind === 'J') r.deg = sg.from.map((a, i) => a + (sg.to[i] - a) * e);
     else if (sg.kind === 'L') { const tgt = toS([sg.t0[0] + (sg.t1[0] - sg.t0[0]) * e, sg.t0[1] + (sg.t1[1] - sg.t0[1]) * e, sg.t0[2] + (sg.t1[2] - sg.t0[2]) * e]);
       // the taught tool angle travels with the line: wrist roll / flange roll and the tool pitch (J2 + J3 + J5) blend start → point
       const seed = r.deg.slice(); if (rig.hold && rig.length >= 6) { const { j0, j1 } = sg; for (const i of [3, 5]) seed[i] = j0[i] + (j1[i] - j0[i]) * e; const S0 = j0[1] + j0[2] + j0[4], S1 = j1[1] + j1[2] + j1[4]; seed[4] = S0 + (S1 - S0) * e - seed[1] - seed[2]; }
       const ik = ikR(rig, o, tgt, seed, { iters: 10 }); if (ik) { r.deg = ik.deg; if (ik.err > 30 && !sg.warned) { sg.warned = true; log(`${P} 직선 이동: 목표에 ${Math.round(ik.err)} mm 못 미칩니다 (도달 거리 밖)`); } } }
-    if (sg.t >= sg.dur) { if (sg.kind === 'J' || sg.kind === 'L') { if (sg.s1 !== undefined) r.rail = sg.s1; } if (sg.kind === 'J') r.deg = sg.to.slice(); if (sg.kind === 'L' && rig.hold && Math.hypot(...tcpOf(n.id).map((v, i) => v - sg.t1[i])) < 5) r.deg = sg.j1.slice(); r.seg = null; if (hold()) return 0; }
+    if (sg.t >= sg.dur) { if (sg.kind === 'J') r.deg = sg.to.slice(); if (sg.kind === 'L' && rig.hold && Math.hypot(...tcpOf(n.id).map((v, i) => v - sg.t1[i])) < 5) r.deg = sg.j1.slice(); r.seg = null; if (hold()) return 0; }
     return left; }
-  /* ------------------------------------------------------------------ 작업자 (operator) run
-     A 작업자 node runs a program like a robot's (doc.programs, same points and lines): MOVJ walks to the point (x, y) on the
-     floor (turns first, 1 m/s), MOVL turns to the point and reaches the hand to it, GRIP takes the nearest work at the hand
-     (450 mm) or puts it down on the surface under it, then the hand comes back to the carry pose. WAIT / SET / DELAY as for
-     robots; WKn_START starts, BUSY / DONE report. Walks go straight from point to point: the program's points are the path. */
-  const WK = { run: {} }, WALK = 1000, REACH = 700;
-  const workerNodes = () => ED.machine.doc.nodes.filter(n => nodeDef(n)?.operator);
-  function wkState(n) { return WK.run[n.id] || (WK.run[n.id] = { on: false, line: -1, seg: null, prev: false, pos: [n.transform.position[0], n.transform.position[1]], yaw: n.transform.rotation[2] || 0, k: 0, tgt: null, carry: null, gdz: 0 }); }
-  const fwdOf = w => { const a = w.yaw * Math.PI / 180; return [Math.cos(a), Math.sin(a)]; };
-  function wkHand(w, h) { const f = fwdOf(w), rest = [w.pos[0] + f[0] * 380, w.pos[1] + f[1] * 380, Math.min(1050, h * 0.6)]; if (!w.tgt || w.k <= 0) return rest; return rest.map((v, i) => v + (w.tgt[i] - v) * w.k); }
-  const angTo = (a, b) => { let d = ((b - a) % 360 + 540) % 360 - 180; return d; };
-  function stepWorkers(dt) { const tags = RUN.tags;
-    for (const n of workerNodes()) { const P = nodeCode(n), w = wkState(n), p = progOf(n.id), o = objs.get(n.id)?.obj; if (!o) continue;
-      const st = !!tags[`${P}_START`]; if (st && !w.prev && p && p.lines.length && !w.on) { w.on = true; w.line = -1; w.seg = null; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; log(`${P} 작업 시작 · ${P}_START`); }
-      if (!st && w.prev && !w.on && `${P}_DONE` in tags) tags[`${P}_DONE`] = false; w.prev = st;
-      if (w.on && p) { let budget = dt; for (let g = 0; g < 8 && budget > 0 && w.on; g++) budget = wkStep(n, P, w, p, budget, tags); }
-      if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = w.on;
-      // pose: body on the floor, arms point at the hand
-      const h = +(n.params.h || 1750), fig = o.getObjectByName('operator'), hand = wkHand(w, h);
-      o.position.copy(toS([w.pos[0], w.pos[1], n.transform.position[2] || 0])); o.rotation.set(0, w.yaw * Math.PI / 180, 0);
-      if (fig) { const f = fwdOf(w), dx = (hand[0] - w.pos[0]) * f[0] + (hand[1] - w.pos[1]) * f[1], dz = hand[2] - (fig.userData.shoulder * 1000), th = Math.atan2(Math.max(0, dx), -dz);
-        for (const nm of ['armL', 'armR']) { const a = fig.getObjectByName(nm); if (a) a.rotation.z = w.carry || w.k > 0 ? th : 0; } }
-      if (w.carry && RUN.works[w.carry]) { const wk = RUN.works[w.carry]; wk.p = [hand[0], hand[1]]; wk.z = hand[2] + w.gdz; wk.held = n.id; }
-    } }
-  function wkStep(n, P, w, p, dt, tags) {
-    if (!w.seg) { w.line++; const l = p.lines[w.line];
-      if (!l) { w.on = false; w.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 작업 끝 · DONE`); return 0; }
-      const pt = l.point && p.points.find(q => q.id === l.point), to = pt && (pt.tcp || [0, 0, 0]);
-      if (l.op === 'MOVJ') { const d = Math.hypot(to[0] - w.pos[0], to[1] - w.pos[1]), head = d > 5 ? Math.atan2(to[1] - w.pos[1], to[0] - w.pos[0]) * 180 / Math.PI : w.yaw, turn = angTo(w.yaw, head);
-        w.seg = { kind: 'walk', from: w.pos.slice(), to: [to[0], to[1]], y0: w.yaw, turn, tTurn: Math.abs(turn) / 240, t: 0, dur: Math.abs(turn) / 240 + d / (WALK * (l.speed || 50) / 50) }; }
-      else if (l.op === 'MOVL') { const head = Math.atan2(to[1] - w.pos[1], to[0] - w.pos[0]) * 180 / Math.PI, turn = angTo(w.yaw, head), far = Math.hypot(to[0] - w.pos[0], to[1] - w.pos[1]);
-        if (far > 1000) log(`${P} ${pt.id}: 손이 ${Math.round(far)} mm 떨어진 곳까지 닿지 않습니다 · 더 가까이 걸어가는 점을 넣으세요`);
-        w.seg = { kind: 'reach', y0: w.yaw, turn, tTurn: Math.abs(turn) / 240, to: to.slice(), k0: w.k, t: 0, dur: Math.abs(turn) / 240 + REACH / 1000 }; }
-      else if (l.op === 'GRIP') { const h = +(n.params.h || 1750), hand = wkHand(w, h);
-        if (l.on) { let best = null, bd = 450; for (const id in RUN.works) { const q = RUN.works[id]; if (q.held && q.held !== n.id) continue; const d = Math.hypot(q.p[0] - hand[0], q.p[1] - hand[1], q.z - hand[2]); if (d < bd) { bd = d; best = id; } }
-          if (!best) { log(`${P} 손 닿는 곳에 워크가 없습니다 · 작업을 멈춥니다 (↺ 워크 다시 투입)`); w.on = false; w.line = -1; if (AUTO.on) setAuto(false); return 0; }
-          w.carry = best; w.gdz = RUN.works[best].z - hand[2]; log(`${P} 워크 집음`); }
-        else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, q.z, w.carry); } log(`${P} 워크 놓음`); w.carry = null; }
-        w.seg = { kind: 'back', k0: w.k, t: 0, dur: 0.6, wait: 0.25 }; }
-      else if (l.op === 'WAIT') w.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
-      else if (l.op === 'SET') { tags[l.tag] = l.value; w.seg = { kind: 'D', t: 0, dur: 0 }; }
-      else if (l.op === 'DELAY') w.seg = { kind: 'D', t: 0, dur: l.s || 0 };
-      else w.seg = { kind: 'D', t: 0, dur: 0 }; }
-    const sg = w.seg;
-    if (sg.kind === 'W') { if (cmp(tags[sg.tag], '==', sg.value)) { w.seg = null; return dt; } sg.t += dt; if (sg.t > 20 && !sg.warned) { sg.warned = true; log(`${P} ${sg.tag} ${valTxt(sg.tag, sg.value)} 20초째 기다립니다`); } return 0; }
-    const f = sg.kind === 'D' ? 1 : ROB.ovr / 100, left = Math.max(0, sg.t + dt * f - sg.dur) / f; sg.t = Math.min(sg.dur, sg.t + dt * f);
-    const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    if (sg.kind === 'walk' || sg.kind === 'reach') { const kt = sg.tTurn > 0 ? Math.min(1, sg.t / sg.tTurn) : 1; w.yaw = sg.y0 + sg.turn * ease(kt);
-      const rest = Math.max(0, sg.t - sg.tTurn), span = sg.dur - sg.tTurn, km = span > 0 ? Math.min(1, rest / span) : 1;
-      if (sg.kind === 'walk') w.pos = [sg.from[0] + (sg.to[0] - sg.from[0]) * km, sg.from[1] + (sg.to[1] - sg.from[1]) * km];
-      else { w.tgt = sg.to; w.k = sg.k0 + (1 - sg.k0) * ease(km); } }
-    else if (sg.kind === 'back') { const k = Math.max(0, (sg.t - sg.wait) / (sg.dur - sg.wait)); w.k = sg.k0 * (1 - ease(Math.min(1, k))); if (sg.t >= sg.dur) { w.k = 0; w.tgt = null; } }
-    if (sg.t >= sg.dur) w.seg = null;
-    return left; }
-  /** Where a released work lands: the first real surface under it (rays down from its middle and corners through the
-      blocks' own shapes: a jig nest, a tray pocket, a table), else the floor. */
-  const rcLand = new T.Raycaster();
-  function landZ(p, z, wid, skip) { const doc = ED.machine.doc, meshes = []; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work || d.operator || b.id === skip) continue; const o = objs.get(b.id)?.obj; if (o) o.traverse(m => { if (m.isMesh && m.visible && m.name !== 'placeholder') meshes.push(m); }); }
-    const wn = wid && doc.nodes.find(x => x.id === wid), hw = wn ? (+wn.params.w || 300) * 0.35 : 0, hd = wn ? (+wn.params.d || 200) * 0.35 : 0, yaw = wn ? (wn.transform.rotation[2] || 0) * Math.PI / 180 : 0, c = Math.cos(yaw), s = Math.sin(yaw);
-    let best = 0; for (const [a, b] of [[0, 0], [hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { rcLand.set(toS([p[0] + a * c - b * s, p[1] + a * s + b * c, z + 30]), new T.Vector3(0, -1, 0)); rcLand.far = (z + 30) / 1000 + 0.001;
-      const h = rcLand.intersectObjects(meshes, false)[0]; if (h) best = Math.max(best, Math.round(h.point.y * 1000)); }
-    return best; }
+  /** Where a released work lands: the highest block top under it that is not above the hand, else the floor. */
+  function landZ(p, z) { const doc = ED.machine.doc; let best = 0; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work) continue; const top = nodeTop(b); if (top > z + 50 || top <= best) continue;
+      const o = objs.get(b.id)?.obj; if (!o) continue; tmpBox.setFromObject(o); const s = toS([p[0], p[1], 0]); if (s.x >= tmpBox.min.x - 0.05 && s.x <= tmpBox.max.x + 0.05 && s.z >= tmpBox.min.z - 0.05 && s.z <= tmpBox.max.z + 0.05) best = top; } return best; }
   // jogging: by joint (deg) or by TCP axis (mm, inverse kinematics)
   /* joint limits: each robot has its mechanical range (cables, end stops, its own body: there is no collision check, so the
      range is what keeps the arm out of its base). 관절 한계 해제 lifts them while trying things out. */
@@ -1020,7 +924,7 @@
   const round1 = deg => deg.map(v => Math.round(v * 10) / 10);
   /* ● 점 기록 = a point and the line to it: straight down / up over the last point (same X·Y) = 직선 이동, else 관절 이동 */
   function recordPoint(name) { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id), pid = newPid(p), tcp = tcpOf(id), last = p.points[p.points.length - 1];
-    p.points.push({ id: pid, ...(typeof name === 'string' && name ? { name } : {}), j: round1(r.deg), tcp, ...(railOf(id) ? { rail: Math.round(r.rail || 0) } : {}) }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
+    p.points.push({ id: pid, ...(typeof name === 'string' && name ? { name } : {}), j: round1(r.deg), tcp }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
     p.lines.push(lin ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }); saveProg(p);
     toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${p.lines.length}줄 ${lin ? '직선 이동' : '관절 이동'} 추가`); }
   // 집기 / 놓기 block: above (150 mm up, 관절 이동) → down (직선) → gripper → back up (직선)
@@ -1047,7 +951,7 @@
     const P = nodeCode(n), has = t => ED.machine.doc.io.some(x => x.tag === t), lines = [];
     lines.push(...gripLines('P1', 'P2', true), ...gripLines('P3', 'P4', false), { op: 'MOVJ', point: 'P0', speed: 60 });
     saveProg({ node: id, name: '픽 앤 플레이스', points: pts, lines }); log(`${P} 픽 앤 플레이스 생성 · ${pick.name} → ${place.name}`); toast(`${pick.name}에서 집어 ${place.name}에 놓는 프로그램을 만들었습니다 · ▶ 실행으로 확인`); }
-  const OPK = { MOVJ: '관절 이동', MOVL: '직선 이동', GRIP: '그리퍼', ARC: '아크 (용접)', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
+  const OPK = { MOVJ: '관절 이동', MOVL: '직선 이동', GRIP: '그리퍼', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
   /* 티칭 패널. Its own column of the bottom panel while 동작 시험 runs with a robot: jog by joint (slider, −/+ held down =
      continuous), jog the TCP by axis, TELEOP = drag the TCP ball in 3D (Shift: height) or the arrow keys, record points, write
      the program lines, run. Light redraws (every frame while jogging / running) only refresh the numbers and sliders. */
@@ -1062,7 +966,7 @@
     if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = limOf(rig);
     placeTcpBall();
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}°`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; const lm = lim[i]; if (e) e.classList.toggle('lim', !!lm && ((r.deg[i] || 0) <= lm[0] + 0.5 || (r.deg[i] || 0) >= lm[1] - 0.5)); }
-      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); { const rv = box.querySelector('[data-rv]'), rsl = box.querySelector('[data-rs]'); if (rv) rv.textContent = Math.round(r.rail || 0); if (rsl && document.activeElement !== rsl) rsl.value = Math.round(r.rail || 0); } const ta = toolAngle(id); if (ta) for (const k of ['p', 'r']) { const e = box.querySelector(`[data-tl="${k}"]`); if (e) e.textContent = `${k === 'p' ? ta.tilt : ta.roll}°`; } const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
+      ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); const ta = toolAngle(id); if (ta) for (const k of ['p', 'r']) { const e = box.querySelector(`[data-tl="${k}"]`); if (e) e.textContent = `${k === 'p' ? ta.tilt : ta.roll}°`; } const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
       const rb = box.querySelector('#pRun'); if (rb) { rb.textContent = r.on ? '■ 정지' : '▶ 실행'; rb.classList.toggle('pri', r.on); }
       box.querySelectorAll('.pline').forEach((el, i) => el.classList.toggle('on', r.on && r.line === i)); return; }
     const ae = document.activeElement, fk = ae && box.contains(ae) && ae.matches('input,select') ? { id: ae.id, f: ae.dataset.f, h: ae.closest('[data-pt],[data-li]'), s: ae.selectionStart } : null, fh = fk?.h ? (fk.h.dataset.pt ? `[data-pt="${fk.h.dataset.pt}"]` : `[data-li="${fk.h.dataset.li}"]`) : '';
@@ -1071,7 +975,6 @@
       if (l.op === 'MOVJ') body = `${pSel(l.point)} <input data-f="speed" type="number" min="1" max="100" value="${l.speed ?? 50}"> %`;
       else if (l.op === 'MOVL') body = `${pSel(l.point)} <input data-f="speed" type="number" min="10" step="10" value="${l.speed ?? 500}"> mm/s`;
       else if (l.op === 'GRIP') body = `<select data-f="on"><option value="true"${l.on ? ' selected' : ''}>닫기 (집기)</option><option value="false"${!l.on ? ' selected' : ''}>열기 (놓기)</option></select>`;
-      else if (l.op === 'ARC') body = `<select data-f="on"><option value="true"${l.on ? ' selected' : ''}>켜기 (용접 시작)</option><option value="false"${!l.on ? ' selected' : ''}>끄기</option></select>`;
       else if (l.op === 'WAIT' || l.op === 'SET') { const tg = io.find(x => x.tag === l.tag); body = `${tagSel(l.tag, l.op === 'SET')}${valSel(tg, l.value, l.op === 'SET' ? 'set' : 'wait')}`; }
       else if (l.op === 'DELAY') body = `<input data-f="s" type="number" min="0" step="0.1" value="${l.s ?? 1}"> s`;
       return `<div class="pline${on ? ' on' : ''}" data-li="${i}"><b>${i + 1}</b><span class="op">${OPK[l.op]}</span>${body}<span class="sp"></span><button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
@@ -1085,7 +988,6 @@
           <h5 class="pjh"><button id="pHome" title="모든 관절 0° (처음 자세)로 · 꼬인 자세를 풀 때">⌂ 홈 자세</button><label title="시험용: 관절 한계(기계적 끝)를 풀어 줍니다. 실제 로봇에서는 갈 수 없는 자세가 나올 수 있습니다"><input type="checkbox" id="pFree"${ROB.free ? ' checked' : ''}> 관절 한계 해제</label></h5>
           <h5>관절 조그 <select id="pStepJ">${[1, 5, 15].map(v => `<option${ROB.deg === v ? ' selected' : ''}>${v}</option>`).join('')}</select>° <em>슬라이더를 끌거나 −/+를 누르고 있으면 계속 움직입니다</em></h5>
           ${rig.map((_, i) => jrow(i)).join('')}
-          ${railOf(id) ? (() => { const R = railOf(id); return `<div class="jrow" title="레일 주행 (7번째 축) ${R.min} ~ ${R.max} mm"><span>레일</span><button data-railj="-1">−</button><input type="range" data-rs="1" min="${R.min}" max="${R.max}" step="10" value="${Math.round(r.rail || 0)}"><button data-railj="1">+</button><b data-rv="1">${Math.round(r.rail || 0)}</b></div>`; })() : ''}
           <h5>TCP 조그 <select id="pStepM">${[10, 50, 200].map(v => `<option${ROB.mm === v ? ' selected' : ''}>${v}</option>`).join('')}</select> mm <em>설비 원점 기준</em></h5>
           ${['X', 'Y', 'Z'].map(trow).join('')}
           ${rig.length >= 6 ? `<div class="jrow" title="끝단(그리퍼)을 위아래로 기울입니다 · 손끝 위치는 그대로 · 0° = 수직 아래, + = 로봇 바깥쪽, − = 로봇 쪽"><span style="width:auto">기울기</span><button data-tool="p:-1">−</button><b class="tv" data-tl="p">${toolAngle(id)?.tilt ?? 0}°</b><button data-tool="p:1">+</button></div>
@@ -1096,7 +998,7 @@
           <h5>점 <em>${p.points.length}</em></h5>
           <div class="ppts">${p.points.map(q => `<div class="ppt" data-pt="${q.id}"><b>${q.id}</b><input data-f="pname" value="${esc(q.name || '')}" placeholder="이름"><small>${(q.tcp || []).join(', ')}</small><button data-pa="go" title="이 자세로">↷</button><button data-pa="re" title="지금 자세로 다시 기록">●</button><button data-pa="del" title="지우기">×</button></div>`).join('') || '<p class="why">● 점 기록을 누르면 지금 자세가 P1부터 쌓이고 그 점으로 가는 줄도 하나 생깁니다</p>'}</div>
           <h5>프로그램 <em>${p.lines.length}줄 · 끝나면 ${esc(nodeCode(n))}_DONE 자동 켜짐</em></h5>
-          <div class="padd"><button data-grip="1" title="지금 손끝 자리에서 집는 4줄: 150 mm 위 → 내려가 → 그리퍼 닫기 → 위로">＋ 집기</button><button data-grip="0" title="지금 손끝 자리에 놓는 4줄: 150 mm 위 → 내려가 → 그리퍼 열기 → 위로">＋ 놓기</button>${p.points.length ? '<button data-chain="1" title="기록한 점을 P1부터 차례로 관절 이동으로 잇습니다 (지금 줄은 지움)">점 순서대로 잇기</button>' : ''}<span class="sep">한 줄</span><button data-add="MOVJ">관절 이동</button><button data-add="MOVL">직선 이동</button><button data-add="GRIP">그리퍼</button><button data-add="ARC">아크</button><button data-add="WAIT">신호 대기</button><button data-add="SET">신호 출력</button><button data-add="DELAY">기다림</button></div>
+          <div class="padd"><button data-grip="1" title="지금 손끝 자리에서 집는 4줄: 150 mm 위 → 내려가 → 그리퍼 닫기 → 위로">＋ 집기</button><button data-grip="0" title="지금 손끝 자리에 놓는 4줄: 150 mm 위 → 내려가 → 그리퍼 열기 → 위로">＋ 놓기</button>${p.points.length ? '<button data-chain="1" title="기록한 점을 P1부터 차례로 관절 이동으로 잇습니다 (지금 줄은 지움)">점 순서대로 잇기</button>' : ''}<span class="sep">한 줄</span><button data-add="MOVJ">관절 이동</button><button data-add="MOVL">직선 이동</button><button data-add="GRIP">그리퍼</button><button data-add="WAIT">신호 대기</button><button data-add="SET">신호 출력</button><button data-add="DELAY">기다림</button></div>
           <div class="plines">${p.lines.map(line).join('') || '<p class="why">줄을 더하거나 점 순서대로 잇기 · 픽 앤 플레이스를 누르세요. ▶ 실행이나 RB_START 신호로 돕니다</p>'}</div></div></div>`;
     drawPath();
     box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; drawPend(); };
@@ -1107,19 +1009,18 @@
     box.querySelector('#pFree').onchange = e => { ROB.free = e.target.checked; if (!ROB.free) { const lm = L.limitsOf(rig), d = robState(id).deg.map((v, i) => lm[i] ? Math.max(lm[i][0], Math.min(lm[i][1], v)) : v); setDeg(id, d); } drawPend(); toast(ROB.free ? '관절 한계를 풀었습니다 · 실제 로봇에서는 못 가는 자세가 나올 수 있습니다' : '관절 한계를 다시 켰습니다'); };
     box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
     if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
-    box.onpointerdown = e => { const rj = e.target.closest('[data-railj]'); if (rj) { holdJog(() => { const rr = robState(id); rr.rail = setRail(id, (rr.rail || 0) + +rj.dataset.railj * ROB.mm); drawPend(true); }); e.preventDefault(); return; }
-      const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
+    box.onpointerdown = e => { const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); holdJog(() => jogJ(+i, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
       const tl = e.target.closest('[data-tool]'); if (tl) { const [k, d] = tl.dataset.tool.split(':'); holdJog(() => jogTool(k, +d * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); e.preventDefault(); return; }
       const x = e.target.closest('[data-xyz]'); if (x) { const [a, d] = x.dataset.xyz.split(':'); holdJog(() => jogXYZ(+a, +d * (JOG_HOLD.iv ? Math.min(ROB.mm, 10) : ROB.mm))); e.preventDefault(); } };
-    box.oninput = e => { const rs2 = e.target.closest('[data-rs]'); if (rs2) { const rr = robState(id); rr.rail = setRail(id, +rs2.value); drawPend(true); return; } const sl = e.target.closest('[data-js]'); if (!sl) return; const deg = robState(id).deg.slice(); deg[+sl.dataset.js] = +sl.value; setDeg(id, deg); drawPend(true); };
-    box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz],[data-tool],[data-railj]')) return;
+    box.oninput = e => { const sl = e.target.closest('[data-js]'); if (!sl) return; const deg = robState(id).deg.slice(); deg[+sl.dataset.js] = +sl.value; setDeg(id, deg); drawPend(true); };
+    box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz],[data-tool]')) return;
       const gp = e.target.closest('[data-grip]'); if (gp) { addGrip(gp.dataset.grip === '1'); return; }
       const ch = e.target.closest('[data-chain]'); if (ch) { const q = prog(id); if (q.lines.length && !confirm('지금 프로그램 줄을 지우고 점을 순서대로 이을까요? (실행 취소 가능)')) return; q.lines = linesFromPoints(q); saveProg(q); return; }
       const ad = e.target.closest('[data-add]'); if (ad) { const q = prog(id), op = ad.dataset.add, first = q.points[0]?.id; if ((op === 'MOVJ' || op === 'MOVL') && !first) { toast('먼저 점을 기록하세요', true); return; }
         if ((op === 'WAIT' && !tagsAny.length) || (op === 'SET' && !tagsOut.length)) { toast('신호가 없습니다', true); return; }
-        q.lines.push(op === 'MOVJ' ? { op, point: first, speed: 50 } : op === 'MOVL' ? { op, point: first, speed: 500 } : op === 'GRIP' || op === 'ARC' ? { op, on: true } : op === 'WAIT' ? { op, tag: tagsAny[0]?.tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0]?.tag, value: true } : { op, s: 1 }); saveProg(q); return; }
+        q.lines.push(op === 'MOVJ' ? { op, point: first, speed: 50 } : op === 'MOVL' ? { op, point: first, speed: 500 } : op === 'GRIP' ? { op, on: true } : op === 'WAIT' ? { op, tag: tagsAny[0]?.tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0]?.tag, value: true } : { op, s: 1 }); saveProg(q); return; }
       const pa = e.target.closest('[data-pa]'); if (pa) { const q = prog(id), pid = pa.closest('[data-pt]').dataset.pt, k = q.points.findIndex(z => z.id === pid), pt = q.points[k];
-        if (pa.dataset.pa === 'go') { const sv = solvePoint(id, pt); r.rail = setRail(id, sv.rail || 0); setDeg(id, sv.deg); drawPend(true); } else if (pa.dataset.pa === 're') { pt.j = r.deg.map(v => Math.round(v * 10) / 10); pt.tcp = tcpOf(id); saveProg(q); } else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
+        if (pa.dataset.pa === 'go') { setDeg(id, pt.j); drawPend(true); } else if (pa.dataset.pa === 're') { pt.j = r.deg.map(v => Math.round(v * 10) / 10); pt.tcp = tcpOf(id); saveProg(q); } else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
       const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') q.lines.splice(i, 1); else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); return; } };
     box.onchange = e => { const f = e.target.dataset.f; if (!f) return; const q = prog(id);
       const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q, true); return; }
@@ -1770,9 +1671,7 @@
     if (d.conveyor || d.corner || d.curve) return { txt: t[`${P}_RUN`] ? '운전 중' : '정지', on: !!t[`${P}_RUN`] };
     if (d.stops) { const up = has(`${P}_IS_UP`) ? t[`${P}_IS_UP`] : t[`${P}_UP`]; return { txt: up ? '올림 · 워크 멈춤' : '내림', on: !!up }; }
     if (d.sensor) return { txt: t[`${P}_ON`] ? '워크 감지' : '감지 없음', on: !!t[`${P}_ON`] };
-    if (d.operator) { const w = WK.run[n.id]; return { txt: w?.on ? (w.carry ? '제품 운반' : w.seg?.kind === 'walk' ? '이동' : w.seg?.kind === 'W' ? '기다림' : '작업 중') : t[`${P}_DONE`] ? '완료' : '대기', on: !!w?.on }; }
-    const rb = ROB.run[n.id]; if (rb && rb.on) return { txt: rb.arc ? '용접 중' : rb.grip ? '제품 이송' : '작업 중', on: true };
-    const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) { const busy = !!(pr?.busy || t[`${P}_BUSY`]); return { txt: busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: busy }; }
+    const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) return { txt: pr?.busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: !!pr?.busy };
     return null; }
   function drawLabels() {
     const r = renderer.domElement.getBoundingClientRect(), want = new Set(), sels = new Set(selIds());
@@ -1813,7 +1712,7 @@
     for (const o of moving) if (!next.has(o)) L.poseModel(o, 0); moving = next; }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); placeTcpBall(); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
+    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); stepRobots(dt); placeTcpBall(); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
     animateSelected(now); stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 
@@ -1839,7 +1738,7 @@
   }
   /* once: the products that were set out in advance on the example stations go (they enter and travel through the process
      instead) — from the stored versions of the built-in stations, the factory's split cells and the open machine */
-  if (!LS.get(KEY.factory + '.noprod', false)) { const isProd = x => x?.params?.src === 'product' && !x.params.feed;
+  if (!LS.get(KEY.factory + '.noprod', false)) { const isProd = x => x?.params?.src === 'product';
     const all = LS.get(KEY.lib, {}); let n = 0; for (const [id, m] of Object.entries(all)) { if (!id.startsWith('plant-')) continue; for (const d of Object.values(m.versions || {})) { const k = d.nodes.length; d.nodes = d.nodes.filter(x => !isProd(x)); n += k - d.nodes.length; } }
     if (n) LS.set(KEY.lib, all);
     for (const s of ['factory', 'machine']) { const list = s === 'factory' ? ED.factory.doc.blocks : ED.machine.doc.nodes, ids = list.filter(isProd).map(x => x.id);
@@ -1849,5 +1748,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, get objs() { return objs; }, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; }, logLines: () => logLines.map(x => x.txt), runStep: dt => { if (mode !== 'run' || tab !== 'machine') return; stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); }, WK, ROB };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, get objs() { return objs; }, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
 })();

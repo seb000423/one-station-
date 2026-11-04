@@ -50,17 +50,13 @@ export const SequenceStep = z.object({
   next: z.array(z.string()).optional().describe('parallel branches: ids of the steps that start after this one'),
 });
 
-/** 티칭 (teach pendant) program of one robot node (or 작업자 node): taught points (joint angles, deg, with the TCP where they
-    were taught) and lines a pendant runs: moves, gripper, arc, signal wait/set, delay. Runs on the signal table: START starts
-    it, BUSY/DONE report. A point with no joint angles (j = []) is a target only: the run solves the joints (and the rail) for
-    its TCP. For a 작업자, MOVJ walks to the point (x, y) and MOVL reaches the hand to it. */
-export const RobotPoint = z.object({ id: z.string(), name: z.string().optional(), j: z.array(z.number()).describe('joint angles deg, J1… (empty: solved from tcp)'), tcp: z.array(z.number()).length(3).optional().describe('TCP x, y, z mm (machine frame) when taught'),
-  rail: z.number().optional().describe('travel on the rail (7th axis) mm from where the robot is placed; robots on a rail only') });
+/** 티칭 (teach pendant) program of one robot node: taught points (joint angles, deg, with the TCP where they were taught)
+    and lines a pendant runs: moves, gripper, signal wait/set, delay. Runs on the signal table: START starts it, BUSY/DONE report. */
+export const RobotPoint = z.object({ id: z.string(), name: z.string().optional(), j: z.array(z.number()).describe('joint angles deg, J1…'), tcp: z.array(z.number()).length(3).optional().describe('TCP x, y, z mm (machine frame) when taught') });
 export const RobotLine = z.discriminatedUnion('op', [
   z.object({ op: z.literal('MOVJ'), point: z.string(), speed: z.number().min(1).max(100).default(50).describe('% of joint vmax') }),
   z.object({ op: z.literal('MOVL'), point: z.string(), speed: z.number().positive().default(500).describe('TCP mm/s') }),
   z.object({ op: z.literal('GRIP'), on: z.boolean() }),
-  z.object({ op: z.literal('ARC'), on: z.boolean() }).describe('welding arc on / off at the TCP'),
   z.object({ op: z.literal('WAIT'), tag: z.string(), value: z.union([z.boolean(), z.number()]) }),
   z.object({ op: z.literal('SET'), tag: z.string(), value: z.union([z.boolean(), z.number()]) }),
   z.object({ op: z.literal('DELAY'), s: z.number().nonnegative() }),

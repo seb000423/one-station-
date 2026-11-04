@@ -272,12 +272,6 @@ describe('robot teach program', () => {
     e.exec('delete', { id: rb }); expect(e.doc.programs).toHaveLength(0);
     e.undo(); expect(e.doc.programs).toHaveLength(1);
   });
-  it('a target-only point (j = [], tcp) with rail travel and the welding arc are kept', () => {
-    const e = new Editor('machine', MachineDoc.parse({ schema: MACHINE_SCHEMA, meta: { id: 'm', name: 'm', bbox: [3000, 2000, 2000] } }), { newId: ids() });
-    const rb = e.exec('add_block', { blockType: 'robot-6axis', name: 'RB1', position: [0, 0, 0], params: { tag: 'RB1' }, joints: [], io: [] }) as string;
-    e.exec('set_program', { node: rb, points: [{ id: 'S1', j: [], tcp: [800, 0, 600], rail: 1200 }], lines: [{ op: 'MOVL', point: 'S1', speed: 100 }, { op: 'ARC', on: true }, { op: 'ARC', on: false }] });
-    const p = e.doc.programs[0]!; expect(p.points[0]!.rail).toBe(1200); expect(p.points[0]!.j).toEqual([]); expect(p.lines.map(l => l.op)).toEqual(['MOVL', 'ARC', 'ARC']);
-  });
 });
 
 describe('a split cell carries its objects', () => {
