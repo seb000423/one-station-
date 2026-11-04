@@ -1344,7 +1344,8 @@
     const mv = mode !== 'edit' ? null : (e.ctrlKey || e.metaKey) ? 'obj' : MOVE.mode; let whole = false;
     if (mv === 'cell') { if (tab === 'machine') { const tops = ED.machine.doc.nodes.filter(n => !n.parent).map(n => n.id); if (tops.includes(id) || ED.machine.doc.nodes.some(n => n.id === id)) { id = topOf(id); selectMany([...new Set([id, ...tops])]); whole = true; } }
       else { const b = ED.factory.doc.blocks.find(x => x.id === id), c = b && blockCell(b); if (c) { select(c); id = c; whole = true; } else if (cellParts(id).length) { select(id); whole = true; } } }
-    else if (mv === 'obj') { if (tab === 'machine' && isCellRoot(id)) { selectOnly(id); toast(`${objLabel(id)}은(는) 셀 바닥이라 객체 이동에서는 고정입니다 · 옮기려면 셀 전체 이동`); return; }
+    let alone = false; // 객체 이동 on a cell's base plate: the plate alone, what stands on it stays where it is
+    if (mv === 'obj') { if (tab === 'machine' && isCellRoot(id)) alone = true;
       if (tab === 'factory') { const b = ED.factory.doc.blocks.find(x => x.id === id); if (b && blockCell(b)) selectOnly(id); else if (cellParts(id).length) { selectOnly(id); toast(`${objLabel(id)}: 객체 이동 중에는 셀이 고정입니다 · 셀을 옮기려면 셀 전체 이동`); return; } } }
     let drill = null; if (tab === 'machine' && mode === 'edit' && !whole) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id), d = n && nodeDef(n);
       if (d && !n.parent && (d.conveyor || d.curve || d.corner)) { const chain = [...joinedConveyors(doc, [id])], cur = selIds();
@@ -1356,9 +1357,9 @@
     if (group && mv === 'obj' && !whole && (e.ctrlKey || e.metaKey)) { group = false; drill = null; selectOnly(id); }
     if (!group) select(id); if (mode === 'run' || isSlab(id)) return;
     plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
-    const ids = group ? selIds().filter(x => !isSlab(x)) : [id], carried = tab === 'machine' ? [...new Set(ids.flatMap(x => [x, ...descendants(ED.machine.doc, x).map(k => k.id)]))] : ids, os = carried.map(x => objs.get(x)?.obj).filter(Boolean); // what sits on a block is seen moving with it
-    drag = { drill, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
-    if (tab === 'machine' && ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]); if (n && (n.blockType === 'model-part' || nodeDef(n)?.cls)) drag.slotPart = toPart(n); }
+    const ids = group ? selIds().filter(x => !isSlab(x)) : [id], carried = tab === 'machine' && !alone ? [...new Set(ids.flatMap(x => [x, ...descendants(ED.machine.doc, x).map(k => k.id)]))] : ids, os = carried.map(x => objs.get(x)?.obj).filter(Boolean); // what sits on a block is seen moving with it
+    drag = { drill, alone, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
+    if (tab === 'machine' && ids.length === 1 && !alone) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]); if (n && (n.blockType === 'model-part' || nodeDef(n)?.cls)) drag.slotPart = toPart(n); }
   });
   renderer.domElement.addEventListener('pointermove', e => {
     if (tele) { teleopMove(e); return; }
@@ -1376,14 +1377,16 @@
   });
   const endDrag = e => {
     if (link) { endLink(e); return; }
-    if (!drag) return; showSnap(null); const { d, moved, drill } = drag; const slotR = drag.slot, slotId = drag.ids[0]; drag = null; controls.enabled = true; updateHint();
+    if (!drag) return; showSnap(null); const { d, moved, drill, alone } = drag, drag0id = drag.id; const slotR = drag.slot, slotId = drag.ids[0]; drag = null; controls.enabled = true; updateHint();
     if (slotR) { const n = ED.machine.doc.nodes.find(x => x.id === slotId); if (!n) return;
       if (!slotR.ok) { toast(`놓을 수 없습니다 · ${slotR.why}`, true); refresh(); return; }
       const p = n.transform.position; ed().batch('move', () => { if ((n.parent || null) !== slotR.host) exec('set_parent', { id: slotId, parent: slotR.host }, true); moveNode(slotId, [slotR.pos[0] - p[0], slotR.pos[1] - p[1], slotR.pos[2] - p[2]]);
         if (slotR.yaw !== (n.transform.rotation[2] || 0)) exec('move', { id: slotId, rotation: [0, 0, slotR.yaw] }, true); });
       toast(slotR.host ? `${n.name}: ${ED.machine.doc.nodes.find(x => x.id === slotR.host)?.name || '받침'}에 결합${slotR.why ? ` · ▲ ${slotR.why}` : ''}` : `${n.name}: 바닥에 놓음${slotR.why ? ` · ▲ ${slotR.why}` : ''}`); return; }
     if (!moved || !d) { if (!drill && pickBehind()) return; if (drill) { selectOnly(drill); toast(`${objLabel(drill) || '객체'} 하나만 골랐습니다 · 이제 끌면 이것만 움직입니다 · 빈 곳을 누르면 다시 전체 (Ctrl+끌기 = 바로 하나만)`); } return; }
-    const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
+    const by = S.sceneToStored([d.x, 0, d.z]);
+    if (alone) { const n = ED.machine.doc.nodes.find(x => x.id === drag0id); if (n) { const p = n.transform.position; exec('move', { id: n.id, position: [p[0] + by[0], p[1] + by[1], p[2]] }); toast(`${objLabel(n.id)}만 옮겼습니다 · 위의 객체는 그대로 (셀 전체를 옮기려면 셀 전체 이동)`); } return; }
+    moveSelBy([by[0], by[1], 0]);
   };
   // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
   let boxSel = null; const boxEl = document.createElement('div'); boxEl.className = 'boxsel'; boxEl.hidden = true; $('labels').parentElement.appendChild(boxEl);
@@ -1413,7 +1416,7 @@
   // 이동 대상 (객체 이동 / 셀 전체 이동), remembered per browser; G switches
   const MOVE = { mode: LS.get('one.build.move', 'obj') };
   function setMove(m) { MOVE.mode = m; LS.set('one.build.move', m); for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.classList.toggle('on', b.dataset.mv === m); }
-  for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.onclick = () => { setMove(b.dataset.mv); toast(b.dataset.mv === 'cell' ? '셀 전체 이동: 어디를 눌러 끌어도 셀 전체가 움직입니다' : '객체 이동: 누른 객체(와 그 위에 놓인 것)만 움직입니다 · 셀 바닥은 고정'); }; setMove(MOVE.mode);
+  for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.onclick = () => { setMove(b.dataset.mv); toast(b.dataset.mv === 'cell' ? '셀 전체 이동: 어디를 눌러 끌어도 셀 전체가 움직입니다' : '객체 이동: 누른 객체(와 그 위에 놓인 것)만 움직입니다 · 셀 베이스를 끌면 베이스만'); }; setMove(MOVE.mode);
   const topOf = id => { const doc = ED.machine.doc; let n = doc.nodes.find(x => x.id === id); while (n && n.parent) { const p = doc.nodes.find(x => x.id === n.parent); if (!p) break; n = p; } return n ? n.id : id; };
   // a cell's base plate: a top-level block carrying most of the machine (half of the blocks or more)
   const isCellRoot = id => { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n || n.parent) return false; const k = descendants(doc, id).length; return k >= 3 && k >= (doc.nodes.length - 1) / 2; };
