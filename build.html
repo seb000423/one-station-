@@ -264,7 +264,7 @@ tr.xtra td{color:var(--dim)}
       <div class="views" id="views"><button class="chip" data-v="fit">전체 보기</button><button class="chip" data-v="sel">선택 보기</button><button class="chip" id="originChip" title="설비 원점 보기 · 바닥면 중심, 공장에 놓을 때 기준점 (X = 투입 → 배출)">원점</button><button class="chip" data-v="xray" id="xrayChip" title="선으로 투시해서 보기 (X)">X-RAY</button><button class="chip" id="chkChip" hidden title="이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침을 검사합니다">설계 검사 ✓</button><button class="chip" id="olBtn" title="이름으로 골라 선택 (L) · 같은 자리를 다시 누르면 뒤 객체">객체 목록 ▾</button></div>
       <div class="objlist" id="objList" hidden><input id="olQ" placeholder="이름·코드로 찾기 (Enter = 첫 번째)"><div id="olList"></div><small>Shift+클릭 = 여러 개 · 화면에서 같은 자리를 다시 누르면 뒤 객체가 골라집니다</small></div>
       <div class="chips"><div id="chipCount"></div><div id="chipOrigin"></div></div>
-      <div class="objlist chklist" id="chkList" hidden><h4>설계 검사 · 실제 라인에서 안 되는 것</h4><div id="chkRows"></div><small>● 고쳐야 함 · ▲ 확인 필요 · 줄을 누르면 해당 객체를 고르고, 3D에는 빨강·노랑 고리로 표시됩니다</small></div>
+      <div class="objlist chklist" id="chkList" hidden><h4 id="chkTitle">설계 검사 · 실제 라인에서 안 되는 것</h4><div id="chkRows"></div><small>● 고쳐야 함 · ▲ 확인 필요 · 줄을 누르면 해당 객체를 고르고, 3D에는 빨강·노랑 고리로 표시됩니다</small></div>
       <div class="toast" id="toast" hidden></div>
     </div>
     <aside class="r"><div id="props"></div></aside>

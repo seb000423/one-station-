@@ -646,14 +646,25 @@
     const m = C.findMounts(ref && ref.some(r => r.id === n.id) ? ref.map(toPart).filter(r => parts.some(q => q.id === r.id)) : parts).get(n.id), h = m && m.host && doc.nodes.find(x => x.id === m.host);
     const cls = C.CLASSES.find(c => c.cls === me.cls), cap = C.hostCap(me.cls);
     return { role: C.ROLE_LABEL[me.role], cls: cls ? cls.label : '기타', host: h ? `${h.name} ${m.rel === 'top' ? '윗면' : m.rel === 'side' ? '옆면' : '안'} · ${C.MOUNT_LABEL[C.mountOf(me.cls, m.rel === 'top' ? 'top' : m.rel === 'side' ? 'side' : 'inside')]}` : `바닥 · ${C.MOUNT_LABEL[C.mountOf(me.cls, 'floor')]}`, carries: [cap.top && '윗면', cap.side && '옆면'].filter(Boolean).join(' · ') || '없음', kids: doc.nodes.filter(x => x.parent === n.id).length }; }
+  /** Factory layout rules F1–F6 on the machine cells (area rectangles, ports, flows) of the factory document. */
+  function factoryIssues(doc) { const items = factoryItems(doc).filter(it => it.path === 'machines'), cells = [];
+    for (const it of items) { const ip = it.item.params || {}, ldoc = it.local && SCN.localDoc(it.local), P = SCN.instancePorts(it); let A;
+      if (ldoc) A = SCN.cellArea(ldoc, ip); else { const sz = (it.def && L.FACTORY[it.def]?.size) || [2400, 1200]; A = { w: sz[0] + 400, d: sz[1] + 400, x: 0, y: 0 }; }
+      const t = it.item.transform, r = (t.rotation[2] || 0) * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r);
+      cells.push({ id: it.id, name: itemCode(it) || itemName(it), c: [t.position[0] + A.x * cs - A.y * sn, t.position[1] + A.x * sn + A.y * cs], size: [A.w, A.d], yaw: t.rotation[2] || 0, inlet: P && P.inlet, outlet: P && P.outlet, dir: P && P.dir }); }
+    const aisles = doc.markings.filter(m => m.kind === 'aisle' && m.polygon && m.polygon.length >= 3).map(m => ({ id: m.id, name: m.name || '', poly: m.polygon }));
+    const slab = doc.building.slabs[0] && doc.building.slabs[0].polygon && doc.building.slabs[0].polygon.length >= 3 ? doc.building.slabs[0].polygon : null;
+    return C.checkLayout(cells, doc.flows, { gap: 600, aisles, slab }).map(it => { if (!it.fix) return it; const moves = it.fix.moves;
+      return Object.assign(it, { fix: { label: it.fix.label, run: () => { for (const m of moves) for (const id of [m.id, ...cellParts(m.id)]) exec('move', { id, by: [m.by[0], m.by[1]] }, true); autoLink(moves.map(m => m.id)); } } }); }); }
   const chkG = new T.Group(); ov.add(chkG); let issues = [];
   const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
-  function updateCheck() { const on = tab === 'machine' && mode !== 'run'; issues = on ? designIssues(ED.machine.doc) : []; chkG.clear();
+  function updateCheck() { const on = mode !== 'run'; issues = !on ? [] : tab === 'machine' ? designIssues(ED.machine.doc) : factoryIssues(ED.factory.doc); chkG.clear();
     for (const it of issues) { const m = new T.Mesh(chkGeo, chkMat[it.lv]), p = toS(it.at); m.position.set(p.x, p.y + 0.015, p.z); m.renderOrder = 10; chkG.add(m); }
-    if (!on) $('chkList').hidden = true; // the check is a Machine Builder tool: its list closes in Factory Builder and in 동작 시험
-    const b = $('chkChip'), ne = issues.filter(i => i.lv === 'err').length; b.hidden = !on; b.textContent = issues.length ? `설계 검사 ⚠ ${issues.length}` : '설계 검사 ✓'; b.classList.toggle('bad', ne > 0); b.classList.toggle('warn', !ne && issues.length > 0);
+    if (!on) $('chkList').hidden = true; // the list closes in 동작 시험
+    $('chkTitle').textContent = tab === 'machine' ? '설계 검사 · 실제 라인에서 안 되는 것' : '배치 검사 · 공장에서 안 되는 것 (F1 겹침 · F2 간격 600 mm · F3 통로 · F4 바닥 · F5 흐름 방향 · F6 흐름 경로)';
+    const b = $('chkChip'), ne = issues.filter(i => i.lv === 'err').length; b.hidden = !on; const nm = tab === 'machine' ? '설계 검사' : '배치 검사'; b.textContent = issues.length ? `${nm} ⚠ ${issues.length}` : `${nm} ✓`; b.title = tab === 'machine' ? '이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침과 설계 구조 규칙 R1~R10을 검사합니다' : '셀 겹침 · 간격 600 mm · 통로 · 바닥 · 흐름 방향·길이·경로 (F1~F6)를 검사합니다'; b.classList.toggle('bad', ne > 0); b.classList.toggle('warn', !ne && issues.length > 0);
     if (!$('chkList').hidden) drawCheck(); }
-  function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침과 설계 구조 규칙 R1~R10 (받침·올리기·결합·겹침·로봇 반경·작업자 자리·짝 설비·통로·경광등·작업 칸)을 봤습니다</p>'; }
+  function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : (tab === 'machine' ? '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침과 설계 구조 규칙 R1~R10 (받침·올리기·결합·겹침·로봇 반경·작업자 자리·짝 설비·통로·경광등·작업 칸)을 봤습니다</p>' : '<p class="ok">문제가 없습니다 · 셀 겹침, 셀 사이 600 mm, 통로 침범, 바닥 밖, 흐름 방향·길이, 흐름이 다른 셀을 가로지르는지 봤습니다</p>'); }
   $('chkChip').onclick = () => { const on = $('chkList').hidden; $('chkList').hidden = !on; if (on) { $('objList').hidden = true; drawCheck(); } };
   $('chkRows').onclick = e => { const f = e.target.closest('[data-cf]'); if (f) { const it = issues[+f.dataset.cf]; if (it?.fix) { ed().batch('design fix', () => it.fix.run()); refresh(); toast(`고쳤습니다 · ${it.fix.label}`); } return; }
     const r = e.target.closest('[data-ci]'); if (!r) return; const it = issues[+r.dataset.ci]; if (!it) return; select(it.ids[0], true); if (it.ids.length > 1) { multi = new Set(it.ids); drawTree(); updateSelMark(); } };
