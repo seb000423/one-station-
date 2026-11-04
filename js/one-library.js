@@ -322,20 +322,20 @@
   const out = (tag, type = 'bool', binding) => ({ tag, dir: 'out', type, ...(binding ? { binding } : {}) });
   const inn = (tag, type = 'bool', binding) => ({ tag, dir: 'in', type, ...(binding ? { binding } : {}) });
 
-  bdef('frame', { name: '프레임 (테이블)', cat: 'structure', code: 'FR', params: { w: 1200, d: 800, h: 850 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)],
+  bdef('frame', { cls: 'frame', name: '프레임 (테이블)', cat: 'structure', code: 'FR', params: { w: 1200, d: 800, h: 850 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)],
     top: p => mm(p.h), heightKey: 'h', build: p => { const g = new T.Group(); legs(g, mm(p.w), mm(p.d), mm(p.h) - 0.03); bx(g, 'body', mm(p.w), 0.03, mm(p.d), 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.04, mm(p.d) - 0.1, 0, 0.12); return g; } });
-  bdef('pedestal', { name: '로봇 단상 (받침대)', cat: 'structure', code: 'PD', params: { w: 700, d: 700, h: 600 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)], heightKey: 'h',
+  bdef('pedestal', { cls: 'frame', name: '로봇 단상 (받침대)', cat: 'structure', code: 'PD', params: { w: 700, d: 700, h: 600 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이', 'mm', 10)], heightKey: 'h',
     top: p => mm(p.h), build: p => { const g = new T.Group(), w = mm(p.w), d = mm(p.d), h = mm(p.h); bx(g, 'frame', w, 0.03, d); bx(g, 'body', w * 0.7, Math.max(0.02, h - 0.06), d * 0.7, 0, 0.03); bx(g, 'light', w * 0.85, 0.03, d * 0.85, 0, h - 0.03); return g; } });
   bdef('base-plate', { name: '베이스 플레이트', cat: 'structure', code: 'BP', params: { w: 800, d: 600, t: 25 }, fields: [num('w', '가로'), num('d', '세로'), num('t', '두께', 'mm', 5)], onTop: true,
     top: p => mm(p.t), build: p => { const g = new T.Group(); bx(g, 'steel', mm(p.w), mm(p.t), mm(p.d)); return g; } });
   bdef('post', { name: '기둥 프로파일', cat: 'structure', code: 'PT', params: { h: 1200, s: 60 }, fields: [num('h', '높이', 'mm', 10), num('s', '단면', 'mm', 5)], onTop: true,
     top: p => mm(p.h), build: p => { const g = new T.Group(); bx(g, 'frame', mm(p.s), mm(p.h), mm(p.s)); return g; } });
-  bdef('cover', { name: '커버·안전 가드', cat: 'structure', code: 'GD', params: { w: 1200, h: 1200 }, fields: [num('w', '가로'), num('h', '높이')], onTop: true,
+  bdef('cover', { cls: 'guard', name: '커버·안전 가드', cat: 'structure', code: 'GD', params: { w: 1200, h: 1200 }, fields: [num('w', '가로'), num('h', '높이')], onTop: true,
     build: p => { const g = new T.Group(); bx(g, 'glass', mm(p.w), mm(p.h), 0.01); bx(g, 'frame', mm(p.w), 0.03, 0.03, 0, mm(p.h) - 0.03); bx(g, 'frame', mm(p.w), 0.03, 0.03); for (const s of [-1, 1]) bx(g, 'frame', 0.03, mm(p.h), 0.03, s * mm(p.w) / 2); return g; } });
-  bdef('control-cabinet', { name: '제어반 외함', cat: 'structure', code: 'CP', params: { w: 600, d: 400, h: 1800 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이')], build: p => cabinet(mm(p.w), mm(p.d), mm(p.h)) });
-  bdef('op-panel', { name: 'OP 조작반', cat: 'structure', code: 'OP', build: () => opPanel(),
+  bdef('control-cabinet', { cls: 'control', name: '제어반 외함', cat: 'structure', code: 'CP', params: { w: 600, d: 400, h: 1800 }, fields: [num('w', '가로'), num('d', '세로'), num('h', '높이')], build: p => cabinet(mm(p.w), mm(p.d), mm(p.h)) });
+  bdef('op-panel', { cls: 'monitor', name: 'OP 조작반', cat: 'structure', code: 'OP', build: () => opPanel(),
     io: P => [inn(`${P}_START_PB`), inn(`${P}_STOP_PB`), inn(`${P}_ESTOP`)] });
-  bdef('tower-lamp', { name: '타워램프', cat: 'structure', code: 'TL', onTop: true, build: () => { const g = new T.Group(); cy(g, 'frame', 0.012, 0.3); lampStack(g, 0, 0.3, 0, 1.2); return g; },
+  bdef('tower-lamp', { cls: 'lamp', name: '타워램프', cat: 'structure', code: 'TL', onTop: true, build: () => { const g = new T.Group(); cy(g, 'frame', 0.012, 0.3); lampStack(g, 0, 0.3, 0, 1.2); return g; },
     io: P => [out(`${P}_RED`), out(`${P}_YEL`), out(`${P}_GRN`)],
     pose: (g, p, v, tag, P) => { const set = (n, on, role) => { const m = g.getObjectByName(n); if (m) m.material = on ? mat(role) : mat('dark'); };
       set('lamp_red', tag(`${P}_RED`), 'glowR'); set('lamp_yel', tag(`${P}_YEL`), 'glowA'); set('lamp_grn', tag(`${P}_GRN`), 'glowG'); } });
@@ -409,28 +409,28 @@
     io: P => [out(`${P}_SERVO_ON`), out(`${P}_POS`, 'real', { kind: 'joint', target: `${P}_X` }), inn(`${P}_INPOS`, 'bool', { kind: 'sensor', target: `${P}_X:target` }), inn(`${P}_ALARM`)],
     build: p => { const g = new T.Group(), L = mm(p.stroke) + 0.3; bx(g, 'body', L, 0.08, 0.12); bx(g, 'dark', 0.12, 0.1, 0.1, -L / 2 - 0.06, 0.01); const c = grp(g, 'carriage', -mm(p.stroke) / 2, 0.08); bx(c, 'light', 0.18, 0.04, 0.16); return g; },
     pose: (g, p, v) => { const c = g.getObjectByName('carriage'); if (c) c.position.x = -mm(p.stroke) / 2 + mm(v.X || 0); } });
-  bdef('rotary-table', { name: '회전 테이블 (인덱스)', cat: 'electric', code: 'RT', params: { d: 800, stations: 4 }, fields: [num('d', '지름', 'mm', 10), num('stations', '분할 수', '개', 1, 2)], onTop: true,
+  bdef('rotary-table', { cls: 'rotary', name: '회전 테이블 (인덱스)', cat: 'electric', code: 'RT', params: { d: 800, stations: 4 }, fields: [num('d', '지름', 'mm', 10), num('stations', '분할 수', '개', 1, 2)], onTop: true,
     top: () => 0.25, joints: (P) => [J(`${P}_R`, 'rot', [0, 0, 1], 'position', 0, 360, 90, 360)],
     io: P => [out(`${P}_INDEX`, 'real', { kind: 'joint', target: `${P}_R` }), inn(`${P}_INPOS`, 'bool', { kind: 'sensor', target: `${P}_R:target` })],
     build: p => { const g = new T.Group(); cy(g, 'frame', 0.15, 0.2); const t = grp(g, 'disk', 0, 0.2); cy(t, 'body', mm(p.d) / 2, 0.05, 0, 0, 0, 'y', 40); for (let i = 0; i < (p.stations | 0); i++) { const a = (i / p.stations) * Math.PI * 2; bx(t, 'steel', 0.12, 0.03, 0.12, Math.cos(a) * mm(p.d) * 0.35, 0.05, Math.sin(a) * mm(p.d) * 0.35); } return g; },
     pose: (g, p, v) => { const t = g.getObjectByName('disk'); if (t) t.rotation.y = (v.R || 0) * Math.PI / 180; } });
 
   const robotIo = P => [out(`${P}_START`), out(`${P}_PROG`, 'int'), inn(`${P}_BUSY`, 'bool', { kind: 'process', target: `${P}_START` }), inn(`${P}_DONE`, 'bool', { kind: 'process', target: `${P}_START` })];
-  bdef('robot-6axis', { name: '6축 다관절 로봇', cat: 'robot', code: 'RB', onTop: true, params: { reach: 1200, payload: 10, cycle: 4 }, fields: [num('reach', '도달 거리', 'mm', 50), num('payload', '가반 중량', 'kg', 1), num('cycle', '동작 시간', 's', 0.5)],
+  bdef('robot-6axis', { cls: 'robot', name: '6축 다관절 로봇', cat: 'robot', code: 'RB', onTop: true, params: { reach: 1200, payload: 10, cycle: 4 }, fields: [num('reach', '도달 거리', 'mm', 50), num('payload', '가반 중량', 'kg', 1), num('cycle', '동작 시간', 's', 0.5)],
     joints: (P) => [J(`${P}_J1`, 'rot', [0, 0, 1], 'position', -170, 170, 180, 720)], io: robotIo,
     build: p => { const g = new T.Group(); arm(g, mm(p.reach)); return g; },
     pose: (g, p, v) => { const j1 = g.getObjectByName('j1'), j2 = g.getObjectByName('j2'), j3 = g.getObjectByName('j3'); const k = v.RUN || 0;
       if (j1) j1.rotation.y = Math.sin(k * Math.PI) * 1.4; if (j2) j2.rotation.z = -0.35 - Math.sin(k * Math.PI) * 0.4; if (j3) j3.rotation.z = 0.2 + Math.sin(k * Math.PI) * 0.5; } });
-  bdef('scara', { name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
+  bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
     io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
     pose: (g, p, v) => { const k = v.RUN || 0, a1 = g.getObjectByName('j1'), a2 = g.getObjectByName('j2'); if (a1) a1.rotation.y = Math.sin(k * Math.PI) * 1.2; if (a2) a2.rotation.y = -Math.sin(k * Math.PI) * 1.6; } });
 
   const sensorBuild = (role) => () => { const g = new T.Group(); bx(g, 'frame', 0.02, 0.08, 0.02); bx(g, role, 0.03, 0.04, 0.02, 0, 0.08); return g; };
-  bdef('photo-sensor', { name: '광전 센서', cat: 'sensor', code: 'PS', onTop: true, params: { range: 500 }, fields: [num('range', '감지 거리', 'mm', 10)], sensor: true,
+  bdef('photo-sensor', { cls: 'sensor', name: '광전 센서', cat: 'sensor', code: 'PS', onTop: true, params: { range: 500 }, fields: [num('range', '감지 거리', 'mm', 10)], sensor: true,
     io: P => [inn(`${P}_ON`, 'bool', { kind: 'sensor', target: 'work' })], build: sensorBuild('dark') });
-  bdef('proximity-sensor', { name: '근접 센서', cat: 'sensor', code: 'PX', onTop: true, params: { range: 8 }, fields: [num('range', '감지 거리', 'mm', 1)], sensor: true,
+  bdef('proximity-sensor', { cls: 'sensor', name: '근접 센서', cat: 'sensor', code: 'PX', onTop: true, params: { range: 8 }, fields: [num('range', '감지 거리', 'mm', 1)], sensor: true,
     io: P => [inn(`${P}_ON`, 'bool', { kind: 'sensor', target: 'work' })], build: () => { const g = new T.Group(); cy(g, 'steel', 0.009, 0.06, 0, 0, 0); return g; } });
-  bdef('vision-camera', { name: '비전 카메라', cat: 'sensor', code: 'CAM', params: { h: 1200 }, fields: [num('h', '설치 높이', 'mm', 10)],
+  bdef('vision-camera', { cls: 'sensor', name: '비전 카메라', cat: 'sensor', code: 'CAM', params: { h: 1200 }, fields: [num('h', '설치 높이', 'mm', 10)],
     io: P => [out(`${P}_TRIG`), inn(`${P}_OK`, 'bool', { kind: 'process', target: `${P}_TRIG` }), inn(`${P}_NG`, 'bool', { kind: 'process', target: `${P}_TRIG` })],
     build: p => { const g = new T.Group(), h = mm(p.h); bx(g, 'frame', 0.04, h, 0.04, 0, 0, -0.25); bx(g, 'frame', 0.04, 0.04, 0.3, 0, h - 0.04, -0.1); bx(g, 'dark', 0.08, 0.1, 0.08, 0, h - 0.14, 0.02); flatRing(g, 'glowW', 0.035, 0.05, h - 0.145, 0, 0.02); return g; } });
 
@@ -561,7 +561,7 @@
     for (const f of modelListeners) f(g);
   }
   bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,
-    params: { src: '', node: '', kind: 'static', w0: 1000, d0: 1000, h0: 1000, w: 1000, d: 1000, h: 1000, cycle: 6 },
+    params: { src: '', node: '', kind: 'static', cls: '', w0: 1000, d0: 1000, h0: 1000, w: 1000, d: 1000, h: 1000, cycle: 6 },
     fields: p => [num('w', '가로', 'mm', 10, 1), num('d', '세로', 'mm', 10, 1), num('h', '높이', 'mm', 10, 1), ...(p.kind === 'robot' || p.kind === 'rotary' ? [num('cycle', p.kind === 'robot' ? '동작 시간 (속도)' : '인덱스 시간 (속도)', 's', 0.5, 0.5)] : [])],
     top: p => mm(p.h), heightKey: null,
     io: (P, p) => p.kind === 'robot' ? robotIo(P) : p.kind === 'rotary' ? procIo(P) : [],

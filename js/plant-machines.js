@@ -17,12 +17,12 @@
     const d = D[st.src], n = {}, nodes = [], io = [];
     d.parts.forEach(([node, label, kind, size, pos], i) => {
       const k = kind === 'robot' || kind === 'rotary' ? kind : 'static', code = CODE[k], tag = code + (n[code] = (n[code] || 0) + 1);
-      const params = { tag, src: st.src, node, kind: k, w0: size[0], d0: size[1], h0: size[2], w: size[0], d: size[1], h: size[2], ...(k === 'static' ? {} : { cycle: k === 'robot' ? 6 : 4 }) };
+      const params = { tag, src: st.src, node, kind: k, cls: window.OneTwin.core.classify(label, k, pos[2]).cls, w0: size[0], d0: size[1], h0: size[2], w: size[0], d: size[1], h: size[2], ...(k === 'static' ? {} : { cycle: k === 'robot' ? 6 : 4 }) };
       nodes.push({ id: `${st.src}-${String(i + 1).padStart(3, '0')}`, type: 'block', blockType: 'model-part', name: label, params, transform: { position: pos, rotation: [0, 0, 0] }, parent: null });
       io.push(...L.BLOCKS['model-part'].io(tag, params));
     });
     // 결합 (설계 구조 규칙 R3): what sits on or hangs on a part is joined to it, so it moves and rises with it
-    const C = window.OneTwin.core, mounts = C.findMounts(nodes.map(x => ({ id: x.id, name: x.name, kind: x.params.kind, size: [x.params.w, x.params.d, x.params.h], pos: x.transform.position })));
+    const C = window.OneTwin.core, mounts = C.findMounts(nodes.map(x => ({ id: x.id, name: x.name, kind: x.params.kind, cls: x.params.cls, size: [x.params.w, x.params.d, x.params.h], pos: x.transform.position })));
     for (const x of nodes) { const m = mounts.get(x.id); if (m && m.host) x.parent = m.host; }
     return S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id: st.id, name: st.name, bbox: d.size, cellFixed: false, fidelity: 'L2', version: 1 },
       card: { cycle_time: st.cycle, ok_rate: st.ok, operators: st.ops, footprint: [d.size[0], d.size[1]] }, nodes, io });
@@ -66,6 +66,11 @@
     e.exec('set_param', { id: machineId, key: 'exploded', value: true });
     return out;
   }
+  /** 기준 설비 부품: one entry per distinct object label of each station (a representative node), for the Machine Builder palette. */
+  function partsCatalog() { const out = []; for (const st of STATIONS) { const seen = new Set();
+    D[st.src].parts.forEach(([node, label, kind, size, pos], i) => { const key = label.replace(/^OP\d+ /, ''); if (seen.has(key)) return; seen.add(key);
+      const k = kind === 'robot' || kind === 'rotary' ? kind : 'static'; out.push({ key: `${st.src}:${i}`, src: st.src, node, kind: k, name: key, station: st.name, size, cls: window.OneTwin.core.classify(label, k, pos[2]).cls }); }); }
+    return out; }
   const splittable = doc => !!doc && doc.nodes.length > 0 && doc.nodes.every(n => n.blockType === 'model-part');
-  window.OnePlant = { STATIONS, withPlant, builtins, defaultFactory, explode, splittable, size: src => D[src].size };
+  window.OnePlant = { STATIONS, withPlant, builtins, defaultFactory, explode, splittable, partsCatalog, size: src => D[src].size };
 })();

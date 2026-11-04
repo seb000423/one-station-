@@ -217,6 +217,7 @@
       // 내 설비 불러오기: open a saved machine (any version) to keep editing it
       const mineM = Object.entries(lib()).map(([id, m]) => ({ key: 'o:' + id, mine: id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: '눌러서 불러오기 · ⋯ = 버전 고르기·이름·복제·삭제' }));
       sec('open', '내 설비 불러오기 (저장한 설비 편집)', mineM);
+      sec('parts', '기준 설비 부품 (협력사 4개 설비)', window.OnePlant.partsCatalog().map(e => ({ key: 'p:' + e.key, name: e.name, code: e.station.split('.')[0] + '번', why: `${e.station} · ${e.size.join('×')} mm · 자리 규칙대로 받침에 붙습니다` })));
       for (const c of L.MACHINE_CATS) { sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
         if (c.id === 'transport') sec('shapes', '컨베이어 레이아웃 (전환·회송·2단)', Object.entries(SHAPES).map(([id, x]) => ({ key: 's:' + id, name: x.name, code: x.code, why: x.why }))); }
     }
@@ -282,11 +283,16 @@
     const w0 = want || [0, 0]; if (clear(w0[0], w0[1])) return w0;
     const step = 50, out = []; for (let x = -BW / 2 + fw / 2; x <= BW / 2 - fw / 2 + 1; x += step) for (let y = -BD / 2 + fd / 2; y <= BD / 2 - fd / 2 + 1; y += step) out.push([x, y]);
     out.sort((a, b) => Math.hypot(a[0] - w0[0], a[1] - w0[1]) - Math.hypot(b[0] - w0[0], b[1] - w0[1])); return out.find(q => clear(q[0], q[1])) || null; }
-  function addBlock(id, at, onto, yaw = 0, over) {
+  /** A station part (기준 설비 부품) put in its slot: a 모델 객체 block joined to the host the slot rules chose. */
+  function addPart(e, r) { const doc = ed().doc, code = e.kind === 'robot' ? 'RB' : e.kind === 'rotary' ? 'RT' : 'P', P = nextCode(doc, code), params = Object.assign({ tag: P }, partParams(e)), d = L.BLOCKS['model-part'];
+    const nid = exec('add_block', { blockType: 'model-part', name: `${e.name} ${P.replace(/^\D+/, '')}`, parent: r.host, position: r.pos, params, joints: [], io: d.io(P, params) });
+    if (nid && r.yaw) exec('move', { id: nid, rotation: [0, 0, r.yaw] }, true); if (nid) { select(nid); toast(`${e.name}: ${r.host ? (doc.nodes.find(x => x.id === r.host)?.name || '받침') + '에 결합' : '바닥에 놓음'}`); } return nid; }
+  function addBlock(id, at, onto, yaw = 0, over, slot) {
     const d = L.BLOCKS[id], doc = ed().doc, P = nextCode(doc, d.code), params = Object.assign({ tag: P }, JSON.parse(JSON.stringify(d.params)), over || {});
     const base = at ? (d.onTop && onto ? doc.nodes.find(n => n.id === onto) : null) : sel && doc.nodes.find(n => n.id === sel);
     let pos, parent = null;
-    if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null;
+    if (slot) { pos = [at[0], at[1], slot.z]; parent = slot.parent; }
+    else if (at) { pos = [at[0], at[1], base ? nodeTop(base) : 0]; parent = base ? base.id : null;
       if (base && !d.work) { const l = storedToLocal(base, at), f = freeSlot(base, d, l); if (!f) { toast(`${base.params.tag || ''} 위에 ${d.name}을(를) 더 놓을 자리가 없습니다`, true); return null; }
         if (Math.hypot(f[0] - l[0], f[1] - l[1]) > 1) { pos = localToStored(base, f[0], f[1], nodeTop(base)); toast('같은 자리에 이미 있어 옆 빈자리에 놓았습니다'); } } }
     else if (d.onTop && base) { const bd = nodeDef(base), bpar = Object.assign({}, bd?.params, base.params); parent = base.id; yaw = yaw || base.transform.rotation[2];
@@ -327,6 +333,7 @@
     let o = null;
     try { if (k === 's') { o = new T.Group(); for (const pc of SHAPES[id].pieces) { const b = L.buildBlock(pc.t, Object.assign({}, L.BLOCKS[pc.t].params, pc.p)); placeObj(b, [pc.x, pc.y, 0], pc.yaw); o.add(b); } }
       else if (k === 'b') o = L.buildBlock(id, L.BLOCKS[id].params);
+      else if (k === 'p') { const e = partEntry(id); o = L.buildBlock('model-part', partParams(e)); }
       else if (k === 'l') o = buildLocalMachine({ id, v: Math.max(...Object.keys(lib()[id].versions).map(Number)) });
       else { const d = L.FACTORY[id], p = d.params || {};
         o = d.kind.cmd === 'draw_wall' ? L.special.wall((p.length || 6000) / 1000, 4, 0.2) : d.kind.cmd === 'add_column' ? L.special.column({ size: p.size || 500, h: 6 })
@@ -337,13 +344,32 @@
     tmpBox.setFromObject(g); const sz = tmpBox.getSize(new T.Vector3()); ring.scale.setScalar(Math.max(0.3, Math.hypot(sz.x, sz.z) / 2 + 0.1)); ring.position.y = 0.004; ring.raycast = () => {}; g.add(ring);
     return g; }
   function startPlace(k, id) { endPlace(); if (mode === 'run') setMode('edit'); if (xray) setXray(false);
-    const name = k === 's' ? SHAPES[id].name : k === 'b' ? L.BLOCKS[id].name : k === 'l' ? lib()[id]?.name : L.FACTORY[id].name;
+    const name = k === 's' ? SHAPES[id].name : k === 'b' ? L.BLOCKS[id].name : k === 'l' ? lib()[id]?.name : k === 'p' ? partEntry(id).name : L.FACTORY[id].name;
     placing = { k, id, name, yaw: 0, at: null, onto: null, obj: previewOf(k, id) }; placing.obj.visible = false; ov.add(placing.obj);
     document.querySelectorAll('#pal [data-add]').forEach(b => b.classList.toggle('placing', b.dataset.add === k + ':' + id));
     renderer.domElement.style.cursor = 'copy'; updateHint(); toast(`${name}: 놓을 곳을 누르세요 · R 회전 · Esc 취소`); }
   function endPlace() { if (!placing) return; ov.remove(placing.obj); placing = null; renderer.domElement.style.cursor = ''; document.querySelectorAll('#pal .placing').forEach(b => b.classList.remove('placing')); updateHint(); }
+  /* 자리 규칙 (slot rules, packages/core structure.ts): a station part or a block with a class is put where the pointer
+     hits a surface: an object's top, a side face, its inside, or the floor. placePart snaps it to that slot, joins it
+     to the host, or refuses with the reason. */
+  const partEntry = key => window.OnePlant.partsCatalog().find(e => e.key === key);
+  const partParams = e => ({ src: e.src, node: e.node, kind: e.kind, cls: e.cls, w0: e.size[0], d0: e.size[1], h0: e.size[2], w: e.size[0], d: e.size[1], h: e.size[2], ...(e.kind === 'static' ? {} : { cycle: e.kind === 'robot' ? 6 : 4 }) });
+  const slotParts = (doc, skip = new Set()) => doc.nodes.filter(n => !skip.has(n.id) && (n.blockType === 'model-part' || nodeDef(n)?.cls)).map(toPart);
+  const blockPart = (id, yaw) => { const d = L.BLOCKS[id], p = d.params, w = +(p.w || p.s || p.d || 400), dd = +(p.d || p.s || p.w || 400); return { id: 'new', name: d.name, cls: d.cls, size: [w, dd, Math.max(100, Math.round(d.top(p) * 1000)) || 300], pos: [0, 0, 0], yaw }; };
+  const usesSlots = (k, id) => tab === 'machine' && (k === 'p' || (k === 'b' && !!L.BLOCKS[id].cls));
+  function slotUnder(skip) {
+    const hits = ray.intersectObjects(root.children, true).filter(h => h.face && h.object.visible && !h.object.isPoints && h.object.userData.pick && !isSlab(h.object.userData.pick) && !skip.has(h.object.userData.pick));
+    const h = hits[0]; if (!h) { plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return null; const p = fromS(hit); return { at: [S.snap(p[0], 5), S.snap(p[1], 5), 0], face: 'floor', host: null }; }
+    const nrm = h.face.normal.clone().transformDirection(h.object.matrixWorld), p = fromS(h.point), id = h.object.userData.pick, node = ED.machine.doc.nodes.find(x => x.id === id);
+    if (!node) return null; const top = nodeTop(node), face = nrm.y > 0.7 ? (p[2] < top - 60 ? 'inside' : 'top') : Math.abs(nrm.y) < 0.4 ? 'side' : 'inside';
+    return { at: [S.snap(p[0], 5), S.snap(p[1], 5), Math.round(p[2])], face, host: id }; }
+  const SLOT_KO = { floor: '바닥', top: '윗면', side: '옆면', inside: '안', front: '앞' };
+  function slotHint(r, sl, name) { $('hint').textContent = r.ok ? `${name}: ${sl.host ? `${ED.machine.doc.nodes.find(x => x.id === sl.host)?.name || ''} ${SLOT_KO[r.rel === 'in' ? 'inside' : sl.face]}에` : '바닥에'} 놓습니다${r.why ? ` · ▲ ${r.why}` : ''} · 누르면 결합` : `● ${r.why}`; }
   function trackPlace(e) {
     setNdc(e); plane.constant = 0; let onto = null, z = 0;
+    if (usesSlots(placing.k, placing.id)) { const sl = slotUnder(new Set()); if (!sl) return; const part = placing.k === 'p' ? Object.assign({ id: 'new', pos: [0, 0, 0], yaw: placing.yaw }, (e => ({ name: e.name, kind: e.kind, cls: e.cls, size: e.size }))(partEntry(placing.id))) : blockPart(placing.id, placing.yaw);
+      const r = C.placePart(slotParts(ED.machine.doc), part, sl); placing.slot = r; placing.at = r.pos.slice(0, 2); placing.obj.visible = true; placeObj(placing.obj, r.pos, r.yaw);
+      placing.obj.traverse(m => { if (m.isMesh && m.material) m.material.color.setHex(r.ok ? (m.userData.c0 ?? (m.userData.c0 = m.material.color.getHex())) : 0xff4040); }); slotHint(r, sl, placing.name); return; }
     if (placing.k === 'b' && L.BLOCKS[placing.id].onTop) { const id = pickExact(); const n = id && ED.machine.doc.nodes.find(x => x.id === id); if (n) { onto = n.id; z = nodeTop(n) / 1000; } }
     if (!ray.ray.intersectPlane(plane, hit)) return; const st = tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50);
     let p = fromS(hit); p = [S.snap(p[0], st), S.snap(p[1], st)];
@@ -351,6 +377,9 @@
     else { const c = cellOf(); if (c) p = [Math.min(c[0] / 2, Math.max(-c[0] / 2, p[0])), Math.min(c[1] / 2, Math.max(-c[1] / 2, p[1]))]; }
     placing.at = p; placing.onto = onto; placing.obj.visible = true; placeObj(placing.obj, [p[0], p[1], z * 1000], placing.yaw); }
   function commitPlace(keep) { const P = placing; if (!P || !P.at) return; const { k, id, at, onto, yaw } = P;
+    if (P.slot) { const r = P.slot; if (!r.ok) { toast(`놓을 수 없습니다 · ${r.why}`, true); return; } if (!keep) endPlace();
+      ed().batch('add', () => { const nid = k === 'p' ? addPart(partEntry(id), r) : addBlock(id, r.pos.slice(0, 2), null, r.yaw, undefined, { z: r.pos[2], parent: r.host });
+        if (nid && r.why) toast(`▲ ${r.why}`); }); return; }
     if (!keep) endPlace();
     ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else if (k === 's') addShape(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
   // drag straight from the palette onto the canvas works too
@@ -429,8 +458,8 @@
         const tags = doc.io.filter(t => t.tag.startsWith(P + '_')), joints = doc.joints.filter(j => j.node === n.id);
         html = `<div class="sec"><h2><span><b style="font-family:var(--mono)">${esc(P)}</b> ${esc(d.name || n.blockType)}</span></h2><div class="props"><span class="k">이름</span><input data-k="name" value="${esc(n.name)}">`;
         for (const f of typeof d.fields === 'function' ? d.fields(Object.assign({}, d.params, n.params)) : d.fields) html += field(f, n.params[f.key] ?? d.params[f.key], 'p.' + f.key);
-        const so = n.blockType === 'model-part' && structOf(doc, n);
-        if (so) html += `<span class="k">구조</span><span class="v" style="font-family:var(--sans)">${esc(so.cls)} · ${esc(so.role)}</span><span class="k">받침</span><span class="v" style="font-family:var(--sans)">${esc(so.host)}</span><span class="k">받아 주는 면</span><span class="v" style="font-family:var(--sans)">${esc(so.carries)}${so.kids ? ` · 결합 ${so.kids}개` : ''}</span>`;
+        const so = n.blockType === 'model-part' && tab === 'machine' && structOf(doc, n);
+        if (so) html += `<span class="k">분류</span><select data-k="p.cls">${C.CLASSES.map(c => `<option value="${c.cls}"${(n.params.cls || '') === c.cls ? ' selected' : ''}>${esc(c.label)} · ${esc(C.ROLE_LABEL[c.role])}</option>`).join('')}<option value="part"${!n.params.cls || n.params.cls === 'part' ? ' selected' : ''}>기타 · 바닥에 섬</option></select><span class="k">구조</span><span class="v" style="font-family:var(--sans)">${esc(so.role)} · 자리 ${C.needsOf(n.params.cls || undefined).map(k => ({ floor: '바닥', top: '윗면', side: '옆면', inside: '안', front: '앞' })[k]).join('·')}</span><span class="k">받침</span><span class="v" style="font-family:var(--sans)">${esc(so.host)}</span><span class="k">받아 주는 면</span><span class="v" style="font-family:var(--sans)">${esc(so.carries)}${so.kids ? ` · 결합 ${so.kids}개` : ''}</span>`;
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
@@ -603,17 +632,17 @@
       const fp = w => { const p = P(w), r = w.transform.rotation[2] * Math.PI / 180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r)); return [(+p.w * c + +p.d * s) / 2, (+p.w * s + +p.d * c) / 2]; }, ea = fp(a), eb = fp(b), pa = a.transform.position, pb = b.transform.position;
       if (Math.abs(pa[0] - pb[0]) < ea[0] + eb[0] - 1 && Math.abs(pa[1] - pb[1]) < ea[1] + eb[1] - 1 && Math.abs(pa[2] - pb[2]) < 1) out.push({ lv: 'err', ids: [a.id, b.id], at: [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, pa[2]], txt: `${nodeCode(a) || a.name} · ${nodeCode(b) || b.name} 워크가 서로 겹쳐 있습니다`, fix: null }); }
     // 설계 구조 규칙 (packages/core/src/structure.ts) on the model objects: 받침 · 올리기 · 결합 · 겹침 · 로봇 반경 · 작업자 자리 · 짝 설비 · 통로 · 경광등 · 작업 칸
-    const mp = doc.nodes.filter(n => n.blockType === 'model-part');
+    const mp = doc.nodes.filter(n => n.blockType === 'model-part' || nodeDef(n)?.cls);
     if (mp.length) { const ref = structRef(doc), RN = Object.fromEntries(C.STRUCTURE_RULES.map(r => [r.id, r.name]));
       for (const it of C.checkStructure(mp.map(toPart), { ref: ref && ref.map(toPart), area: doc.meta.cellFixed ? doc.meta.bbox.slice(0, 2) : null }))
         out.push({ lv: it.lv, ids: it.ids, at: it.at, txt: `${it.rule} ${RN[it.rule]} · ${it.txt}`, fix: it.fix ? { label: it.fix.label, run: () => it.fix.moves.forEach(m => moveNode(m.id, m.by)) } : null }); }
     return out; }
-  const toPart = n => ({ id: n.id, name: n.name, kind: n.params.kind, size: [+n.params.w || 1, +n.params.d || 1, +n.params.h || 1], pos: n.transform.position.slice(), yaw: n.transform.rotation[2] || 0 });
+  const toPart = n => ({ id: n.id, name: n.name, kind: n.params.kind, cls: n.params.cls || nodeDef(n)?.cls || undefined, size: [+n.params.w || 1, +n.params.d || 1, +n.params.h || 1], pos: n.transform.position.slice(), yaw: n.transform.rotation[2] || 0 });
   /** The reference the structure rules compare with: the built-in station v1, else the first saved version of this machine. */
   function structRef(doc) { const id = doc.meta.id, b = window.OnePlant?.builtins()[id], m = b || lib()[id], v = m && (m.versions[1] || m.versions[Object.keys(m.versions).sort((a, c) => a - c)[0]]);
     return v ? v.nodes.filter(n => n.blockType === 'model-part') : null; }
   /** Role and host of a model object (for the properties panel). */
-  function structOf(doc, n) { const mp = doc.nodes.filter(x => x.blockType === 'model-part'), ref = structRef(doc), parts = C.withRoles(mp.map(toPart)), me = parts.find(x => x.id === n.id); if (!me) return null;
+  function structOf(doc, n) { const mp = doc.nodes.filter(x => x.blockType === 'model-part' || nodeDef(x)?.cls), ref = structRef(doc), parts = C.withRoles(mp.map(toPart)), me = parts.find(x => x.id === n.id); if (!me) return null;
     const m = C.findMounts(ref && ref.some(r => r.id === n.id) ? ref.map(toPart).filter(r => parts.some(q => q.id === r.id)) : parts).get(n.id), h = m && m.host && doc.nodes.find(x => x.id === m.host);
     const cls = C.CLASSES.find(c => c.cls === me.cls), cap = C.hostCap(me.cls);
     return { role: C.ROLE_LABEL[me.role], cls: cls ? cls.label : '기타', host: h ? `${h.name} ${m.rel === 'top' ? '윗면' : m.rel === 'side' ? '옆면' : '안'}` : '바닥', carries: [cap.top && '윗면', cap.side && '옆면'].filter(Boolean).join(' · ') || '없음', kids: doc.nodes.filter(x => x.parent === n.id).length }; }
@@ -1057,6 +1086,7 @@
     plane.constant = 0; if (!ray.ray.intersectPlane(plane, hit)) return;
     const ids = group ? selIds().filter(x => !isSlab(x)) : [id], os = ids.map(x => objs.get(x)?.obj).filter(Boolean);
     drag = { drill, id, ids, os, starts: os.map(o => o.position.clone()), grab: hit.clone(), moved: false, sx: e.clientX, sy: e.clientY, armed: false }; controls.enabled = false; renderer.domElement.setPointerCapture(e.pointerId);
+    if (tab === 'machine' && ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === ids[0]); if (n && (n.blockType === 'model-part' || nodeDef(n)?.cls)) drag.slotPart = toPart(n); }
   });
   renderer.domElement.addEventListener('pointermove', e => {
     if (placing && !drag) { trackPlace(e); return; }
@@ -1064,13 +1094,22 @@
     if (!drag) return; if (!drag.armed) { if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; drag.armed = true; } setNdc(e); if (!ray.ray.intersectPlane(plane, hit)) return;
     const d = hit.clone().sub(drag.grab); const step = (tab === 'factory' ? (e.altKey ? 10 : 500) : (e.altKey ? 5 : 50)) / 1000;
     d.x = Math.round(d.x / step) * step; d.z = Math.round(d.z / step) * step; if (d.lengthSq() > 0) drag.moved = true;
+    if (tab === 'machine' && drag.ids.length === 1 && drag.slotPart) { const skip = new Set([drag.ids[0], ...descendants(ED.machine.doc, drag.ids[0]).map(k => k.id)]), sl = slotUnder(skip);
+      if (sl) { const r = C.placePart(slotParts(ED.machine.doc, skip), drag.slotPart, sl); drag.slot = r; drag.moved = true; const o = drag.os[0]; o.position.copy(toS(r.pos)); showSnap(r.ok ? { pt: r.pos, h: r.pos[2] } : null); slotHint(r, sl, drag.slotPart.name); }
+      updateSelMark(); updateEnvelope(); return; }
     if (tab === 'machine' && drag.ids.length === 1) { const n = ED.machine.doc.nodes.find(x => x.id === drag.ids[0]), by = S.sceneToStored([d.x, 0, d.z]), p = n.transform.position, sn = n && conveyorSnap(n, [p[0] + by[0], p[1] + by[1]], new Set());
       showSnap(sn); if (sn) { const s2 = toS([sn.pos[0] - p[0], sn.pos[1] - p[1], 0]); d.x = s2.x; d.z = s2.z; } }
     drag.os.forEach((o, i) => o.position.set(drag.starts[i].x + d.x, drag.starts[i].y, drag.starts[i].z + d.z)); drag.d = d; updateSelMark(); if (tab === 'machine') updateEnvelope();
   });
   const endDrag = e => {
     if (link) { endLink(e); return; }
-    if (!drag) return; showSnap(null); const { d, moved, drill } = drag; drag = null; controls.enabled = true; if (!moved || !d) { if (drill) { select(drill); toast('조각 하나만 골랐습니다 · 빈 곳을 눌렀다가 다시 누르면 라인 전체'); } return; }
+    if (!drag) return; showSnap(null); const { d, moved, drill } = drag; const slotR = drag.slot, slotId = drag.ids[0]; drag = null; controls.enabled = true; updateHint();
+    if (slotR) { const n = ED.machine.doc.nodes.find(x => x.id === slotId); if (!n) return;
+      if (!slotR.ok) { toast(`놓을 수 없습니다 · ${slotR.why}`, true); refresh(); return; }
+      const p = n.transform.position; ed().batch('move', () => { if ((n.parent || null) !== slotR.host) exec('set_parent', { id: slotId, parent: slotR.host }, true); moveNode(slotId, [slotR.pos[0] - p[0], slotR.pos[1] - p[1], slotR.pos[2] - p[2]]);
+        if (slotR.yaw !== (n.transform.rotation[2] || 0)) exec('move', { id: slotId, rotation: [0, 0, slotR.yaw] }, true); });
+      toast(slotR.host ? `${n.name}: ${ED.machine.doc.nodes.find(x => x.id === slotR.host)?.name || '받침'}에 결합${slotR.why ? ` · ▲ ${slotR.why}` : ''}` : `${n.name}: 바닥에 놓음${slotR.why ? ` · ▲ ${slotR.why}` : ''}`); return; }
+    if (!moved || !d) { if (drill) { select(drill); toast('조각 하나만 골랐습니다 · 빈 곳을 눌렀다가 다시 누르면 라인 전체'); } return; }
     const by = S.sceneToStored([d.x, 0, d.z]); moveSelBy([by[0], by[1], 0]);
   };
   // Shift + drag on an empty spot: a box; everything whose centre falls inside is selected
@@ -1408,5 +1447,5 @@
   dirty = { factory: false, machine: false };
   switchTab(tab);
   requestAnimationFrame(loop);
-  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
+  window.ONE_BUILD = { ED, stage, select, selectMany, moveSelBy, switchTab, setMode, RUN, addBlock, startPlace, commitPlace, get placing() { return placing; }, objs, camera, addShape: (id, at, yaw) => ed().batch('add', () => addShape(id, at, yaw)), joined: id => [...joinedConveyors(ED.machine.doc, [id])], issues: () => issues, get sel() { return sel; } };
 })();

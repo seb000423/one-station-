@@ -12,24 +12,26 @@
  */
 
 export type Role = 'floor' | 'top' | 'side' | 'robot' | 'seat';
-export type HostCap = { top: boolean; side: boolean };
+export type HostCap = { top: boolean; side: boolean; inside?: boolean; front?: boolean; stack?: number };
+/** 자리 (slot) kinds an object can need: the floor, a host's top plane, a side face, its inside volume, the space in front of it (a seat at a desk). */
+export type SlotKind = 'floor' | 'top' | 'side' | 'inside' | 'front';
 export interface Part { id: string; name: string; kind?: string; size: [number, number, number]; pos: [number, number, number]; yaw?: number; role?: Role; cls?: string; reach?: number }
 export interface Mount { host: string | null; rel: 'floor' | 'top' | 'side' | 'in'; dz: number; gap: number; off?: [number, number, number] }
 export interface StructureIssue { rule: string; lv: 'err' | 'warn'; ids: string[]; at: [number, number, number]; txt: string; fix?: { label: string; moves: { id: string; by: [number, number, number] }[] } }
 
 /** Object classes: label keywords (generic names, in priority order) → class, role and what it can carry. */
-export const CLASSES: { cls: string; label: string; words: string[]; role: Role; host: HostCap }[] = [
-  { cls: 'base', label: '셀 베이스', words: ['셀 베이스', '베이스', 'base'], role: 'floor', host: { top: true, side: true } },
+export const CLASSES: { cls: string; label: string; words: string[]; role: Role; host: HostCap; needs?: SlotKind[] }[] = [
+  { cls: 'base', label: '셀 베이스', words: ['셀 베이스', '베이스', 'base'], role: 'floor', host: { top: true, side: true, inside: true } },
   { cls: 'utility', label: '부대 설비', words: ['부대설비', '부대 설비', '용접 전원', '에어 필터', '컴프레서', '전원'], role: 'floor', host: { top: false, side: false } },
   { cls: 'furnace', label: '로 · 대형 장비', words: ['브레이징로', '진공로', '열처리로'], role: 'floor', host: { top: false, side: true } },
   { cls: 'rotary', label: '회전 테이블', words: ['회전 테이블', '턴테이블'], role: 'floor', host: { top: true, side: false } },
-  { cls: 'desk', label: '작업대', words: ['작업대', '테이블'], role: 'floor', host: { top: true, side: true } },
-  { cls: 'frame', label: '프레임', words: ['프레임', 'frame'], role: 'floor', host: { top: true, side: true } },
+  { cls: 'desk', label: '작업대', words: ['작업대', '테이블'], role: 'floor', host: { top: true, side: true, front: true } },
+  { cls: 'frame', label: '프레임', words: ['프레임', 'frame'], role: 'floor', host: { top: true, side: true, inside: true } },
   { cls: 'rail', label: '레일', words: ['레일', 'rail'], role: 'floor', host: { top: true, side: true } },
-  { cls: 'shelf', label: '선반', words: ['선반', '랙', 'shelf'], role: 'floor', host: { top: true, side: true } },
+  { cls: 'shelf', label: '선반', words: ['선반', '랙', 'shelf'], role: 'floor', host: { top: true, side: true, inside: true } },
   { cls: 'lamp', label: '경광등', words: ['경광등', '타워램프', 'lamp'], role: 'top', host: { top: false, side: false } },
-  { cls: 'jig', label: '지그', words: ['지그', 'jig'], role: 'top', host: { top: true, side: false } },
-  { cls: 'tray', label: '트레이', words: ['트레이', 'tray'], role: 'top', host: { top: true, side: false } },
+  { cls: 'jig', label: '지그', words: ['지그', 'jig'], role: 'top', host: { top: true, side: false }, needs: ['top', 'inside', 'floor'] },
+  { cls: 'tray', label: '트레이', words: ['트레이', 'tray'], role: 'top', host: { top: true, side: false, stack: 315 }, needs: ['top', 'inside', 'floor'] },
   { cls: 'work', label: '제품', words: ['제품', '워크', 'work'], role: 'top', host: { top: true, side: false } },
   { cls: 'dispenser', label: '디스펜서', words: ['디스펜서'], role: 'floor', host: { top: false, side: false } },
   { cls: 'control', label: '제어함', words: ['제어함', '제어반', 'control'], role: 'side', host: { top: false, side: false } },
@@ -37,11 +39,22 @@ export const CLASSES: { cls: string; label: string; words: string[]; role: Role;
   { cls: 'sensor', label: '센서', words: ['센서', 'sensor'], role: 'side', host: { top: false, side: false } },
   { cls: 'guard', label: '가림판 · 가드', words: ['가림판', '가드', 'guard'], role: 'side', host: { top: false, side: false } },
   { cls: 'aux', label: '부속 · 부대 장치', words: ['부대 장치', '부속'], role: 'side', host: { top: false, side: false } },
-  { cls: 'seat', label: '의자', words: ['의자', 'chair'], role: 'seat', host: { top: false, side: false } },
+  { cls: 'seat', label: '의자', words: ['의자', 'chair'], role: 'seat', host: { top: false, side: false }, needs: ['front', 'floor'] },
   { cls: 'robot', label: '로봇', words: ['로봇', 'robot'], role: 'robot', host: { top: false, side: false } },
 ];
 export const ROLE_LABEL: Record<Role, string> = { floor: '바닥에 섬', top: '위에 얹힘', side: '옆면에 붙음', robot: '로봇', seat: '작업자 자리' };
 const NOHOST: HostCap = { top: false, side: false };
+const NEEDS: Record<Role, SlotKind[]> = { floor: ['floor', 'inside'], top: ['top', 'inside'], side: ['side', 'inside'], robot: ['floor', 'top', 'inside'], seat: ['floor'] };
+/** Which slots an object of this class can take, best first. */
+export const needsOf = (cls?: string, role?: Role): SlotKind[] => (cls && byCls.get(cls)?.needs) || NEEDS[role || (cls && byCls.get(cls)?.role) || 'floor'];
+/** Pairs seen in the four reference stations (part class → host class, by slot): a pair outside this list is allowed with a warning. */
+export const SEEN_PAIRS: Record<SlotKind, string[]> = {
+  floor: ['*'],
+  top: ['lamp>frame', 'lamp>shelf', 'lamp>tray', 'lamp>base', 'shelf>shelf', 'work>tray', 'tray>jig', 'tray>tray', 'robot>base', 'jig>base'],
+  side: ['control>shelf', 'control>frame', 'aux>frame', 'monitor>frame'],
+  inside: ['aux>shelf', 'sensor>base', 'guard>base', 'monitor>base', 'jig>base', 'tray>base', 'lamp>base', 'robot>base'],
+  front: ['seat>desk'],
+};
 const byCls = new Map(CLASSES.map(c => [c.cls, c]));
 /** Can a thing of this class carry things on top / on its sides? */
 export const hostCap = (cls?: string): HostCap => (cls && byCls.get(cls)?.host) || NOHOST;
@@ -68,6 +81,8 @@ const zOverlap = (a: Part, b: Part) => Math.min(topOf(a), topOf(b)) - Math.max(a
 /** Volume overlap depth: the smallest of the three overlaps, ≤ 0 when apart. */
 const interfere = (a: Part, b: Part) => { const [gx, gy] = gaps(a, b); return Math.min(-gx, -gy, zOverlap(a, b)); };
 const inside = (x: number, y: number, h: Part, m = 0) => { const e = half(h); return Math.abs(x - h.pos[0]) <= e[0] + m && Math.abs(y - h.pos[1]) <= e[1] + m; };
+/** Share of a's footprint that lies within b's (axis-aligned by their yaws' extents). */
+const within = (a: Part, b: Part) => { const ea = half(a), eb = half(b), ox = Math.max(0, Math.min(a.pos[0] + ea[0], b.pos[0] + eb[0]) - Math.max(a.pos[0] - ea[0], b.pos[0] - eb[0])), oy = Math.max(0, Math.min(a.pos[1] + ea[1], b.pos[1] + eb[1]) - Math.max(a.pos[1] - ea[1], b.pos[1] - eb[1])); return (ox * oy) / (4 * ea[0] * ea[1]); };
 const hDist = (a: Part, b: Part) => { const [gx, gy] = gaps(a, b); return Math.hypot(Math.max(0, gx), Math.max(0, gy)); };
 const vol = (p: Part) => p.size[0] * p.size[1] * p.size[2];
 
@@ -81,20 +96,18 @@ export function withRoles(parts: Part[]): Part[] { return parts.map(p => (p.role
  */
 export function findMounts(parts0: Part[]): Map<string, Mount> {
   const parts = withRoles(parts0), out = new Map<string, Mount>();
+  const hollow = (p: Part) => parts.filter(h => h !== p && hostCap(h.cls).inside && vol(h) > vol(p) * 2 && within(p, h) >= 0.7 && p.pos[2] >= h.pos[2] - 50 && p.pos[2] < topOf(h)).sort((a, b) => vol(a) - vol(b))[0] || null;
   for (const p of parts) {
-    const z = p.pos[2]; let best: Part | null = null, bestScore = Infinity, rel: Mount['rel'] = 'floor';
-    if (p.role === 'top' || (p.role === 'robot' && z >= 50) || (p.role === 'side' && z < 50)) {
-      for (const h of parts) { if (h === p || !hostCap(h.cls).top || vol(h) < vol(p) * 0.2) continue; const t = topOf(h), dz = z - t;
-        if (dz < -150 || dz > 400 || !inside(p.pos[0], p.pos[1], h)) continue; const sc = Math.abs(dz) + (h.cls === 'base' ? 200 : 0); // the cell base carries what nothing else carries
-        if (sc < bestScore) { best = h; bestScore = sc; rel = 'top'; } }
-    }
-    if (p.role === 'side' || (p.role === 'top' && !best)) {
-      for (const h of parts) { if (h === p || !hostCap(h.cls).side) continue; if (zOverlap(p, h) <= 0) continue; const [gx, gy] = gaps(p, h), g = Math.max(gx, gy);
-        if (g > 300 || g < -Math.min(...p.size.slice(0, 2))) continue; const sc = Math.abs(g) + (h.cls === 'base' ? 300 : 0); if (sc < bestScore) { best = h; bestScore = sc; rel = 'side'; } }
-    }
-    // fixed inside a hollow host (a sensor or guard in the cell base, a part in a shelf): keeps its place in the host
-    if (!best && p.role !== 'floor' && p.role !== 'seat') for (const h of parts) { if (h === p || !(hostCap(h.cls).top || hostCap(h.cls).side) || vol(h) < vol(p) * 4) continue;
-      if (inside(p.pos[0], p.pos[1], h) && z >= h.pos[2] && z < topOf(h)) { const sc = vol(h); if (sc < bestScore) { best = h; bestScore = sc; rel = 'in'; } } }
+    const z = p.pos[2]; let best = null as Part | null, bestScore = Infinity, rel = 'floor' as Mount['rel'];
+    const onTop = () => { for (const h of parts) { if (h === p || !hostCap(h.cls).top || vol(h) < vol(p) * 0.2) continue; const t = topOf(h), dz = z - t;
+      if (dz < -150 || dz > 400 || !inside(p.pos[0], p.pos[1], h)) continue; const sc = Math.abs(dz) + (h.cls === 'base' ? 200 : 0); if (sc < bestScore) { best = h; bestScore = sc; rel = 'top'; } } };
+    const onSide = (max: number) => { for (const h of parts) { if (h === p || !hostCap(h.cls).side) continue; if (zOverlap(p, h) <= 0) continue; const [gx, gy] = gaps(p, h), g = Math.max(gx, gy);
+      if (g > max || g < -Math.min(...p.size.slice(0, 2))) continue; const sc = Math.abs(g) + (h.cls === 'base' ? 300 : 0); if (sc < bestScore) { best = h; bestScore = sc; rel = 'side'; } } };
+    const inHollow = () => { const h = hollow(p); if (h) { best = h; rel = 'in'; } };
+    if (p.role === 'top') { onTop(); if (!best) inHollow(); if (!best) onSide(10); }
+    else if (p.role === 'robot') { if (z >= 50) onTop(); if (!best) inHollow(); }
+    else if (p.role === 'side') { onSide(300); if (!best) inHollow(); if (!best && z < 50) onTop(); }
+    else if (p.role === 'floor' && p.cls !== 'base') inHollow();
     if (best && rel === 'in') { out.set(p.id, { host: best.id, rel, dz: 0, gap: 0, off: [p.pos[0] - best.pos[0], p.pos[1] - best.pos[1], z - best.pos[2]] }); continue; }
     out.set(p.id, best ? { host: best.id, rel, dz: rel === 'top' ? Math.round(z - topOf(best)) : 0, gap: rel === 'side' ? Math.round(Math.max(...gaps(p, best))) : 0 } : { host: null, rel: 'floor', dz: Math.round(z), gap: 0 });
   }
@@ -183,3 +196,74 @@ export const STRUCTURE_RULES: { id: string; name: string; txt: string }[] = [
   { id: 'R9', name: '경광등 시야', txt: '경광등 위를 가리지 않는다.' },
   { id: 'R10', name: '작업 칸', txt: '작업 칸을 고정하면 모든 객체가 그 안에 든다.' },
 ];
+
+// ------------------------------------------------------------------------------------------------------- placement
+/** Where the user dropped a part: the pointer hit in stored mm, the kind of surface under it and the object it belongs to. */
+export interface Drop { at: [number, number, number]; face: SlotKind; host?: string | null }
+export interface Placement { ok: boolean; pos: [number, number, number]; yaw: number; host: string | null; rel: Mount['rel']; why?: string; lv?: 'err' | 'warn' }
+
+const clsLabel = (c?: string) => (c && byCls.get(c)?.label) || c || '객체';
+/** The side face of `h` nearest to point (x, y): its outward unit normal (world) and the distance from the face. */
+function nearestFace(h: Part, x: number, y: number): { n: [number, number]; d: number; along: number } {
+  const r = ((h.yaw || 0) * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r), dx = x - h.pos[0], dy = y - h.pos[1];
+  const lx = dx * c + dy * s, ly = -dx * s + dy * c, ex = h.size[0] / 2, ey = h.size[1] / 2;
+  const faces: { n: [number, number]; d: number; along: number }[] = [
+    { n: [c, s], d: lx - ex, along: ly }, { n: [-c, -s], d: -lx - ex, along: ly }, { n: [-s, c], d: ly - ey, along: lx }, { n: [s, -c], d: -ly - ey, along: lx }];
+  return faces.sort((a, b) => Math.abs(a.d) - Math.abs(b.d))[0]!;
+}
+
+/**
+ * Put `part` where the user dropped it, by the slot rules: the part's class says which slots it can take (needsOf), the
+ * host's class which it offers (hostCap). The result is snapped to the slot (on the top plane, against the side face,
+ * inside the host at the pointer height, in front of a desk, on the floor) and refused with a reason when the slot is
+ * wrong, the part does not fit in it, or it would run into another object. A pair never seen in the reference stations
+ * is allowed with a warning.
+ */
+export function placePart(parts0: Part[], part0: Part, drop: Drop): Placement {
+  const parts = withRoles(parts0.filter(p => p.id !== part0.id)), part = withRoles([part0])[0]!, P = new Map(parts.map(p => [p.id, p]));
+  const needs = needsOf(part.cls, part.role), host = drop.host ? P.get(drop.host) || null : null, cap = hostCap(host?.cls);
+  const no = (why: string, pos: [number, number, number] = [drop.at[0], drop.at[1], 0]): Placement => ({ ok: false, pos, yaw: part.yaw || 0, host: null, rel: 'floor', why, lv: 'err' });
+  let face: SlotKind = drop.face; if (face === 'floor' || !host) face = 'floor';
+  // a desk's top under the pointer with a seat in hand: the seat goes in front of the desk
+  if (face !== 'floor' && needs.includes('front') && cap.front) face = 'front';
+  if (!needs.includes(face)) {
+    const want = needs.map(k => ({ floor: '바닥', top: '받침 윗면', side: '받침 옆면', inside: '받침 안', front: '작업대 앞' })[k]).join('·');
+    return no(face === 'floor' ? `${clsLabel(part.cls)}은(는) 바닥에 놓을 수 없습니다 · ${want}에 놓으세요` : `${clsLabel(part.cls)}은(는) ${clsLabel(host?.cls)} ${face === 'top' ? '윗면' : face === 'side' ? '옆면' : '안'}에 둘 수 없습니다 · ${want}에 놓으세요`);
+  }
+  let pos: [number, number, number] = [drop.at[0], drop.at[1], 0], yaw = part.yaw || 0, rel: Mount['rel'] = 'floor';
+  if (face === 'floor') { pos = [drop.at[0], drop.at[1], 0]; }
+  else if (face === 'inside' && part.role === 'floor' && host && hostCap(host.cls).inside) { pos = [drop.at[0], drop.at[1], 0]; rel = 'in'; }
+  else if (!host) return no('받침이 없습니다');
+  else if (face === 'top') { if (!cap.top) return no(`${clsLabel(host.cls)} 위에는 올릴 수 없습니다`);
+    const e = half(host), hx = Math.max(-e[0], Math.min(e[0], drop.at[0] - host.pos[0])), hy = Math.max(-e[1], Math.min(e[1], drop.at[1] - host.pos[1]));
+    const stack = host.cls === part.cls && cap.stack ? host.pos[2] + cap.stack : topOf(host);
+    pos = [host.pos[0] + hx, host.pos[1] + hy, stack]; rel = 'top'; if (host.cls === part.cls && cap.stack) { pos[0] = host.pos[0]; pos[1] = host.pos[1]; yaw = host.yaw || 0; } }
+  else if (face === 'side') { if (!cap.side) return no(`${clsLabel(host.cls)} 옆에는 붙일 수 없습니다`);
+    const f = nearestFace(host, drop.at[0], drop.at[1]), hy = (host.yaw || 0) * Math.PI / 180, r = ((part.yaw || 0) - (host.yaw || 0)) * Math.PI / 180;
+    const depth = Math.abs(f.n[0] * Math.cos(hy) + f.n[1] * Math.sin(hy)) > 0.5 ? (Math.abs(Math.cos(r)) * part.size[0] + Math.abs(Math.sin(r)) * part.size[1]) / 2 : (Math.abs(Math.sin(r)) * part.size[0] + Math.abs(Math.cos(r)) * part.size[1]) / 2;
+    // on the face at the pointer, pushed out so the part touches it; at the pointer height, kept within the host's height
+    const fx = drop.at[0] - f.n[0] * f.d, fy = drop.at[1] - f.n[1] * f.d, z = Math.max(host.pos[2], Math.min(topOf(host) - part.size[2] / 2, drop.at[2] - part.size[2] / 2));
+    pos = [fx + f.n[0] * depth, fy + f.n[1] * depth, z]; rel = 'side'; }
+  else if (face === 'inside') { if (!cap.inside) return no(`${clsLabel(host.cls)} 안에는 둘 수 없습니다`);
+    const e = half(host), hx = Math.max(-e[0], Math.min(e[0], drop.at[0] - host.pos[0])), hy = Math.max(-e[1], Math.min(e[1], drop.at[1] - host.pos[1]));
+    pos = [host.pos[0] + hx, host.pos[1] + hy, Math.max(host.pos[2], Math.min(topOf(host) - part.size[2], drop.at[2]))]; rel = 'in'; }
+  else if (face === 'front') { // a seat at a desk: against the long face under the pointer, tucked 100 mm under the top
+    const f = nearestFace(host, drop.at[0], drop.at[1]), depth = Math.max(part.size[0], part.size[1]) / 2 - 100;
+    const fx = drop.at[0] - f.n[0] * f.d, fy = drop.at[1] - f.n[1] * f.d; pos = [fx + f.n[0] * depth, fy + f.n[1] * depth, 0]; yaw = host.yaw || 0; rel = 'floor'; }
+  pos = pos.map(v => Math.round(v)) as [number, number, number];
+  let placed: Part = Object.assign({}, part, { pos, yaw }), hostId: string | null = face === 'floor' || face === 'front' ? null : host!.id;
+  // a floor object set down inside a hollow frame, shelf or cell base (a turntable in its frame) is carried by it
+  if (face === 'floor' && part.cls !== 'base') { const h = parts.filter(o => hostCap(o.cls).inside && o !== host && vol(o) > vol(placed) * 2 && within(placed, o) >= 0.7).sort((a, b) => vol(a) - vol(b))[0];
+    if (h) { hostId = h.id; rel = 'in'; } }
+  /* real objects are not boxes (a chair tucks under a desk, a shelf stands in its frame), so an overlap of two outlines is a
+     warning, except two solid floor machines (furnaces, utilities, desks) driven into each other */
+  const SOLID = new Set(['furnace', 'utility', 'desk', 'dispenser']); let warn: string | null = null;
+  for (const o of parts) { if (o.id === hostId || o === host || o.cls === 'base' || placed.cls === 'base') continue; const d = interfere(placed, o); if (d <= 20) continue;
+    if (SOLID.has(placed.cls!) && SOLID.has(o.cls!)) return { ok: false, pos, yaw, host: hostId, rel, why: `${o.name}와(과) ${Math.round(d)} mm 겹칩니다`, lv: 'err' };
+    warn = warn || `${o.name}와(과) 외곽이 ${Math.round(d)} mm 겹칩니다 · 실제 형상을 확인하세요`; }
+  if (face === 'floor' && part.role === 'seat') { const desk = parts.filter(o => o.cls === 'desk').sort((a, b) => hDist(placed, a) - hDist(placed, b))[0];
+    if (!desk || hDist(placed, desk) > 1200) warn = '작업대에서 1200 mm 안에 두세요'; }
+  const pair = host ? `${part.cls}>${host.cls}` : '*', seen = !host || SEEN_PAIRS[face].includes(pair) || SEEN_PAIRS[face].includes('*');
+  if (!seen) warn = warn || `${clsLabel(part.cls)}을(를) ${clsLabel(host?.cls)}에 두는 조합은 기준 설비에 없습니다 · 확인하세요`;
+  return { ok: true, pos, yaw, host: hostId, rel, ...(warn ? { why: warn, lv: 'warn' as const } : {}) };
+}
