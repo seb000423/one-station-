@@ -21,6 +21,9 @@
       nodes.push({ id: `${st.src}-${String(i + 1).padStart(3, '0')}`, type: 'block', blockType: 'model-part', name: label, params, transform: { position: pos, rotation: [0, 0, 0] }, parent: null });
       io.push(...L.BLOCKS['model-part'].io(tag, params));
     });
+    // 결합 (설계 구조 규칙 R3): what sits on or hangs on a part is joined to it, so it moves and rises with it
+    const C = window.OneTwin.core, mounts = C.findMounts(nodes.map(x => ({ id: x.id, name: x.name, kind: x.params.kind, size: [x.params.w, x.params.d, x.params.h], pos: x.transform.position })));
+    for (const x of nodes) { const m = mounts.get(x.id); if (m && m.host) x.parent = m.host; }
     return S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id: st.id, name: st.name, bbox: d.size, cellFixed: false, fidelity: 'L2', version: 1 },
       card: { cycle_time: st.cycle, ok_rate: st.ok, operators: st.ops, footprint: [d.size[0], d.size[1]] }, nodes, io });
   }

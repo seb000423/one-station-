@@ -429,6 +429,8 @@
         const tags = doc.io.filter(t => t.tag.startsWith(P + '_')), joints = doc.joints.filter(j => j.node === n.id);
         html = `<div class="sec"><h2><span><b style="font-family:var(--mono)">${esc(P)}</b> ${esc(d.name || n.blockType)}</span></h2><div class="props"><span class="k">이름</span><input data-k="name" value="${esc(n.name)}">`;
         for (const f of typeof d.fields === 'function' ? d.fields(Object.assign({}, d.params, n.params)) : d.fields) html += field(f, n.params[f.key] ?? d.params[f.key], 'p.' + f.key);
+        const so = n.blockType === 'model-part' && structOf(doc, n);
+        if (so) html += `<span class="k">구조</span><span class="v" style="font-family:var(--sans)">${esc(so.cls)} · ${esc(so.role)}</span><span class="k">받침</span><span class="v" style="font-family:var(--sans)">${esc(so.host)}</span><span class="k">받아 주는 면</span><span class="v" style="font-family:var(--sans)">${esc(so.carries)}${so.kids ? ` · 결합 ${so.kids}개` : ''}</span>`;
         html += `<span class="k">위치 X·Y·Z</span><span class="unit"><input type="number" data-k="pos.0" value="${p[0]}" step="5"><input type="number" data-k="pos.1" value="${p[1]}" step="5"><input type="number" data-k="pos.2" value="${p[2]}" step="5"></span><span class="k">방향</span><span class="v">${n.transform.rotation[2]}°</span></div>`;
         if (joints.length) html += `<h2 style="margin-top:14px">축 <small>${joints.length}</small></h2><div class="taglist">${joints.map(j => `<span>${esc(j.id)} · ${j.type === 'rot' ? '회전' : '직선'} ${j.mode} · ${j.min}~${j.max} · ${j.vmax}${j.type === 'rot' ? '°/s' : ' mm/s'}</span>`).join('')}</div>`;
         if (tags.length) html += `<h2 style="margin-top:14px">태그 <small>${tags.length}</small></h2><div class="taglist">${tags.map(t => `<span>${esc(t.tag)} · ${t.dir === 'out' ? 'OUT' : 'IN'} · ${t.type.toUpperCase()}</span>`).join('')}</div>`;
@@ -531,7 +533,8 @@
         if (f && Math.hypot(f[0] - l[0], f[1] - l[1]) > 1) { const q = localToStored(base, f[0], f[1], m.transform.position[2]); moveNode(id, [q[0] - m.transform.position[0], q[1] - m.transform.position[1], 0]); toast('다른 블록과 겹쳐 옆 빈자리로 옮겼습니다'); } } } }
   function setParamKeepKids(id, key, value) { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n) return;
     ed().batch('set_param', () => { const before = nodeTop(n); exec('set_param', { id, key, value }, true); const after = nodeTop(ED.machine.doc.nodes.find(x => x.id === id));
-      if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id)) moveNode(k.id, [0, 0, after - before]); }); }
+      // what sits on its top follows; what hangs on its sides or stands inside it stays
+      if (Math.abs(after - before) > 0.5) for (const k of ED.machine.doc.nodes.filter(x => x.parent === id && x.transform.position[2] >= before - 200)) moveNode(k.id, [0, 0, after - before]); }); }
   // conveyors that meet end to end or at a side transfer, at the same height: they rise and fall together
   /* conveyors that are really joined: an open end meets an open end face to face (gap ≤ 10 mm), or an end sits on the side
      of another (90° transfer), with the same width and the same top (a lift also at its upper stop). Pieces that only lie
@@ -599,7 +602,21 @@
     for (let i = 0; i < works.length; i++) for (let j = i + 1; j < works.length; j++) { const a = works[i], b = works[j]; if ((a.parent || null) !== (b.parent || null)) continue;
       const fp = w => { const p = P(w), r = w.transform.rotation[2] * Math.PI / 180, c = Math.abs(Math.cos(r)), s = Math.abs(Math.sin(r)); return [(+p.w * c + +p.d * s) / 2, (+p.w * s + +p.d * c) / 2]; }, ea = fp(a), eb = fp(b), pa = a.transform.position, pb = b.transform.position;
       if (Math.abs(pa[0] - pb[0]) < ea[0] + eb[0] - 1 && Math.abs(pa[1] - pb[1]) < ea[1] + eb[1] - 1 && Math.abs(pa[2] - pb[2]) < 1) out.push({ lv: 'err', ids: [a.id, b.id], at: [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2, pa[2]], txt: `${nodeCode(a) || a.name} · ${nodeCode(b) || b.name} 워크가 서로 겹쳐 있습니다`, fix: null }); }
+    // 설계 구조 규칙 (packages/core/src/structure.ts) on the model objects: 받침 · 올리기 · 결합 · 겹침 · 로봇 반경 · 작업자 자리 · 짝 설비 · 통로 · 경광등 · 작업 칸
+    const mp = doc.nodes.filter(n => n.blockType === 'model-part');
+    if (mp.length) { const ref = structRef(doc), RN = Object.fromEntries(C.STRUCTURE_RULES.map(r => [r.id, r.name]));
+      for (const it of C.checkStructure(mp.map(toPart), { ref: ref && ref.map(toPart), area: doc.meta.cellFixed ? doc.meta.bbox.slice(0, 2) : null }))
+        out.push({ lv: it.lv, ids: it.ids, at: it.at, txt: `${it.rule} ${RN[it.rule]} · ${it.txt}`, fix: it.fix ? { label: it.fix.label, run: () => it.fix.moves.forEach(m => moveNode(m.id, m.by)) } : null }); }
     return out; }
+  const toPart = n => ({ id: n.id, name: n.name, kind: n.params.kind, size: [+n.params.w || 1, +n.params.d || 1, +n.params.h || 1], pos: n.transform.position.slice(), yaw: n.transform.rotation[2] || 0 });
+  /** The reference the structure rules compare with: the built-in station v1, else the first saved version of this machine. */
+  function structRef(doc) { const id = doc.meta.id, b = window.OnePlant?.builtins()[id], m = b || lib()[id], v = m && (m.versions[1] || m.versions[Object.keys(m.versions).sort((a, c) => a - c)[0]]);
+    return v ? v.nodes.filter(n => n.blockType === 'model-part') : null; }
+  /** Role and host of a model object (for the properties panel). */
+  function structOf(doc, n) { const mp = doc.nodes.filter(x => x.blockType === 'model-part'), ref = structRef(doc), parts = C.withRoles(mp.map(toPart)), me = parts.find(x => x.id === n.id); if (!me) return null;
+    const m = C.findMounts(ref && ref.some(r => r.id === n.id) ? ref.map(toPart).filter(r => parts.some(q => q.id === r.id)) : parts).get(n.id), h = m && m.host && doc.nodes.find(x => x.id === m.host);
+    const cls = C.CLASSES.find(c => c.cls === me.cls), cap = C.hostCap(me.cls);
+    return { role: C.ROLE_LABEL[me.role], cls: cls ? cls.label : '기타', host: h ? `${h.name} ${m.rel === 'top' ? '윗면' : m.rel === 'side' ? '옆면' : '안'}` : '바닥', carries: [cap.top && '윗면', cap.side && '옆면'].filter(Boolean).join(' · ') || '없음', kids: doc.nodes.filter(x => x.parent === n.id).length }; }
   const chkG = new T.Group(); ov.add(chkG); let issues = [];
   const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
   function updateCheck() { const on = tab === 'machine' && mode !== 'run'; issues = on ? designIssues(ED.machine.doc) : []; chkG.clear();
@@ -607,7 +624,7 @@
     if (!on) $('chkList').hidden = true; // the check is a Machine Builder tool: its list closes in Factory Builder and in 동작 시험
     const b = $('chkChip'), ne = issues.filter(i => i.lv === 'err').length; b.hidden = !on; b.textContent = issues.length ? `설계 검사 ⚠ ${issues.length}` : '설계 검사 ✓'; b.classList.toggle('bad', ne > 0); b.classList.toggle('warn', !ne && issues.length > 0);
     if (!$('chkList').hidden) drawCheck(); }
-  function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침을 봤습니다</p>'; }
+  function drawCheck() { $('chkRows').innerHTML = issues.length ? issues.map((it, i) => `<div class="chkrow ${it.lv}" data-ci="${i}"><span>${it.lv === 'err' ? '●' : '▲'}</span><p>${esc(it.txt)}</p>${it.fix ? `<button data-cf="${i}">${esc(it.fix.label)}</button>` : ''}</div>`).join('') : '<p class="ok">문제가 없습니다 · 이음 폭·높이·틈, 워크 크기, 커브 통과, 워크 겹침과 설계 구조 규칙 R1~R10 (받침·올리기·결합·겹침·로봇 반경·작업자 자리·짝 설비·통로·경광등·작업 칸)을 봤습니다</p>'; }
   $('chkChip').onclick = () => { const on = $('chkList').hidden; $('chkList').hidden = !on; if (on) { $('objList').hidden = true; drawCheck(); } };
   $('chkRows').onclick = e => { const f = e.target.closest('[data-cf]'); if (f) { const it = issues[+f.dataset.cf]; if (it?.fix) { ed().batch('design fix', () => it.fix.run()); refresh(); toast(`고쳤습니다 · ${it.fix.label}`); } return; }
     const r = e.target.closest('[data-ci]'); if (!r) return; const it = issues[+r.dataset.ci]; if (!it) return; select(it.ids[0], true); if (it.ids.length > 1) { multi = new Set(it.ids); drawTree(); updateSelMark(); } };
