@@ -10,12 +10,12 @@
   const PRODUCT = D.product.parts[0], TRAY_GRID = (() => { const out = []; for (const dx of [-505, 0, 505]) for (const dy of [813, 543, 270, -3, -274, -550, -814]) out.push([dx, dy]); return out; })();
   /** No products are set out in advance (user 2026-11-04): products enter the line and travel through the process. The
       조립 셀 is fed from its tray P34 (P_C6_Tray_3): one product on each of its three rows (params.feed). */
-  function products(src) { return src === 'assembly' ? [863, 1111, 1359].map(y => [PRODUCT[0], '제품', 'static', PRODUCT[3], [7491, y, 1501], 'product', { feed: true }]) : []; }
+  function products(src) { return src === 'assembly' ? [863, 1111, 1359].map(y => [PRODUCT[0], '제품', 'static', PRODUCT[3], [7491, y, 1501], 'product', { feed: true, stage0: 0 }]) : []; }
   /** what some parts of the 조립 셀 do in 동작 시험: P25 dispenser (도포: the pump and needle come down), P26 conveyor rail
       (carries a work to its front end), P27 / P23 inspection and P24 laser marking (timed jobs started by the switch),
       jigs P19–P22 (클램프 · 작업 끝 signals for the weld robots) */
   const PART_RUN = { assembly: { P_Moho_dis_Solo: { proc: 'dispense', cycle: 5, stage: 1 }, P_Rail_blk: { convey: { speed: 300, dir: 1 } }, P_t04_FCT01: { proc: 'check', cycle: 5 }, P_EX: { proc: 'check', cycle: 5, stage: 5 },
-    P_Object192: { proc: 'mark', cycle: 6, stage: 6 }, P_OTC_fd_v8: { toolPitch: 12 }, P_OTC_fd_v8_2: { toolPitch: 12 }, P_JIG01: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG01_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } }, P_JIG02: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG02_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } } } };
+    P_Object192: { proc: 'mark', cycle: 6, stage: 6 }, P_OTC_fd_v8: { toolPitch: 25 }, P_OTC_fd_v8_2: { toolPitch: 25 }, P_JIG01: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG01_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } }, P_JIG02: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG02_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } } } };
   /* The 조립 셀 process as the user described it (2026-11-04), on the cell as built (points = targets in mm, cell frame; the
      run solves the robot joints):
      RB3 takes a product from the P34 tray rows → P25 dispenser rest under the needle → 도포 → re-grips → P26 rail, which
@@ -26,7 +26,7 @@
      P24 runs down x −5400. */
   /* where the product sits in each jig: the products that came built into the partner's jig model (taken out of the mesh),
      their box centre / bottom in the cell frame — a work let go near it settles exactly there */
-  const NEST = { assembly: { P_JIG01: [-2439, 1619, 1616], P_JIG01_2: [1196, 1619, 1616], P_JIG02: [-935, 1619, 1616], P_JIG02_2: [2695, 1619, 1616], P_Moho_dis_Solo: [5490, -1713, 1494] } };
+  const NEST = { assembly: { P_JIG01: [-2439, 1619, 1616], P_JIG01_2: [1196, 1619, 1616], P_JIG02: [-935, 1619, 1616], P_JIG02_2: [2695, 1619, 1616], P_Moho_dis_Solo: [5490, -1713, 1494], P_t04_FCT01: [5000, 1500, 1444] } };
   function assemblyRun(ids) { const pt = (id, name, tcp) => ({ id, name, j: [], tcp }), J = (point, speed = 50) => ({ op: 'MOVJ', point, speed }), Lm = (point, speed = 300) => ({ op: 'MOVL', point, speed });
     const G = on => ({ op: 'GRIP', on }), SET = (tag, value) => ({ op: 'SET', tag, value }), WAIT = (tag, value) => ({ op: 'WAIT', tag, value }), H = { id: 'H', name: '홈', j: [0, 0, 0, 0, 0, 0] };
     const rb3 = { node: ids.rb3, name: '트레이 → 도포 → 레일', points: [H, pt('TA1', '트레이 1줄 위', [7491, 863, 1850]), pt('TA2', '트레이 2줄 위', [7491, 1111, 1850]), pt('T1', '트레이 1줄 (손가락 사이)', [7491, 863, 1580]), pt('T2', '트레이 2줄 (손가락 사이)', [7491, 1111, 1580]),
@@ -36,12 +36,16 @@
       J('DA'), Lm('D', 200), G(true), Lm('DA', 200), J('RA'), Lm('R', 200), G(false), Lm('RA', 200));
     rb3.lines.push(J('H'));
     const weld = (node, name, jigs) => { const points = [H], lines = [];
-      for (const [P, xr] of jigs) { points.push(pt(`${P}R`, `${P} 판 뒤 대기`, [xr - 150, 0, 1850]), pt(`${P}Q`, `${P} 판 뒤 복귀`, [xr + 150, 0, 1850]), pt(`${P}A`, `${P} 접근`, [xr - 150, 1250, 1740]), pt(`${P}S`, `${P} 용접 시작`, [xr - 150, 1505, 1720]), pt(`${P}E`, `${P} 용접 끝`, [xr + 150, 1505, 1720]), pt(`${P}B`, `${P} 빠짐`, [xr + 150, 1250, 1740]));
-        lines.push(WAIT(`${P}_CLAMP`, true), J(`${P}R`, 40), Lm(`${P}A`, 250), Lm(`${P}S`, 200), { op: 'ARC', on: true }, Lm(`${P}E`, 40), { op: 'ARC', on: false }, Lm(`${P}B`, 200), Lm(`${P}Q`, 250), SET(`${P}_FIN`, true), J('H', 40)); } // joint moves only behind the panel; through the gap under it in straight lines
+      // the torch tip touches the seam on the product's back top edge, tilted 45° in from the robot's side; it comes down from above the jig
+      // a jig off to the robot's side: the seam on the product's end that faces the robot (the torch then does not cross the jig's clamp frame)
+      for (const [P, xr, side] of jigs) { const e = xr + side * 195;
+        if (side) points.push(pt(`${P}A`, `${P} 접근 (위)`, [e + side * 140, 1530, 1930]), pt(`${P}S`, `${P} 용접 시작`, [e, 1530, 1785]), pt(`${P}E`, `${P} 용접 끝`, [e, 1700, 1785]), pt(`${P}B`, `${P} 빠짐 (위)`, [e + side * 140, 1700, 1930]));
+        else points.push(pt(`${P}A`, `${P} 접근 (위)`, [xr - 150, 1300, 1860]), pt(`${P}S`, `${P} 용접 시작`, [xr - 150, 1505, 1785]), pt(`${P}E`, `${P} 용접 끝`, [xr + 150, 1505, 1785]), pt(`${P}B`, `${P} 빠짐 (위)`, [xr + 150, 1300, 1860]));
+        lines.push(WAIT(`${P}_CLAMP`, true), J(`${P}A`, 40), Lm(`${P}S`, 150), { op: 'ARC', on: true }, Lm(`${P}E`, 40), { op: 'ARC', on: false }, Lm(`${P}B`, 150), SET(`${P}_FIN`, true), J('H', 40)); }
       return { node, name, points, lines }; };
-    const rb1 = weld(ids.rb1, 'P22 → P20 용접', [['P22', 2695], ['P20', 1196]]), rb2 = weld(ids.rb2, 'P21 → P19 용접', [['P21', -935], ['P19', -2439]]);
+    const rb1 = weld(ids.rb1, 'P22 → P20 용접', [['P22', 2695, 0], ['P20', 1196, 0]]), rb2 = weld(ids.rb2, 'P21 → P19 용접', [['P21', -935, 0], ['P19', -2439, 0]]);
     const jig = (P, x) => [pt(`${P}S`, `${P} 앞`, [x, 2350, 0]), pt(P, `${P} 지그`, [x, 1619, 1795]), pt(`${P}B`, `${P} 라이트 커튼 밖`, [x, 2750, 0])];
-    const wk1 = { node: ids.wk1, name: '레일 → P27 검사 → P22 / P20 → 적재함', points: [pt('RS', '레일 끝 앞', [6237, 2350, 0]), pt('RE', '레일 끝', [6237, 1712, 1435]), pt('FS', 'P27 앞', [5023, 2350, 0]), pt('F', 'P27 검사 지그', [5023, 1502, 1809]),
+    const wk1 = { node: ids.wk1, name: '레일 → P27 검사 → P22 / P20 → 적재함', points: [pt('RS', '레일 끝 앞', [6237, 2350, 0]), pt('RE', '레일 끝', [6237, 1712, 1435]), pt('FS', 'P27 앞', [5023, 2350, 0]), pt('F', 'P27 검사 지그', [5000, 1500, 1620]),
         pt('C1', '통로 (P27)', [5023, 3800, 0]), pt('C2', '통로 (P22)', [2696, 3800, 0]), pt('C3', '통로 (레일)', [6237, 3800, 0]), pt('C4', '통로 (P20)', [1197, 3800, 0]), ...jig('P22', 2695), ...jig('P20', 1196),
         pt('BS', '적재함 옆', [750, 2800, 0]), pt('B1', '초록 적재함 1', [250, 2600, 1495]), pt('B2', '초록 적재함 2', [250, 3000, 1495])],
       lines: [] };

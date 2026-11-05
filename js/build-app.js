@@ -741,7 +741,7 @@
     const doc = ED.machine.doc; RUN.t = 0; RUN.v = {}; RUN.tags = {}; RUN.procs = {}; RUN.works = {};
     for (const j of doc.joints) RUN.v[j.id] = j.home ?? j.min;
     for (const t of doc.io) RUN.tags[t.tag] = t.type === 'bool' ? false : 0;
-    for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2] }; }
+    for (const n of doc.nodes) { const d = nodeDef(n); if (d && d.work) RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2], stage: n.params.stage0 ?? 6 }; }
     RUN.rails = {}; for (const r of Object.values(ROB.run)) { r.rail = 0; r.arc = false; r.grip = null; } WK.run = {}; for (const a of Object.values(ARC)) a.visible = false;
   }
   const fmtVal = (t, v) => t.type === 'bool' ? (v ? '켜짐' : '꺼짐') : (+v).toFixed(t.type === 'int' ? 0 : 1);
@@ -1019,27 +1019,14 @@
   const rcLand = new T.Raycaster();
   /* 제품 단계 (params.stage on a timed part, params.stageAt = { on: signal, stage } on a jig, params.seatStage on a seat): the work
      at that part grows to the next stage — 0 코어, 1 도포, 2 지그에 맞춤 (헤더), 3 브라켓 용접, 4 파이프 용접, 5 볼트 체결, 6 레이저 각인.
-     The shapes are plain generic ones (no drawing of a real product) */
+     The parts come from the product model itself (split by part), nothing is added */
   function stageUp(n, st) { const o = objs.get(n.id)?.obj; if (!o) return; o.updateMatrixWorld(true); const c = fromS(o.localToWorld(toS(n.params.nest || [0, 0, 0])));
     let best = null, bd = 700; for (const id in RUN.works) { const w = RUN.works[id]; const dd = Math.hypot(w.p[0] - c[0], w.p[1] - c[1]); if (dd < bd && Math.abs(w.z - c[2]) < 900) { bd = dd; best = w; } }
-    if (best && (best.stage || 0) < st) { best.stage = st; log(`${nodeCode(n)} · 제품 단계: ${STAGE_NAMES[st]}`); } }
+    if (best && (best.stage ?? 6) < st) { best.stage = st; log(`${nodeCode(n)} · 제품 단계: ${STAGE_NAMES[st]}`); } }
   const STAGE_NAMES = ['코어', '도포', '지그에 맞춤', '브라켓 용접', '파이프 용접', '볼트 체결', '레이저 각인'];
-  const STAGE_MAT = {};
-  const stMat = c => STAGE_MAT[c] || (STAGE_MAT[c] = new T.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.35 }));
-  function stageFx(o, st, n) { if (o.userData.stage === st) return; o.userData.stage = st; let g = o.getObjectByName('stageFx'); if (g) o.remove(g); if (!st) return;
-    g = new T.Group(); g.name = 'stageFx'; o.add(g); const W = +n.params.w || 404, D = +n.params.d || 240, H = +n.params.h || 163, mm = v => v / 1000;
-    // a box / a cylinder in the work's own frame (mm: x along the length, y across, z up from its bottom)
-    const box = (sx, sy, sz, x, y, z, c) => { const m = new T.Mesh(new T.BoxGeometry(mm(sx), mm(sz), mm(sy)), stMat(c)); m.position.set(mm(x), mm(z), -mm(y)); m.castShadow = true; g.add(m); return m; };
-    const cyl = (r, len, x, y, z, axis, c) => { const m = new T.Mesh(new T.CylinderGeometry(mm(r), mm(r), mm(len), 20), stMat(c)); m.position.set(mm(x), mm(z), -mm(y)); if (axis === 'x') m.rotation.z = Math.PI / 2; else if (axis === 'y') m.rotation.x = Math.PI / 2; m.castShadow = true; g.add(m); return m; };
-    if (st >= 1) for (const sx of [-1, 1]) box(8, D + 8, H + 8, sx * (W / 2 + 2), 0, H / 2, 0xd8d0b8); // paste on both ends of the core
-    if (st >= 2) { box(70, D - 20, H - 10, -W / 2 - 38, 0, H / 2, 0x9097c8); cyl(30, 60, -W / 2 - 40, 0, H + 25, 'z', 0x9097c8); // inlet tank with its neck
-      box(70, D - 20, H - 10, W / 2 + 38, 0, H / 2, 0xa7aab0); cyl(38, 50, W / 2 + 95, 0, H / 2, 'x', 0xa7aab0); } // outlet tank and spout
-    if (st >= 3) for (const sy of [-1, 1]) { box(110, 10, 90, W / 4, sy * (D / 2 + 5), H - 20, 0x8a5a3a); box(110, 60, 10, W / 4, sy * (D / 2 + 30), H + 20, 0x8a5a3a); } // two brackets
-    if (st >= 4) { cyl(16, W, 0, -D / 2 - 30, 30, 'x', 0x3f7fd0); cyl(14, 220, -W / 2 + 40, D / 2 - 30, H + 110, 'z', 0x8a5a3a); // coolant pipes
-      box(14, 190, 110, W / 2 + 128, 0, H / 2, 0xb0322a); } // outlet flange
-    if (st >= 5) for (const sy of [-1, 1]) cyl(9, 40, W / 2 + 145, sy * 70, H / 2, 'x', 0x30343a); // bolts through the flange
-    if (st >= 6) box(90, 26, 2, 0, 0, H + 1, 0x202226); // laser mark on the top
-  }
+  // the product model is split into its real parts (node names st<N>_…: the stage from which the part is on); a work shows
+  // the parts up to its stage. Works without a start stage (params.stage0) are whole products.
+  function stageFx(o, st) { if (o.userData.stage === st) return; let f = 0; o.traverse(m => { const k = /^st(\d)_/.exec(m.name); if (k) { m.visible = +k[1] <= st; f++; } }); if (f) o.userData.stage = st; }
   /* a work let go over a seat (params.nest of a part: where the product sits in a jig) settles exactly in it */
   function seatAt(w) { const doc = ED.machine.doc; for (const b of doc.nodes) { const ns = b.params?.nest; if (!ns) continue; const o = objs.get(b.id)?.obj; if (!o) continue; o.updateMatrixWorld(true);
       const c = fromS(o.localToWorld(toS(ns))); if (Math.hypot(c[0] - w.p[0], c[1] - w.p[1]) < 200 && Math.abs(c[2] - w.z) < 300) { w.p = [Math.round(c[0]), Math.round(c[1])]; w.z = Math.round(c[2]); if (b.params.seatStage) w.stage = Math.max(w.stage || 0, +b.params.seatStage); return true; } } return false; }
@@ -1298,7 +1285,7 @@
   $('bSeqGen').onclick = () => { const doc = ED.machine.doc; if (doc.sequence.steps.length && !confirm('지금 동작 순서를 지우고 블록에서 다시 만들까요? (실행 취소로 되돌릴 수 있습니다)')) return; AUTO.open = -1; exec('set_sequence', { steps: genSequence(doc) }); AUTO.i = 0; AUTO.phase = 'wait'; drawSeq(); if (ED.machine.doc.sequence.steps.length) toast('동작 순서를 블록에서 만들었습니다'); };
   // 워크 다시 투입: every work goes back to the spot (and height) it was placed at, as if it were loaded again;
   // 자동 운전 starts over from its first step. Conveyors, stoppers and other outputs keep their state.
-  $('bWorkBack').onclick = () => { const doc = ED.machine.doc; let k = 0; for (const n of doc.nodes) if (nodeDef(n)?.work) { RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2] }; k++; }
+  $('bWorkBack').onclick = () => { const doc = ED.machine.doc; let k = 0; for (const n of doc.nodes) if (nodeDef(n)?.work) { RUN.works[n.id] = { p: [n.transform.position[0], n.transform.position[1]], z: n.transform.position[2], stage: n.params.stage0 ?? 6 }; k++; }
     if (!k) { toast('워크 블록이 없습니다. 팔레트의 워크를 컨베이어 위에 놓으세요', true); return; }
     AUTO.i = 0; AUTO.phase = 'wait'; AUTO.t = 0; AUTO.waited = 0; log(`워크 ${k}개를 처음 놓은 자리로 다시 투입${AUTO.on ? ' · 자동 운전은 1단계부터' : ''}`); drawSeq(); };
   // the panel under the view: drag its top edge to make it taller or shorter; the 3D view takes the rest
@@ -1395,9 +1382,9 @@
       for (const j of doc.joints) if (j.node === n.id) vals[j.id.slice(P.length + 1)] = RUN.v[j.id];
       vals.RUN = RUN.procs[P]?.run || 0;
       if (d.pose) d.pose(o, Object.assign({}, d.params, n.params), vals, tg => !!tags[tg], P);
-      if (RUN.works[n.id]) { placeObj(o, [RUN.works[n.id].p[0], RUN.works[n.id].p[1], RUN.works[n.id].z], n.transform.rotation[2]); stageFx(o, RUN.works[n.id].stage || 0, n); } }
+      if (RUN.works[n.id]) { placeObj(o, [RUN.works[n.id].p[0], RUN.works[n.id].p[1], RUN.works[n.id].z], n.transform.rotation[2]); stageFx(o, RUN.works[n.id].stage ?? 6, n); } }
   }
-  function setMode(m) { setTimeout(drawPend, 0);
+  function setMode(m) { setTimeout(drawPend, 0); setTimeout(() => { for (const n of ED.machine.doc.nodes) if (nodeDef(n)?.work) { const o = objs.get(n.id)?.obj; if (o) { o.userData.stage = null; stageFx(o, n.params.stage0 ?? 6); } } }, 0);
     if (tab !== 'machine') m = 'edit'; mode = m; if (AUTO.on) setAuto(false); document.querySelectorAll('#mode button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
     if (m === 'run') { resetRun(); log('동작 시험 시작 · Control Panel의 ON / OFF로 켜고 끄거나 ▶ 자동 운전을 누릅니다');
       // tall blocks that never move (cabinets, panels, guards) turn see-through so the work and stoppers stay in view
