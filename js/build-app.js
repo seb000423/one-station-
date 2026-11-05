@@ -892,9 +892,21 @@
   function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
   function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
   const VJ = 150; // joint speed deg/s at 100 %
-  function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; r.pause = false; log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
+  function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; r.pause = false; r.hits = new Set(); log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
   function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; r.pause = false; } drawPend(true); }
   function fkStored(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); L.rigSet(rig, deg); const t = fromS(L.rigTcp(rig, o)); L.rigSet(rig, r.deg); return t; }
+  /* 충돌 검사: the arm's centre line, joint to joint and the flange to the tool tip, against every other part of the cell
+     (not the works, the operators, or what the robot stands on at its base). A hit is logged once per part and shown on the
+     robot's label; the line through a link is thinner than the link, so a near pass can still go unreported. */
+  const rcHit = new T.Raycaster();
+  function checkHit(n, P, rig, o, r) { const doc = ED.machine.doc, meshes = []; for (const b of doc.nodes) { if (b.id === n.id) continue; const d = nodeDef(b); if (!d || d.work || d.operator) continue;
+      const ob = objs.get(b.id)?.obj; if (ob) ob.traverse(m => { if (m.isMesh && m.visible && m.name !== 'placeholder') meshes.push(m); }); }
+    o.updateMatrixWorld(true); const pts = rig.map(e => e.j.getWorldPosition(new T.Vector3())); if (rig.tcp) pts.push(rig.tcp.getWorldPosition(new T.Vector3()));
+    for (let i = 1; i + 1 < pts.length; i++) { const a = pts[i], d = pts[i + 1].clone().sub(a), len = d.length(); if (len < 0.03) continue; d.divideScalar(len);
+      rcHit.set(a, d); rcHit.near = 0.015; rcHit.far = len - 0.015; const h = rcHit.intersectObjects(meshes, false)[0]; if (!h) continue;
+      let b = h.object; while (b && !(b.userData && b.userData.nodeId) && b.parent) b = b.parent; const hn = doc.nodes.find(x => objs.get(x.id)?.obj && (objs.get(x.id).obj === b || objs.get(x.id).obj.getObjectById(h.object.id)));
+      const name = hn ? `${nodeCode(hn)} ${hn.name}` : '설비'; r.hit = { name, t: performance.now() };
+      const key = name + i; if (!r.hits) r.hits = new Set(); if (!r.hits.has(key)) { r.hits.add(key); log(`${P} 충돌: 팔(J${i + 1}–${i + 2 > rig.length ? '툴 끝' : 'J' + (i + 2)})이 ${name}에 닿습니다${(() => { const l = progOf(n.id)?.lines[r.line]; return l?.point ? ` (${l.point} 쪽으로 가는 중)` : ''; })()}`); } return; } }
   function stepRobots(dt) {
     const doc = ED.machine.doc, tags = RUN.tags;
     for (const n of doc.nodes) { const rig = rigFor(n.id); if (!rig) continue; const P = nodeCode(n), o = robObj(n.id), p = progOf(n.id), r = robState(n.id);
@@ -902,6 +914,7 @@
       o.userData.prog = true; const st = !!tags[`${P}_START`];
       if (st && !r.prev) { startProg(n.id, `${P}_START`); if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; } if (!st && r.prev && `${P}_DONE` in tags && !r.on) tags[`${P}_DONE`] = false; r.prev = st;
       if (r.on) { let budget = dt; for (let g = 0; g < 8 && budget > 0 && r.on; g++) budget = progStep(n, P, r, p, rig, o, budget, tags); }
+      if (r.on && (r.hitT = (r.hitT || 0) + dt) > 0.2) { r.hitT = 0; checkHit(n, P, rig, o, r); }
       if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = r.on; if (RUN.procs[P]) RUN.procs[P].busy = r.on;
       if (railOf(n.id)) setRail(n.id, r.rail || 0); L.rigSet(rig, r.deg); o.userData.deg = r.deg;
       if (r.grip && RUN.works[r.grip]) { const t = tcpOf(n.id), w = RUN.works[r.grip]; w.p = [t[0], t[1]]; w.z = t[2] + (r.gdz || 0); w.held = n.id; }
@@ -919,7 +932,7 @@
         r.seg = { kind: 'L', t0, t1, t: 0, dur: Math.max(0.05, Math.max(d / (l.speed || 500), Math.abs((sv.rail || 0) - (r.rail || 0)) / RAILV)), j0: r.deg.slice(), j1, s0: r.rail || 0, s1: sv.rail || 0 }; }
       else if (l.op === 'GRIP') { if (l.on) { const t = tcpOf(n.id); let best = null, bd = 400; for (const id in RUN.works) { const w = RUN.works[id]; if (w.held && w.held !== n.id) continue; const d = Math.hypot(w.p[0] - t[0], w.p[1] - t[1], w.z - t[2]); if (d < bd) { bd = d; best = id; } }
           if (best) { r.grip = best; r.gdz = RUN.works[best].z - t[2]; log(`${P} 그리퍼 닫힘 · 워크 집음`); } else log(`${P} 그리퍼 닫힘 · 400 mm 안에 워크가 없습니다`); }
-        else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z, r.grip, n.id); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
+        else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z, r.grip, n.id); seatAt(w); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
         r.seg = { kind: 'D', t: 0, dur: 0.3 }; }
       else if (l.op === 'ARC') { r.arc = !!l.on; log(`${P} 아크 ${l.on ? '켬 · 용접 시작' : '끔 · 용접 끝'}`); r.seg = { kind: 'D', t: 0, dur: 0.2 }; }
       else if (l.op === 'WAIT') r.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
@@ -984,7 +997,7 @@
         if (l.on) { let best = null, bd = 450; for (const id in RUN.works) { const q = RUN.works[id]; if (q.held && q.held !== n.id) continue; const d = Math.hypot(q.p[0] - hand[0], q.p[1] - hand[1], q.z - hand[2]); if (d < bd) { bd = d; best = id; } }
           if (!best) { log(`${P} 손 닿는 곳에 워크가 없습니다 · 작업을 멈춥니다 (↺ 워크 다시 투입)`); w.on = false; w.line = -1; if (AUTO.on) setAuto(false); return 0; }
           w.carry = best; w.gdz = RUN.works[best].z - hand[2]; log(`${P} 워크 집음`); }
-        else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, Math.max(q.z, hand[2]), w.carry); } log(`${P} 워크 놓음`); w.carry = null; }
+        else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, Math.max(q.z, hand[2]), w.carry); seatAt(q); } log(`${P} 워크 놓음`); w.carry = null; }
         w.seg = { kind: 'back', k0: w.k, t: 0, dur: 0.6, wait: 0.25 }; }
       else if (l.op === 'WAIT') w.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
       else if (l.op === 'SET') { tags[l.tag] = l.value; w.seg = { kind: 'D', t: 0, dur: 0 }; }
@@ -1004,6 +1017,9 @@
   /** Where a released work lands: the first real surface under it (rays down from its middle and corners through the
       blocks' own shapes: a jig nest, a tray pocket, a table), else the floor. */
   const rcLand = new T.Raycaster();
+  /* a work let go over a seat (params.nest of a part: where the product sits in a jig) settles exactly in it */
+  function seatAt(w) { const doc = ED.machine.doc; for (const b of doc.nodes) { const ns = b.params?.nest; if (!ns) continue; const o = objs.get(b.id)?.obj; if (!o) continue; o.updateMatrixWorld(true);
+      const c = fromS(o.localToWorld(toS(ns))); if (Math.hypot(c[0] - w.p[0], c[1] - w.p[1]) < 200 && Math.abs(c[2] - w.z) < 300) { w.p = [Math.round(c[0]), Math.round(c[1])]; w.z = Math.round(c[2]); return true; } } return false; }
   function landZ(p, z, wid, skip) { const doc = ED.machine.doc, meshes = []; for (const b of doc.nodes) { const d = nodeDef(b); if (!d || d.work || d.operator || b.id === skip) continue; const o = objs.get(b.id)?.obj; if (o) o.traverse(m => { if (m.isMesh && m.visible && m.name !== 'placeholder') meshes.push(m); }); }
     const wn = wid && doc.nodes.find(x => x.id === wid), hw = wn ? (+wn.params.w || 300) * 0.35 : 0, hd = wn ? (+wn.params.d || 200) * 0.35 : 0, yaw = wn ? (wn.transform.rotation[2] || 0) * Math.PI / 180 : 0, c = Math.cos(yaw), s = Math.sin(yaw);
     let best = 0; for (const [a, b] of [[0, 0], [hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { rcLand.set(toS([p[0] + a * c - b * s, p[1] + a * s + b * c, z + 30]), new T.Vector3(0, -1, 0)); rcLand.far = (z + 30) / 1000 + 0.001;
@@ -1798,7 +1814,7 @@
     if (d.stops) { const up = has(`${P}_IS_UP`) ? t[`${P}_IS_UP`] : t[`${P}_UP`]; return { txt: up ? '올림 · 워크 멈춤' : '내림', on: !!up }; }
     if (d.sensor) return { txt: t[`${P}_ON`] ? '워크 감지' : '감지 없음', on: !!t[`${P}_ON`] };
     if (d.operator) { const w = WK.run[n.id]; return { txt: w?.on ? (w.carry ? '제품 운반' : w.seg?.kind === 'walk' ? '이동' : w.seg?.kind === 'W' ? '기다림' : '작업 중') : t[`${P}_DONE`] ? '완료' : '대기', on: !!w?.on }; }
-    const rb = ROB.run[n.id]; if (rb && rb.on) return { txt: rb.arc ? '용접 중' : rb.grip ? '제품 이송' : '작업 중', on: true };
+    const rb = ROB.run[n.id]; if (rb && rb.on) return { txt: rb.hit && performance.now() - rb.hit.t < 1500 ? `충돌 · ${rb.hit.name}` : rb.arc ? '용접 중' : rb.grip ? '제품 이송' : '작업 중', on: true };
     const pr = RUN.procs[P]; if (pr || has(`${P}_START`) || has(`${P}_TRIG`)) { const busy = !!(pr?.busy || t[`${P}_BUSY`]); return { txt: busy ? '작업 중' : t[`${P}_DONE`] ? '완료' : '대기', on: busy }; }
     return null; }
   function drawLabels() {

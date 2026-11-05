@@ -502,9 +502,25 @@
       if (i === 3 || i === 5) { const a = wp[Math.min(i + 1, wp.length - 1)].clone().sub(wp[i]); if (i === 5 || a.lengthSq() < 1e-8) a.copy(wp[i]).sub(wp[i - 1]); return a.lengthSq() > 1e-8 ? a.normalize() : reach; }
       return pitch; };
     const list = kind === 'rotary' ? [ch[ch.length - 1]] : ch;
-    return list.map((j, k) => { const i = kind === 'rotary' ? 0 : k, pq = new T.Quaternion(); if (j.parent) j.parent.getWorldQuaternion(pq);
+    const rig = list.map((j, k) => { const i = kind === 'rotary' ? 0 : k, pq = new T.Quaternion(); if (j.parent) j.parent.getWorldQuaternion(pq);
       return { j, i, base: j.quaternion.clone(), axis: axisW(i).clone().applyQuaternion(pq.invert()).normalize() }; });
+    if (kind !== 'rotary' && rig.length >= 6) toolOf(rig);
+    return rig;
   }
+  /* The tool of a model robot: its TCP is the tip of what hangs on the flange (the torch tip, the middle of the gripper
+     fingers) and not the flange itself — otherwise the arm stretches a whole tool length past every point. The IK moves
+     J1–J3 and turns J5 so the tool points straight down (J4 / J6 stay as jogged), the way a pick or a top weld is done. */
+  function toolOf(rig) { const last = rig[rig.length - 1].j; last.updateMatrixWorld(true); const inv = last.matrixWorld.clone().invert(), v = new T.Vector3(), pts = [];
+    last.traverse(m => { if (!m.isMesh || !m.geometry?.attributes?.position) return; const pa = m.geometry.attributes.position, st = Math.max(1, Math.floor(pa.count / 3000));
+      for (let i = 0; i < pa.count; i += st) pts.push(v.fromBufferAttribute(pa, i).applyMatrix4(m.matrixWorld).applyMatrix4(inv).clone()); });
+    if (pts.length < 8) return; let far = 0; for (const q of pts) far = Math.max(far, q.length()); const tip = new T.Vector3(); let n = 0;
+    for (const q of pts) if (q.length() > far * 0.94) { tip.add(q); n++; } tip.divideScalar(n);
+    const t = new T.Object3D(); t.name = 'tcp'; t.position.copy(tip); last.add(t); rig.tcp = t; rig.ikN = 3; rig.hold = a => { a[4] = toolDown(rig, a); }; }
+  function toolDown(rig, a) { const r5 = rig[4], b = a.slice(); b[4] = 0; rigSet(rig, b); rig[0].j.updateMatrixWorld(true);
+    const A = r5.axis.clone().applyQuaternion(r5.j.parent.getWorldQuaternion(new T.Quaternion())).normalize();
+    const v = rig.tcp.getWorldPosition(new T.Vector3()).sub(r5.j.getWorldPosition(new T.Vector3())), d = new T.Vector3(0, -1, 0);
+    v.sub(A.clone().multiplyScalar(v.dot(A))); d.sub(A.clone().multiplyScalar(d.dot(A))); if (v.lengthSq() < 1e-12 || d.lengthSq() < 1e-12) return a[4];
+    return Math.atan2(A.dot(new T.Vector3().crossVectors(v, d)), v.dot(d)) * 180 / Math.PI; }
   /** The palette arm (arm()): six joints; the IK moves J1–J3 and turns J5 against J2 + J3 so the gripper keeps its taught
       tilt (J4 / J6 stay as jogged), the way a pendant's linear jog keeps the tool orientation. */
   function rigOfArm(g) { const n = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6'].map(k => g.getObjectByName(k)), w = g.getObjectByName('wrist'); if (!n[0] || !n[1] || !n[2]) return null;
