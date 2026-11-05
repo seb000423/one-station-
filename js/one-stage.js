@@ -39,6 +39,8 @@
     renderer.toneMapping = T.NoToneMapping;          // done in the output pass
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.setClearColor(BG, 1);
+    // WebXR (ONE SIMULATION VR view, js/sim-vr.js): the headset pose drives xrCam inside xrRig; the rig is moved by the sticks
+    renderer.xr.enabled = true; renderer.xr.setReferenceSpaceType('local-floor');
 
     const scene = new T.Scene(); scene.background = BG;
     const world = new T.Group(); scene.add(world);      // everything under here is mirrored in the floor
@@ -110,6 +112,7 @@
     let center = new T.Vector3(), radius = 10, dir = DIR.clone();
     const size = new T.Vector2();
     const resize = () => {
+      if (renderer.xr.isPresenting) return;   // the headset owns the size during a VR session
       const r = canvas.parentElement.getBoundingClientRect(), w = Math.max(1, r.width), h = Math.max(1, r.height);
       renderer.setSize(w, h, false); composer.setSize(w, h); size.set(w, h);
       const a = w / h; Object.assign(camera, { left: -a, right: a, top: 1, bottom: -1 }); camera.updateProjectionMatrix();
@@ -204,13 +207,30 @@
       m.position.y = 0.012; m.renderOrder = 1; m.layers.enableAll(); world.add(m); return m;
     };
 
+    /* ---- VR: post passes do not reach the headset, so in a session the scene is drawn straight to it (no mirror, no
+       bloom; tone mapping by the renderer). Static shadows are refreshed every 3rd frame to keep the headset frame rate. */
+    const xrRig = new T.Group(), xrCam = new T.PerspectiveCamera(70, 1, 0.05, 400); xrRig.add(xrCam); scene.add(xrRig);
+    const onFrame = [];
+    let xrFrame = 0;
+    renderer.xr.addEventListener('sessionstart', () => {
+      renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0; renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
+      try { renderer.xr.setFoveation(1); } catch (e) { /* not offered */ } });
+    renderer.xr.addEventListener('sessionend', () => { renderer.toneMapping = T.NoToneMapping; renderer.shadowMap.autoUpdate = true; setTimeout(resize, 0); });
+
     let last = performance.now();
-    const render = () => { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; stepGhost(dt); controls.update(); composer.render(); };
+    const render = () => { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; stepGhost(dt);
+      for (const f of onFrame) f(dt);
+      if (renderer.xr.isPresenting) {
+        xrCam.layers.mask = camera.layers.mask;
+        if (++xrFrame % 3 === 0) renderer.shadowMap.needsUpdate = true;
+        renderer.setRenderTarget(null); renderer.render(scene, xrCam); return;
+      }
+      controls.update(); composer.render(); };
     const setDir = v => { dir.copy(v).normalize(); };
     const setGrid = (minor, major) => { gridMat.uniforms.uS1.value = minor; gridMat.uniforms.uS2.value = major; };
 
     window.addEventListener('resize', resize); resize();
-    return { renderer, scene, world, overlay, camera, controls, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, setGrid, floor, studio, addTwin, ghost, ring,
+    return { renderer, scene, world, overlay, camera, controls, xrRig, xrCam, onFrame, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, setGrid, floor, studio, addTwin, ghost, ring,
       get ghosting() { return ghostT > 0.5; } };
   }
 
