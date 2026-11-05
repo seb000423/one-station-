@@ -518,7 +518,9 @@
     const t = new T.Object3D(); t.name = 'tcp'; t.position.copy(tip); last.add(t); rig.tcp = t; rig.ikN = 3; rig.hold = a => { a[4] = toolDown(rig, a); }; }
   function toolDown(rig, a) { const r5 = rig[4], b = a.slice(); b[4] = 0; rigSet(rig, b); rig[0].j.updateMatrixWorld(true);
     const A = r5.axis.clone().applyQuaternion(r5.j.parent.getWorldQuaternion(new T.Quaternion())).normalize();
-    const v = rig.tcp.getWorldPosition(new T.Vector3()).sub(r5.j.getWorldPosition(new T.Vector3())), d = new T.Vector3(0, -1, 0);
+    // the tool points down, or (rig.pitch, deg below horizontal) out from the robot and tilted down, e.g. a torch reaching in under a hood
+    const p5 = r5.j.getWorldPosition(new T.Vector3()), v = rig.tcp.getWorldPosition(new T.Vector3()).sub(p5), d = new T.Vector3(0, -1, 0), pt = rig.pitch ?? 90;
+    if (pt < 89.5) { const out = p5.clone().sub(rig[0].j.getWorldPosition(new T.Vector3())); out.y = 0; if (out.lengthSq() > 1e-8) { out.normalize(); const k = pt * Math.PI / 180; d.copy(out.multiplyScalar(Math.cos(k))).add(new T.Vector3(0, -Math.sin(k), 0)); } }
     v.sub(A.clone().multiplyScalar(v.dot(A))); d.sub(A.clone().multiplyScalar(d.dot(A))); if (v.lengthSq() < 1e-12 || d.lengthSq() < 1e-12) return a[4];
     return Math.atan2(A.dot(new T.Vector3().crossVectors(v, d)), v.dot(d)) * 180 / Math.PI; }
   /** The palette arm (arm()): six joints; the IK moves J1–J3 and turns J5 against J2 + J3 so the gripper keeps its taught
@@ -632,7 +634,7 @@
     c.traverse(m => { m.userData.pick = g.userData.pick; if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
     const ph = g.getObjectByName('placeholder'); if (ph) g.remove(ph);
     const fk = fxKind(p.node); if (fk) setupFx(g, c, fk, p.node);
-    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
+    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null; if (g.userData.rig && p.toolPitch != null) g.userData.rig.pitch = +p.toolPitch; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
     for (const f of modelListeners) f(g);
   }
   bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,

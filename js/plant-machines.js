@@ -15,7 +15,7 @@
       (carries a work to its front end), P27 / P23 inspection and P24 laser marking (timed jobs started by the switch),
       jigs P19–P22 (클램프 · 작업 끝 signals for the weld robots) */
   const PART_RUN = { assembly: { P_Moho_dis_Solo: { proc: 'dispense', cycle: 5 }, P_Rail_blk: { convey: { speed: 300, dir: 1 } }, P_t04_FCT01: { proc: 'check', cycle: 5 }, P_EX: { proc: 'check', cycle: 5 },
-    P_Object192: { proc: 'mark', cycle: 6 }, P_JIG01: { jig: true }, P_JIG01_2: { jig: true }, P_JIG02: { jig: true }, P_JIG02_2: { jig: true } } };
+    P_Object192: { proc: 'mark', cycle: 6 }, P_OTC_fd_v8: { toolPitch: 12 }, P_OTC_fd_v8_2: { toolPitch: 12 }, P_JIG01: { jig: true }, P_JIG01_2: { jig: true }, P_JIG02: { jig: true }, P_JIG02_2: { jig: true } } };
   /* The 조립 셀 process as the user described it (2026-11-04), on the cell as built (points = targets in mm, cell frame; the
      run solves the robot joints):
      RB3 takes a product from the P34 tray rows → P25 dispenser rest under the needle → 도포 → re-grips → P26 rail, which
@@ -36,8 +36,8 @@
       J('DA'), Lm('D', 200), G(true), Lm('DA', 200), J('RA'), Lm('R', 200), G(false), Lm('RA', 200));
     rb3.lines.push(J('H'));
     const weld = (node, name, jigs) => { const points = [H], lines = [];
-      for (const [P, xr] of jigs) { points.push(pt(`${P}A`, `${P} 접근`, [xr - 150, 1505, 1850]), pt(`${P}S`, `${P} 용접 시작`, [xr - 150, 1505, 1785]), pt(`${P}E`, `${P} 용접 끝`, [xr + 150, 1505, 1785]), pt(`${P}B`, `${P} 빠짐`, [xr + 150, 1505, 1850]));
-        lines.push(WAIT(`${P}_CLAMP`, true), J(`${P}A`, 40), Lm(`${P}S`, 200), { op: 'ARC', on: true }, Lm(`${P}E`, 40), { op: 'ARC', on: false }, Lm(`${P}B`, 200), SET(`${P}_FIN`, true), J('H', 40)); }
+      for (const [P, xr] of jigs) { points.push(pt(`${P}R`, `${P} 판 뒤 대기`, [xr - 150, 0, 1850]), pt(`${P}Q`, `${P} 판 뒤 복귀`, [xr + 150, 0, 1850]), pt(`${P}A`, `${P} 접근`, [xr - 150, 1250, 1740]), pt(`${P}S`, `${P} 용접 시작`, [xr - 150, 1505, 1720]), pt(`${P}E`, `${P} 용접 끝`, [xr + 150, 1505, 1720]), pt(`${P}B`, `${P} 빠짐`, [xr + 150, 1250, 1740]));
+        lines.push(WAIT(`${P}_CLAMP`, true), J(`${P}R`, 40), Lm(`${P}A`, 250), Lm(`${P}S`, 200), { op: 'ARC', on: true }, Lm(`${P}E`, 40), { op: 'ARC', on: false }, Lm(`${P}B`, 200), Lm(`${P}Q`, 250), SET(`${P}_FIN`, true), J('H', 40)); } // joint moves only behind the panel; through the gap under it in straight lines
       return { node, name, points, lines }; };
     const rb1 = weld(ids.rb1, 'P22 → P20 용접', [['P22', 2695], ['P20', 1196]]), rb2 = weld(ids.rb2, 'P21 → P19 용접', [['P21', -935], ['P19', -2439]]);
     const jig = (P, x) => [pt(`${P}S`, `${P} 앞`, [x, 2350, 0]), pt(P, `${P} 지그`, [x, 1619, 1795]), pt(`${P}B`, `${P} 라이트 커튼 밖`, [x, 2750, 0])];
