@@ -6,6 +6,7 @@
     { "source": "/builder", "destination": "/build.html" },
     { "source": "/monitor", "destination": "/console2.html" },
     { "source": "/sim", "destination": "/sim.html" },
+    { "source": "/vr", "destination": "/sim.html" },
     { "source": "/build", "destination": "/build.html" }
   ]
 }

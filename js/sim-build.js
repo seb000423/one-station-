@@ -12,7 +12,9 @@
   // no factory saved in ONE BUILDER yet: the default partner plant line (js/plant-machines.js)
   // a stored factory that is still an older copy of the example (before .plant5) is replaced by the current example
   const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant5');
-  const fdoc = (!oldEx && saved) || (P ? P.defaultFactory() : null), lib = P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {};
+  // (plain copies: the example factory / machines come frozen, and the products are filtered out of them below)
+  const copy = o => o && JSON.parse(JSON.stringify(o));
+  const fdoc = copy((!oldEx && saved) || (P ? P.defaultFactory() : null)), lib = copy(P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {});
   // products set out in advance on the example stations (before the builder removed them): not shown, products enter the line
   if (!read('one.build.factory.noprod')) { const isProd = x => x?.params?.src === 'product' && !x.params.feed; if (fdoc) fdoc.blocks = fdoc.blocks.filter(b => !isProd(b));
     for (const [id, m] of Object.entries(lib)) if (id.startsWith('plant-')) for (const d of Object.values(m.versions || {})) d.nodes = d.nodes.filter(x => !isProd(x)); }
@@ -260,10 +262,21 @@
         L.setFx(g, f); } } }
 
   $('loading').hidden = true;
-  let last = performance.now(), fr = 0;
-  const loop = now => { const real = Math.min(0.1, (now - last) / 1000); last = now;
-    if (playing) { let left = real * speed; while (left > 1e-6) { const h = Math.min(0.1, left); step(h); left -= h; } }
-    updateFx(); stage.render(); updateTags(); if (links.length && (fr++ % 10 === 0)) drawPanel(); requestAnimationFrame(loop); };
-  requestAnimationFrame(loop);
-  window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; } };
+  // fixed 0.1 s steps (an accumulator): the run is then the same on every screen for the same factory, so a headset that
+  // follows the desktop (js/sim-link.js) only needs the desktop's clock, not the parts' positions.
+  // follow = { simT, playing, speed (the desktop's measured pace), at }: the desktop's clock as last received; this page
+  // steps until it is level (looking ahead at most 0.12 s of real time, so it does not run past a desktop that paused).
+  let last = performance.now(), fr = 0, acc = 0, follow = null;
+  const H = 0.1;
+  const loop = () => { const now = performance.now(), real = Math.min(0.1, (now - last) / 1000); last = now;
+    if (follow) { const target = follow.simT + (follow.playing ? Math.min(0.12, (now - follow.at) / 1000) * follow.speed : 0), cap = target - simT > 120 ? 3000 : 60;
+      for (let n = 0; simT + H / 2 < target && n < cap; n++) step(H);
+      $('loading').hidden = target - simT < 120; if (!$('loading').hidden) $('loading').textContent = `데스크톱 시각까지 따라가는 중… ${fmt(simT)} / ${fmt(target)}`; }
+    else if (playing) { acc += real * speed; while (acc >= H) { step(H); acc -= H; } }
+    updateFx(); stage.render(); updateTags(); if (links.length && (fr++ % 10 === 0)) drawPanel(); };
+  stage.renderer.setAnimationLoop(loop);   // not requestAnimationFrame: a VR session only drives the renderer's loop
+  window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; },
+    stage, SC, root, objs, rect: r, get playing() { return playing; }, get speed() { return speed; },
+    follow(c) { follow = c ? { ...c, at: performance.now() } : null; if (!c) $('loading').hidden = true; } };
+  document.dispatchEvent(new Event('one-sim-ready'));
 })();
