@@ -1,6 +1,6 @@
 // ONE SIMULATION VR view (Meta Quest 3, WebXR): stand in the line at 1:1.
 // Left stick walks (1.4 m/s, relative to where you look, on the floor). Right stick left / right turns the view
-// smoothly (45°/s, around the head; no up / down tilt of the world, that makes people sick). The head looks as usual. No teleport, no menu in VR. Machines, walls and columns
+// smoothly (45°/s, around the head; no up / down tilt of the world, that makes people sick). The head looks as usual. No teleport, no menu in VR. Machines, walls and columns (real surfaces, by short rays)
 // stop you (you slide along them); nothing to walk through. You start at the line's infeed end looking down the line.
 // Plus the desktop pairing chip ("VR 연결", js/sim-link.js) and the "VR 보기" chip on a headset.
 (() => {
@@ -55,8 +55,23 @@
   const measure = () => { boxes = []; const b = new T.Box3();
     for (const { o } of objs.values()) { b.setFromObject(o); if (b.isEmpty()) continue;
       if (b.max.y < 0.15 || b.min.y > 1.9) continue;
-      boxes.push({ x0: b.min.x - BODY, x1: b.max.x + BODY, z0: b.min.z - BODY, z1: b.max.z + BODY }); } };
+      boxes.push({ o, x0: b.min.x - BODY, x1: b.max.x + BODY, z0: b.min.z - BODY, z1: b.max.z + BODY }); } };
   const blocked = (x, z) => boxes.some(q => x > q.x0 && x < q.x1 && z > q.z0 && z < q.z1);
+
+  /* ---------------------------------------------------------------- walking into things */
+  // A step is free unless a real surface of a placed object (machine, guard, wall, column…) lies within the step plus
+  // 25 cm of body, at knee (0.35 m) or chest (1.1 m) height. Rays, not bounding boxes: a cell's open aisle or a big
+  // group's empty middle is walkable, a guard panel is not. Back faces do not count, so someone who stepped into a
+  // machine in the room can walk out.
+  const ray = new T.Raycaster(), rayO = new T.Vector3(), rayD = new T.Vector3();
+  ray.params.Line = { threshold: 0 }; ray.params.Points = { threshold: 0 };
+  // only objects whose footprint (re-measured every 4 s) is within reach of this step are tested
+  const targets = (h, reach) => boxes.filter(q => h.x > q.x0 - reach && h.x < q.x1 + reach && h.z > q.z0 - reach && h.z < q.z1 + reach).map(q => q.o);
+  function free(h, dx, dz) { const len = Math.hypot(dx, dz); if (len < 1e-6) return true;
+    rayD.set(dx / len, 0, dz / len); ray.far = len + BODY; const list = targets(h, len + BODY); if (!list.length) return true;
+    for (const y of [0.35, 1.1]) { rayO.set(h.x, y, h.z); ray.set(rayO, rayD);
+      if (ray.intersectObjects(list, true).some(i => i.object.isMesh && i.object.visible && !((m => m && m.opacity < 0.2)(Array.isArray(i.object.material) ? i.object.material[0] : i.object.material)))) return false; }
+    return true; }
 
   /* ---------------------------------------------------------------- start pose */
   const head = new T.Vector3(), fwd = new T.Vector3();
@@ -98,11 +113,10 @@
       const rx = -fwd.z, rz = fwd.x;   // right of the view
       const step = WALK * dt * k, dx = (fwd.x * -my + rx * mx) * step, dz = (fwd.z * -my + rz * mx) * step;
       headPos(head);
-      if (blocked(head.x, head.z)) { rig.position.x += dx; rig.position.z += dz; }   // stepped into something in the room: let them walk out
-      else if (!blocked(head.x + dx, head.z + dz)) { rig.position.x += dx; rig.position.z += dz; }
-      else if (!blocked(head.x + dx, head.z)) rig.position.x += dx;     // slide along the obstacle
-      else if (!blocked(head.x, head.z + dz)) rig.position.z += dz; }
+      if (free(head, dx, dz)) { rig.position.x += dx; rig.position.z += dz; }
+      else if (free(head, dx, 0)) rig.position.x += dx;     // slide along the obstacle
+      else if (free(head, 0, dz)) rig.position.z += dz; }
   });
 
-  window.ONE_VR = { start, measure, blocked, get boxes() { return boxes; } };
+  window.ONE_VR = { start, measure, blocked, free, get boxes() { return boxes; } };
 })();
