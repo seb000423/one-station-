@@ -1,6 +1,6 @@
 // ONE SIMULATION VR view (Meta Quest 3, WebXR): stand in the line at 1:1.
-// The head only looks. Walking and turning are on the sticks only: left stick walks (1.4 m/s, along where you look,
-// on the floor), right stick left / right turns in 30° snaps. No teleport, no menu in VR. Machines, walls and columns
+// The head only looks (the only way to turn). Either stick walks: push = move that way relative to where you look
+// (1.4 m/s, on the floor), no stick turning. No teleport, no menu in VR. Machines, walls and columns
 // stop you (you slide along them); nothing to walk through. You start at the line's infeed end looking down the line.
 // Plus the desktop pairing chip ("VR 연결", js/sim-link.js) and the "VR 보기" chip on a headset.
 (() => {
@@ -8,7 +8,7 @@
   const $ = id => document.getElementById(id), T = window.THREE, S = window.ONE_SIMB;
   if (!S) return;
   const { stage, SC, objs, rect: r } = S, rig = stage.xrRig, renderer = stage.renderer;
-  const WALK = 1.4, TURN = Math.PI / 6, DEAD = 0.2, BODY = 0.25;
+  const WALK = 1.4, DEAD = 0.2, BODY = 0.25;
 
   /* ---------------------------------------------------------------- chips */
   const views = $('views');
@@ -45,7 +45,7 @@
         b.classList.add('on'); say(''); start(); }
       catch (e) { say(/already an active/i.test(e.message) ? 'VR이 이미 다른 탭에서 열려 있습니다. 다른 탭을 닫고 이 페이지를 새로 고친 뒤 다시 누르세요' : `VR 시작 실패: ${e.message}`); }
       finally { starting = false; }
-    }).title = '1:1 현장 보기 · 왼 스틱 걷기 · 오른 스틱 회전';
+    }).title = '1:1 현장 보기 · 스틱으로 이동, 방향은 고개로';
   }).catch(() => {});
 
   /* ---------------------------------------------------------------- obstacles (floor plan boxes) */
@@ -76,15 +76,15 @@
   }
 
   /* ---------------------------------------------------------------- sticks */
-  let turnHeld = false;
   stage.onFrame.push(dt => {
     if (!renderer.xr.isPresenting) return;
     const now = performance.now(); if (now - measured > 4000) { measure(); measured = now; }
     const ses = renderer.xr.getSession(); if (!ses) return;
-    let mx = 0, my = 0, tx = 0;
-    for (const src of ses.inputSources) { const g = src.gamepad; if (!g || g.axes.length < 4) continue;
-      const ax = g.axes[2], ay = g.axes[3];
-      if (src.handedness === 'left') { mx = ax; my = ay; } else if (src.handedness === 'right') tx = ax; }
+    // either stick (the one pushed further); thumbstick = axes 2/3 on Quest Touch (xr-standard), 0/1 on some pads
+    let mx = 0, my = 0;
+    for (const src of ses.inputSources) { const g = src.gamepad; if (!g) continue;
+      const ax = g.axes.length >= 4 ? g.axes[2] : g.axes[0] || 0, ay = g.axes.length >= 4 ? g.axes[3] : g.axes[1] || 0;
+      if (Math.hypot(ax, ay) > Math.hypot(mx, my)) { mx = ax; my = ay; } }
     // walk: along where the head looks, flattened to the floor
     const m = Math.hypot(mx, my);
     if (m > DEAD) { const k = Math.min(1, (m - DEAD) / (1 - DEAD)) / m;
@@ -96,10 +96,6 @@
       else if (!blocked(head.x + dx, head.z + dz)) { rig.position.x += dx; rig.position.z += dz; }
       else if (!blocked(head.x + dx, head.z)) rig.position.x += dx;     // slide along the obstacle
       else if (!blocked(head.x, head.z + dz)) rig.position.z += dz; }
-    // turn: 30° per push, around the head (the view does not swing sideways)
-    if (Math.abs(tx) > 0.7 && !turnHeld) { turnHeld = true; const a = tx > 0 ? -TURN : TURN; headPos(head);
-      rig.position.sub(head).applyAxisAngle(new T.Vector3(0, 1, 0), a).add(head); rig.rotation.y += a; }
-    else if (Math.abs(tx) < 0.3) turnHeld = false;
   });
 
   window.ONE_VR = { start, measure, blocked, get boxes() { return boxes; } };
