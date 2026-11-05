@@ -33,12 +33,18 @@
   let session = null;
   if (navigator.xr) navigator.xr.isSessionSupported('immersive-vr').then(ok => {
     if (!ok) return;
+    let starting = false;
     chip('VR 보기', async b => {
+      if (starting) return;                       // a second tap while the headset is still opening the session
       if (session) { session.end(); return; }
+      starting = true; say('VR 여는 중…');
       try { session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor'] });
-        session.addEventListener('end', () => { session = null; b.classList.remove('on'); });
-        await renderer.xr.setSession(session); b.classList.add('on'); start(); }
-      catch (e) { say(`VR 시작 실패: ${e.message}`); }
+        session.addEventListener('end', () => { session = null; b.classList.remove('on'); say(''); });
+        try { await renderer.xr.setSession(session); }
+        catch (e) { const s = session; session = null; try { await s.end(); } catch (x) {} throw e; }   // never leave a half-open session behind
+        b.classList.add('on'); say(''); start(); }
+      catch (e) { say(/already an active/i.test(e.message) ? 'VR이 이미 다른 탭에서 열려 있습니다. 다른 탭을 닫고 이 페이지를 새로 고친 뒤 다시 누르세요' : `VR 시작 실패: ${e.message}`); }
+      finally { starting = false; }
     }).title = '1:1 현장 보기 · 왼 스틱 걷기 · 오른 스틱 회전';
   }).catch(() => {});
 

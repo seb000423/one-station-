@@ -223,7 +223,7 @@
       if (renderer.xr.isPresenting) {
         xrCam.layers.mask = camera.layers.mask;
         if (++xrFrame % 3 === 0) renderer.shadowMap.needsUpdate = true;
-        renderer.setRenderTarget(null); renderer.render(scene, xrCam); return;
+        renderer.render(scene, xrCam); return;   // three has already bound the headset's framebuffer for this frame
       }
       controls.update(); composer.render(); };
     const setDir = v => { dir.copy(v).normalize(); };
