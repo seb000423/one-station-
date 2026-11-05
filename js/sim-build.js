@@ -310,7 +310,7 @@
     updateFx(); stage.render(); updateTags(); if (live && (fr++ % 10 === 0)) drawPanel(); };
   stage.renderer.setAnimationLoop(loop);   // not requestAnimationFrame: a VR session only drives the renderer's loop
   window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; },
-    stage, SC, root, objs, rect: r, get playing() { return playing; }, get speed() { return speed; },
+    stage, SC, root, objs, solids: cells.map(c => c.g), rect: r, get playing() { return playing; }, get speed() { return speed; },
     follow(c) { follow = c ? { ...c, at: performance.now() } : null; if (!c) $('loading').hidden = true; } };
   document.dispatchEvent(new Event('one-sim-ready'));
 })();
