@@ -26,7 +26,12 @@
   $('modes').hidden = true; const legend = document.querySelector('.legend'), footer = document.querySelector('footer');
   legend.hidden = true; footer.style.display = 'none';
 
-  const stage = window.OneStage.create($('c')), { camera } = stage;
+  // one stage for the page: a run started again (the time bar going back, ONE_SIMB.reset) keeps the renderer, the camera
+  // and a VR session; the previous run takes its objects, chips, labels and loop away first
+  const again = !!window.ONE_SIMB_STAGE, NEXT = window.ONE_SIMB_NEXT || {}; window.ONE_SIMB_NEXT = null;
+  if (window.ONE_SIMB && window.ONE_SIMB.dispose) window.ONE_SIMB.dispose();
+  const stage = window.ONE_SIMB_STAGE || (window.ONE_SIMB_STAGE = window.OneStage.create($('c'))), { camera } = stage;
+  let disposed = false; const mine = [];   // DOM nodes this run added (chips, labels)
   if (!fdoc || (!fdoc.machines?.length && !fdoc.blocks?.length)) { $('loading').innerHTML = `ONE BUILDER의 공장이 비어 있습니다.<br>Factory Builder에서 설비를 놓거나 ‘예시 공정 불러오기’를 누르면 여기서 돌아갑니다.<br><br><a class="btn pri" href="/build" style="text-decoration:none">ONE BUILDER로 가기</a>`; return; }
 
   const SC = window.OneScene.create({ lib: () => lib }), root = new T.Group(); stage.world.add(root);
@@ -46,7 +51,7 @@
   slab.position.set(c.x, 0.001, c.z); stage.overlay.add(slab); stage.mirrorPass.mirror = false;
   const m = Math.max(w, d) * 0.35 + 6; stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2 - m, 0, c.z - d / 2 - m), new T.Vector3(c.x + w / 2 + m, 6, c.z + d / 2 + m))); stage.setGrid(0.5, 5);
   const fitAll = () => stage.fit(new T.Box3().setFromPoints([SC.toS([r.x0, r.y0, 0]), SC.toS([r.x1, r.y1, 4000])]), 1.05);
-  fitAll();
+  if (!again) fitAll();
 
   // machine cards: instance override → saved machine card → library card
   const machines = items.filter(it => it.path === 'machines').map(it => {
@@ -255,7 +260,7 @@
 
   // view chips: 전체 · X-RAY (see parts inside closed machines)
   let xray = false;
-  const chip = (txt, fn) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = txt; b.onclick = () => fn(b); $('views').appendChild(b); return b; };
+  const chip = (txt, fn) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = txt; b.onclick = () => fn(b); $('views').insertBefore(b, mine.length ? mine[mine.length - 1].nextSibling : $('views').firstChild); mine.push(b); return b; };
   chip('전체', fitAll);
   // 단색: charcoal · grey · ivory with one amber accent (stage.studio), on by default; status lamps and screens keep their colour
   let mono = true;
@@ -264,23 +269,24 @@
   const xrayHot = o => machines.some(x => objs.get(x.it.id)?.o === o);
   chip('X-RAY', b => { xray = !xray; if (xray) stage.addTwin(root, xrayHot); stage.ghost(xray); b.classList.toggle('on', xray); });
   // a model that arrives while X-RAY is on gets its outline too (otherwise it would vanish in the ghost view)
-  L.onModel(g => { if (xray) stage.addTwin(g, xrayHot); if (mono) stage.studio(g, true); });
+  L.onModel(g => { if (disposed) return; if (xray) stage.addTwin(g, xrayHot); if (mono) stage.studio(g, true); });
 
   // machine labels (projected HTML) with a state dot
   const tags = $('tags'), v3 = new T.Vector3(), box = new T.Box3();
-  const els = machines.map(x => { const el = document.createElement('div'); el.className = 'tag'; el.innerHTML = `<i style="width:7px;height:7px;border-radius:50%;display:block;background:var(--idle)"></i><b>${esc(x.code)}</b>${esc(x.name)}`; tags.appendChild(el); return { x, el, s: st.get(x.it.id) }; });
+  const els = machines.map(x => { const el = document.createElement('div'); el.className = 'tag'; el.innerHTML = `<i style="width:7px;height:7px;border-radius:50%;display:block;background:var(--idle)"></i><b>${esc(x.code)}</b>${esc(x.name)}`; mine.push(el); tags.appendChild(el); return { x, el, s: st.get(x.it.id) }; });
   const updateTags = () => { const rc = $('c').getBoundingClientRect(); for (const { x, el, s } of els) { const o = objs.get(x.it.id)?.o; if (!o) continue; box.setFromObject(o); box.getCenter(v3); v3.y = box.max.y + 0.1; v3.project(camera);
     el.style.display = Math.abs(v3.x) < 1.05 && Math.abs(v3.y) < 1.05 ? '' : 'none'; el.style.left = ((v3.x + 1) / 2 * rc.width) + 'px'; el.style.top = ((1 - v3.y) / 2 * rc.height) + 'px';
     el.firstChild.style.background = !s ? 'var(--dim)' : `var(--${s.state === 'busy' ? 'busy' : s.state === 'blocked' ? 'blocked' : 'idle'})`; } };
 
   // clock: play / pause, speed
-  const live = links.length > 0 || cells.length > 0; let playing = live, speed = cells.length ? 1 : 10; // a cell running its program is watched at real speed
+  const onKey = e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('play').click(); } };
+  const live = links.length > 0 || cells.length > 0; let playing = NEXT.playing ?? live, speed = NEXT.speed ?? (cells.length ? 1 : 10); // a cell running its program is watched at real speed
   if (live) { footer.style.display = ''; legend.hidden = false; legend.innerHTML = '<span><i class="st-busy"></i>가동</span><span><i class="st-idle"></i>대기</span><span><i class="st-blocked"></i>막힘 (출구가 비지 않음)</span>';
-    $('seek').hidden = true; $('horizonL').textContent = '공장 시간'; $('play').textContent = '❚❚';
+    $('play').textContent = playing ? '❚❚' : '▶';
     $('speeds').innerHTML = [1, 2, 10, 30, 60].map(v => `<button data-v="${v}" class="${v === speed ? 'on' : ''}">×${v}</button>`).join('');
     $('speeds').onclick = e => { const b = e.target.closest('[data-v]'); if (!b) return; speed = +b.dataset.v; $('speeds').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
     $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? '❚❚' : '▶'; };
-    addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('play').click(); } }); }
+    addEventListener('keydown', onKey); }
   setTimeout(stage.resize, 0);
 
   // status effects of the cells' own objects (tower lamps, sensors, operator screens), once a frame
@@ -298,19 +304,43 @@
   // follow = { simT, playing, speed (the desktop's measured pace), at }: the desktop's clock as last received; this page
   // steps until it is level (looking ahead at most 0.12 s of real time, so it does not run past a desktop that paused).
   let last = performance.now(), fr = 0, acc = 0, follow = null;
+  /* time bar: jump to any moment. Forward = the run steps there at once; back = the run starts again from 0 and steps
+     there (same steps, same result: nothing is stored, the run is deterministic). The bar spans 5 min, or up to the
+     furthest moment reached, rounded up to a minute. */
+  let seekTo = NEXT.seekTo ?? null, far = Math.max(NEXT.far || 0, seekTo || 0), dragging = false;
+  const seek = $('seek'), horizon = () => Math.max(300, Math.ceil(Math.max(far, simT) / 60) * 60);
+  const drawSeek = () => { const h = horizon(); if (+seek.max !== h) { seek.max = h; $('horizonL').textContent = fmt(h); } if (!dragging) seek.value = Math.round(seekTo ?? simT); };
+  function goTo(t) { t = Math.max(0, t); far = Math.max(far, simT);
+    if (t >= simT) { seekTo = t; return; }
+    reset({ seekTo: t }); }
+  let resetting = false;
+  function reset(o = {}) { if (resetting) return; resetting = true; window.ONE_SIMB_NEXT = { playing, speed, far: Math.max(far, simT), ...o };
+    const el = document.createElement('script'); el.src = 'js/sim-build.js'; document.body.appendChild(el); }
+  if (live) { seek.hidden = false; seek.step = 1;
+    seek.oninput = () => { dragging = true; $('clock').textContent = fmt(+seek.value); };
+    seek.onchange = () => { dragging = false; goTo(+seek.value); }; drawSeek(); }
   const H = 0.1;
   let ready = !cells.length, readyT = performance.now();
   const loop = () => { const now = performance.now(), real = Math.min(0.1, (now - last) / 1000); last = now;
     if (!ready) { ready = cellsReady() || now - readyT > 60000; if (ready) { cells.forEach(cellStart); $('loading').hidden = true; } else { $('loading').hidden = false; $('loading').textContent = '셀의 로봇·설비 모델을 불러오는 중…'; } }
     if (!ready) { /* the clock waits for the models */ }
+    else if (seekTo != null) { const end = performance.now() + 150;   // a jump may take whole frames: the view need not be smooth while it runs
+      while (simT + H / 2 < seekTo && performance.now() < end) step(H);
+      if (simT + H / 2 >= seekTo) { seekTo = null; $('loading').hidden = true; } else { $('loading').hidden = false; $('loading').textContent = `이동 중… ${fmt(simT)} / ${fmt(seekTo)}`; } drawPanel(); }
     else if (follow) { const target = follow.simT + (follow.playing ? Math.min(0.12, (now - follow.at) / 1000) * follow.speed : 0), cap = target - simT > 120 ? 3000 : 60;
-      for (let n = 0; simT + H / 2 < target && n < cap; n++) step(H);
+      if (target < simT - 1) { reset(); return; }   // the desktop went back in time: start again and catch up
+      const end = performance.now() + (target - simT > 120 ? 50 : 25);   // a time budget, not a step count: a headset frame must not freeze
+      for (let n = 0; simT + H / 2 < target && n < cap && (n < 2 || performance.now() < end); n++) step(H);
       $('loading').hidden = target - simT < 120; if (!$('loading').hidden) $('loading').textContent = `데스크톱 시각까지 따라가는 중… ${fmt(simT)} / ${fmt(target)}`; }
     else if (playing) { acc += real * speed; while (acc >= H) { step(H); acc -= H; } }
-    updateFx(); stage.render(); updateTags(); if (live && (fr++ % 10 === 0)) drawPanel(); };
+    updateFx(); stage.render(); updateTags(); if (live && (fr++ % 10 === 0)) { drawPanel(); drawSeek(); } };
   stage.renderer.setAnimationLoop(loop);   // not requestAnimationFrame: a VR session only drives the renderer's loop
   window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; },
     stage, SC, root, objs, solids: cells.map(c => c.g), rect: r, get playing() { return playing; }, get speed() { return speed; },
-    follow(c) { follow = c ? { ...c, at: performance.now() } : null; if (!c) $('loading').hidden = true; } };
+    follow(c) { follow = c ? { ...c, at: performance.now() } : null; if (!c) $('loading').hidden = true; },
+    seek: goTo, reset,
+    dispose() { disposed = true; stage.renderer.setAnimationLoop(null); removeEventListener('keydown', onKey);
+      stage.world.remove(root); for (const g of [bnRing, bn0]) if (g && g.parent) g.parent.remove(g); stage.overlay.remove(slab);
+      for (const el of mine) el.remove(); } };
   document.dispatchEvent(new Event('one-sim-ready'));
 })();

@@ -8,7 +8,10 @@
   'use strict';
   const $ = id => document.getElementById(id), T = window.THREE, S = window.ONE_SIMB;
   if (!S) return;
-  const { stage, SC, objs, rect: r } = S, rig = stage.xrRig, renderer = stage.renderer;
+  // the run can start again (time bar going back): its objects are read from the current ONE_SIMB each time; the stage,
+  // the VR rig and this file's frame hook stay the same
+  const stage = S.stage, rig = stage.xrRig, renderer = stage.renderer, cur = () => window.ONE_SIMB || S;
+  if (window.ONE_VR) return;   // already set up on this page
   const WALK = 1.4, TURN = Math.PI / 4, DEAD = 0.2, BODY = 0.25, EYE0 = 1.63, UP = new T.Vector3(0, 1, 0);
 
   /* ---------------------------------------------------------------- chips */
@@ -55,7 +58,7 @@
   let boxes = [], measured = -1e9;
   const measure = () => { boxes = []; const b = new T.Box3();
     // placed objects + anything else the run says is solid (ONE_SIMB.solids: e.g. the cell groups of programmed cells)
-    const solids = [...[...objs.values()].map(v => v.o), ...(S.solids || [])];
+    const solids = [...[...cur().objs.values()].map(v => v.o), ...(cur().solids || [])];
     for (const o of solids) { b.setFromObject(o); if (b.isEmpty()) continue;
       if (b.max.y < 0.15 || b.min.y > 1.9) continue;
       boxes.push({ o, x0: b.min.x - BODY, x1: b.max.x + BODY, z0: b.min.z - BODY, z1: b.max.z + BODY }); } };
@@ -88,7 +91,7 @@
   function start() {
     measure(); measured = performance.now(); lightenShadows();
     // 1.5 m before the infeed edge of the floor, halfway across, facing the flow direction (stored +X)
-    const p = SC.toS([r.x0 - 1500, (r.y0 + r.y1) / 2, 0]);
+    const { SC, rect: r } = cur(), p = SC.toS([r.x0 - 1500, (r.y0 + r.y1) / 2, 0]);
     let x = p.x; while (blocked(x, p.z) && x > p.x - 20) x -= 0.5;
     rig.position.set(x, 0, p.z); rig.rotation.set(0, -Math.PI / 2, 0);
     eye = EYE0; head0 = null;   // the wearer's own head height is read on the first tracked frame
