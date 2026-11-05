@@ -263,7 +263,7 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 // The old welding-module demo line (sim-run / sim-lab) is gone.
 (() => {
   // ?vr=<6 digits>: this is the headset following a desktop (js/sim-link.js): its ONE BUILDER data arrives first
-  const list = ['sim-link', 'one-twin', 'one-library', 'plant-data', 'plant-machines', 'one-scene', 'sim-build', 'sim-vr'];
+  const list = ['sim-link', 'one-twin', 'one-library', 'plant-data', 'plant-machines', 'one-scene', 'one-run', 'sim-build', 'sim-vr'];
   // /vr (the headset, no code): connect to the PC that is waiting with 'VR 연결'
   const vr = new URLSearchParams(location.search).get('vr'), loading = document.getElementById('loading');
   const follow = /^\d{6}$/.test(vr || '') || location.pathname.replace(/\/$/, '') === '/vr';

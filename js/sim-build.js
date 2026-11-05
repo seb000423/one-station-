@@ -9,12 +9,13 @@
   const $ = id => document.getElementById(id), T = window.THREE, L = window.OneLibrary;
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  // no factory saved in ONE BUILDER yet: the default partner plant line (js/plant-machines.js)
+  // the factory as ONE BUILDER keeps it (both builders open empty; Factory Builder's 예시 공정 불러오기 opens the partner plant line)
   // a stored factory that is still an older copy of the example (before .plant5) is replaced by the current example
   const P = window.OnePlant, saved = read('one.build.factory'), oldEx = saved && P && ['예시 공정 · 감마 라인', '감마 라인 (협력사 설비)'].includes(saved.meta?.name) && !read('one.build.factory.plant5');
   // (plain copies: the example factory / machines come frozen, and the products are filtered out of them below)
   const copy = o => o && JSON.parse(JSON.stringify(o));
-  const fdoc = copy((!oldEx && saved) || (P ? P.defaultFactory() : null)), lib = copy(P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {});
+  // the builder's factory as it is (an empty one shows a note; the example line is opened in Factory Builder: 예시 공정 불러오기)
+  const fdoc = copy((!oldEx && saved) || (P && oldEx ? P.defaultFactory() : null)), lib = copy(P ? P.withPlant(read('one.build.machines') || {}) : read('one.build.machines') || {});
   // products set out in advance on the example stations (before the builder removed them): not shown, products enter the line
   if (!read('one.build.factory.noprod')) { const isProd = x => x?.params?.src === 'product' && !x.params.feed; if (fdoc) fdoc.blocks = fdoc.blocks.filter(b => !isProd(b));
     for (const [id, m] of Object.entries(lib)) if (id.startsWith('plant-')) for (const d of Object.values(m.versions || {})) d.nodes = d.nodes.filter(x => !isProd(x)); }
@@ -26,11 +27,17 @@
   legend.hidden = true; footer.style.display = 'none';
 
   const stage = window.OneStage.create($('c')), { camera } = stage;
-  if (!fdoc) { $('loading').innerHTML = 'ONE BUILDER에 저장된 공장이 없습니다.<br><br><a class="btn pri" href="/build" style="text-decoration:none">ONE BUILDER로 가기</a>'; return; }
+  if (!fdoc || (!fdoc.machines?.length && !fdoc.blocks?.length)) { $('loading').innerHTML = `ONE BUILDER의 공장이 비어 있습니다.<br>Factory Builder에서 설비를 놓거나 ‘예시 공정 불러오기’를 누르면 여기서 돌아갑니다.<br><br><a class="btn pri" href="/build" style="text-decoration:none">ONE BUILDER로 가기</a>`; return; }
 
   const SC = window.OneScene.create({ lib: () => lib }), root = new T.Group(); stage.world.add(root);
   const items = SC.factoryItems(fdoc), objs = new Map();
-  for (const it of items) { let o; try { o = SC.buildFactoryObj(it, fdoc); } catch (e) { continue; } root.add(o); objs.set(it.id, { o, it }); }
+  /* cells with their own program (Machine Builder: robot / 작업자 programs, 동작 순서): run here exactly as in 동작 시험 —
+     the machine's own objects in its frame (js/one-run.js engine), placed where the cell stands. Its split objects in the
+     factory are not built a second time. The cell runs its own works round after round (it is not a station of the flow). */
+  const progDoc = it => { if (it.path !== 'machines' || !it.local) return null; const d = SC.localDoc(it.local); return d && d.programs?.length && d.sequence?.steps?.length ? d : null; };
+  const progIds = new Set(items.filter(progDoc).map(it => it.id));
+  for (const it of items) { if (it.path === 'blocks' && progIds.has(it.item.parent ?? it.item.params?.cell)) continue;
+    let o; try { o = SC.buildFactoryObj(it, fdoc); } catch (e) { continue; } root.add(o); objs.set(it.id, { o, it }); }
 
   // floor: the slab as a faint tint with an ivory edge, the stage grid underneath
   const r = SC.slabRect(fdoc), w = (r.x1 - r.x0) / 1000, d = (r.y1 - r.y0) / 1000, c = SC.toS([(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 0]);
@@ -63,6 +70,27 @@
 
   /* ------------------------------------------------------------------ run model */
   const rng = (s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; })(20261103);
+  const WORKP = {}, nodeDef = n => { const d = L.BLOCKS[n.blockType]; if (d && n.blockType === 'model-part' && n.params?.cls === 'work') return WORKP[n.blockType] || (WORKP[n.blockType] = Object.assign(Object.create(d), { work: true })); return d; };
+  const cells = [...progIds].map(id => { const { it, o: fo } = objs.get(id), doc = JSON.parse(JSON.stringify(progDoc(it))), g = new T.Group(), map = new Map(), t = it.item.transform;
+    fo.visible = false; root.add(g); SC.placeObj(g, t.position, t.rotation[2] || 0);
+    for (const n of doc.nodes) { let ob; try { ob = L.buildBlock(n.blockType, n.params); } catch (e) { continue; } SC.placeObj(ob, n.transform.position, n.transform.rotation[2]); ob.userData.node = n; g.add(ob); map.set(n.id, { obj: ob }); }
+    const c = { id, it, g, doc, map, name: it.item.name || doc.meta.name, rounds: 0, wait: 0 };
+    c.eng = window.OneRun.create({ doc: () => doc, objs: () => map, nodeDef, nodeCode: n => n.params.tag || '', placeObj: SC.placeObj, ov: g, rng, hits: false,
+      log: txt => { if (/제품 단계: 레이저 각인/.test(txt)) c.made = (c.made || 0) + 1; } });
+    return c; });
+  // ready = every model of the cells has arrived (a robot still loading has no arm yet): the clock starts then, on every screen alike
+  const cellsReady = () => cells.every(c => { for (const v of c.map.values()) if (v.obj.getObjectByName('placeholder')) return false; return true; });
+  function cellStart(c) { const E = c.eng; for (const r of Object.values(E.ROB.run)) Object.assign(r, { on: false, line: -1, seg: null, prev: false, grip: null, arc: false });
+    E.resetRun(); for (const n of c.doc.nodes) if (nodeDef(n)?.work) { const o = c.map.get(n.id)?.obj; if (o) { o.userData.stage = null; E.stageFx(o, n.params.stage0 ?? 6); } }
+    Object.assign(E.AUTO, { on: true, i: 0, phase: 'wait', t: 0, waited: 0 }); c.wait = 0; }
+  // one step of a cell: its frame is the world while it steps (rays, IK and set-down work in the machine's own coordinates)
+  const keepP = new T.Vector3(), keepQ = new T.Quaternion();
+  function cellStep(c, dt) { const g = c.g; keepP.copy(g.position); keepQ.copy(g.quaternion); g.position.set(0, 0, 0); g.quaternion.identity(); g.updateMatrixWorld(true);
+    for (let k = 0; k < 2; k++) c.eng.step(dt / 2);
+    g.position.copy(keepP); g.quaternion.copy(keepQ); g.updateMatrixWorld(true);
+    // the round is over when the sequence waits on its last step with every program at rest: the next round starts with the works back on the trays
+    const E = c.eng, steps = c.doc.sequence.steps, idle = !Object.values(E.ROB.run).some(r => r.on) && !Object.values(E.WK.run).some(w => w.on);
+    if (E.AUTO.i === steps.length - 1 && E.AUTO.phase === 'wait' && idle) { if ((c.wait += dt) > 4) { c.rounds++; cellStart(c); } } else c.wait = 0; }
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], (a[2] || 0) - (b[2] || 0));
   const polyLen = pts => pts.reduce((s, p, i) => s + (i ? dist(pts[i - 1], p) : 0), 0);
   function along(pts, u) { const total = polyLen(pts); let s = Math.max(0, Math.min(1, u)) * total;
@@ -85,7 +113,7 @@
 
   // stations: every machine or storage that a flow touches
   const st = new Map();
-  function station(id) { if (st.has(id)) return st.get(id); const { it, o } = objs.get(id), P = SC.instancePorts(it); if (!P) return null;
+  function station(id) { if (st.has(id)) return st.get(id); if (progIds.has(id)) return null; const { it, o } = objs.get(id), P = SC.instancePorts(it); if (!P) return null;
     const mc = machines.find(x => x.it.id === id), path = SC.instancePath(it) || [P.inlet, P.outlet];
     const s = { id, it, o, P, path, kind: it.path === 'storage' ? 'store' : 'mach', name: mc ? `${mc.code} ${mc.name}` : (it.item.name || (it.item.kind === 'rack' ? '랙' : '보관 구역')), code: mc?.code || (it.item.kind === 'rack' ? 'RK' : 'ST'),
       ct: mc?.ct || DEF_CT, assumed: !mc?.ct && it.path !== 'storage', ok: mc ? mc.ok : 1, ins: [], outs: [], inQ: null, inRes: false, cur: null, t: 0, outQ: null, feeding: false,
@@ -152,7 +180,7 @@
   /* ------------------------------------------------------------------ one step (dt s of factory time) */
   let simT = 0;
   function step(dt) {
-    simT += dt;
+    simT += dt; for (const c of cells) cellStep(c, dt);
     for (const pt of parts) if (pt.anim) { const a = pt.anim; a.t += dt; setPos(pt, along(a.pts, a.t / a.d)); if (a.t >= a.d) { pt.anim = null; a.done && a.done(); } }
     for (const s of st.values()) {
       // sources pull the next part off the raw-material pallet
@@ -206,6 +234,7 @@
       <div class="kpis"><div class="kpi"><b id="kOk">0</b><span>완성 (양품)</span></div><div class="kpi"><b id="kUph">–</b><span>시간당 생산 (실측)</span></div>
       <div class="kpi"><b id="kWip">0</b><span>재공 (라인 위 부품)</span></div><div class="kpi"><b id="kNg">0</b><span>불량</span></div></div></section>
     <section><h2>병목 <span>가동률 기준</span></h2><div class="bn-box"><b id="bnNow">–</b><span id="bnWhy">돌려 보면 가장 바쁜 설비가 나옵니다. 카드로 계산한 병목은 ${bn ? esc(`${bn.code} (${bn.uph.toFixed(1)}/h)`) : '없음'}입니다.</span></div></section>
+    ${cells.length ? `<section><h2>셀 <span>설비 프로그램대로</span></h2><div id="cells" style="display:grid;gap:4px;font-size:12px"></div><p class="note">로봇·작업자가 Machine Builder에서 만든 프로그램과 동작 순서 그대로 움직이고, 제품은 공정마다 모양이 바뀝니다. 한 바퀴가 끝나면 워크를 다시 트레이에 놓고 다음 바퀴를 돕니다.</p></section>` : ''}
     <section><h2>설비 <span>가동 · 막힘</span></h2><div id="rows"></div></section>
     <section><h2>흐름</h2><div id="links" style="display:grid;gap:4px;font-size:12px"></div>
       <p class="note">${flows.length ? '부품은 원자재 파렛트에서 나와 각 설비의 경로를 따라 가공되고, 흐름에 정한 수단으로 다음 설비 입구까지 옮겨집니다. 불량은 설비 옆 빨간 통으로 갑니다. 원자재 파렛트가 비거나 완성품 파렛트가 차면 새 파렛트로 바뀝니다.' : '아직 설비끼리 공정 흐름이 연결되지 않았습니다. Factory Builder에서 설비의 주황 출구 화살표를 끌어 다음 설비에 놓으면 여기서 부품이 흐릅니다.'}</p>
@@ -216,6 +245,8 @@
   $('rows').addEventListener('click', e => { const r_ = e.target.closest('[data-id]'); if (!r_) return; const s = st.get(r_.dataset.id); stage.fit(new T.Box3().setFromObject(s.o).expandByScalar(1.5), 1.2); });
   let bnRing = bn0, bnId = bn ? bn.it.id : null;
   function drawPanel() { const made = stations.filter(s => s.sink).reduce((a, s) => a + s.made, 0), ng = mstations.reduce((a, s) => a + s.ng, 0), wip = parts.filter(p => !p.ng && !stations.some(s => (s.fin && s.fin.parts.includes(p)) || (s.raw && s.raw.parts.includes(p)))).length;
+    if (cells.length) $('cells').innerHTML = cells.map(c => { const on = [...Object.entries(c.eng.ROB.run).filter(([, r]) => r.on), ...Object.entries(c.eng.WK.run).filter(([, w]) => w.on)].length;
+      return `<div><b>${esc(c.name)}</b> <span style="color:var(--mute)">${c.rounds + 1}바퀴째 · 완성 ${c.made || 0}개 · ${on ? `움직이는 로봇·작업자 ${on}` : '대기'}</span></div>`; }).join('');
     $('kOk').textContent = made; $('kNg').textContent = ng; $('kWip').textContent = wip; $('kUph').textContent = simT > 600 ? (made / simT * 3600).toFixed(1) : '–'; $('clock').textContent = fmt(simT);
     let top = null; for (const { s, el } of rowEls) { const T_ = s.busy + s.blocked + s.idle || 1, b = s.busy / T_, k = s.blocked / T_; const u = el.querySelectorAll('u'); u[0].style.width = b * 100 + '%'; u[1].style.width = k * 100 + '%';
       el.querySelector('.pc').textContent = Math.round(b * 100) + '%'; el.querySelector('i').style.background = `var(--${s.state === 'busy' ? 'busy' : s.state === 'blocked' ? 'blocked' : 'idle'})`; if (!top || b > top.b) top = { s, b }; }
@@ -243,10 +274,10 @@
     el.firstChild.style.background = !s ? 'var(--dim)' : `var(--${s.state === 'busy' ? 'busy' : s.state === 'blocked' ? 'blocked' : 'idle'})`; } };
 
   // clock: play / pause, speed
-  let playing = links.length > 0, speed = 10;
-  if (links.length) { footer.style.display = ''; legend.hidden = false; legend.innerHTML = '<span><i class="st-busy"></i>가동</span><span><i class="st-idle"></i>대기</span><span><i class="st-blocked"></i>막힘 (출구가 비지 않음)</span>';
+  const live = links.length > 0 || cells.length > 0; let playing = live, speed = cells.length ? 1 : 10; // a cell running its program is watched at real speed
+  if (live) { footer.style.display = ''; legend.hidden = false; legend.innerHTML = '<span><i class="st-busy"></i>가동</span><span><i class="st-idle"></i>대기</span><span><i class="st-blocked"></i>막힘 (출구가 비지 않음)</span>';
     $('seek').hidden = true; $('horizonL').textContent = '공장 시간'; $('play').textContent = '❚❚';
-    $('speeds').innerHTML = [1, 10, 30, 60].map(v => `<button data-v="${v}" class="${v === speed ? 'on' : ''}">×${v}</button>`).join('');
+    $('speeds').innerHTML = [1, 2, 10, 30, 60].map(v => `<button data-v="${v}" class="${v === speed ? 'on' : ''}">×${v}</button>`).join('');
     $('speeds').onclick = e => { const b = e.target.closest('[data-v]'); if (!b) return; speed = +b.dataset.v; $('speeds').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
     $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? '❚❚' : '▶'; };
     addEventListener('keydown', e => { if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('play').click(); } }); }
@@ -268,12 +299,15 @@
   // steps until it is level (looking ahead at most 0.12 s of real time, so it does not run past a desktop that paused).
   let last = performance.now(), fr = 0, acc = 0, follow = null;
   const H = 0.1;
+  let ready = !cells.length, readyT = performance.now();
   const loop = () => { const now = performance.now(), real = Math.min(0.1, (now - last) / 1000); last = now;
-    if (follow) { const target = follow.simT + (follow.playing ? Math.min(0.12, (now - follow.at) / 1000) * follow.speed : 0), cap = target - simT > 120 ? 3000 : 60;
+    if (!ready) { ready = cellsReady() || now - readyT > 60000; if (ready) { cells.forEach(cellStart); $('loading').hidden = true; } else { $('loading').hidden = false; $('loading').textContent = '셀의 로봇·설비 모델을 불러오는 중…'; } }
+    if (!ready) { /* the clock waits for the models */ }
+    else if (follow) { const target = follow.simT + (follow.playing ? Math.min(0.12, (now - follow.at) / 1000) * follow.speed : 0), cap = target - simT > 120 ? 3000 : 60;
       for (let n = 0; simT + H / 2 < target && n < cap; n++) step(H);
       $('loading').hidden = target - simT < 120; if (!$('loading').hidden) $('loading').textContent = `데스크톱 시각까지 따라가는 중… ${fmt(simT)} / ${fmt(target)}`; }
     else if (playing) { acc += real * speed; while (acc >= H) { step(H); acc -= H; } }
-    updateFx(); stage.render(); updateTags(); if (links.length && (fr++ % 10 === 0)) drawPanel(); };
+    updateFx(); stage.render(); updateTags(); if (live && (fr++ % 10 === 0)) drawPanel(); };
   stage.renderer.setAnimationLoop(loop);   // not requestAnimationFrame: a VR session only drives the renderer's loop
   window.ONE_SIMB = { st, links, parts, step: n => { for (let i = 0; i < n; i++) step(0.1); drawPanel(); }, get t() { return simT; },
     stage, SC, root, objs, rect: r, get playing() { return playing; }, get speed() { return speed; },
