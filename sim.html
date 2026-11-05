@@ -264,10 +264,14 @@ svg.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--mute)}
 (() => {
   // ?vr=<6 digits>: this is the headset following a desktop (js/sim-link.js): its ONE BUILDER data arrives first
   const list = ['sim-link', 'one-twin', 'one-library', 'plant-data', 'plant-machines', 'one-scene', 'sim-build', 'sim-vr'];
+  // /vr (the headset, no code): connect to the PC that is waiting with 'VR 연결'
   const vr = new URLSearchParams(location.search).get('vr'), loading = document.getElementById('loading');
+  const follow = /^\d{6}$/.test(vr || '') || location.pathname.replace(/\/$/, '') === '/vr';
   const status = (state, text) => { window.ONE_VR_STATUS = { state, text }; if (window.ONE_VR_SAY) window.ONE_VR_SAY(text, state === 'open'); else loading.textContent = text; };
   const next = i => { if (i >= list.length) return; const el = document.createElement('script'); el.src = 'js/' + list[i] + '.js';
-    el.onload = () => { if (list[i] === 'sim-link' && /^\d{6}$/.test(vr || '')) window.OneLink.join(vr, status).then(() => next(i + 1), e => { status('error', `${e.message} · 이 기기에서 혼자 재생`); next(i + 1); }); else next(i + 1); };
+    el.onload = () => { if (list[i] !== 'sim-link' || !follow) return next(i + 1);
+      const L = window.OneLink; (/^\d{6}$/.test(vr || '') ? Promise.resolve(vr) : L.findDesktop(status)).then(code => L.join(code, status))
+        .then(() => next(i + 1), e => { status('error', `${e.message} · 이 기기에서 혼자 재생`); next(i + 1); }); };
     el.onerror = () => console.error('load', list[i]); document.body.appendChild(el); };
   next(0);
 })();

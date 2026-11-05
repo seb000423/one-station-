@@ -1,6 +1,8 @@
 // Pairing for the ONE SIMULATION VR view (js/sim-link.js): the desktop and the headset swap one WebRTC offer / answer
 // through here, then talk to each other directly. Only these two small messages pass through the server.
 // POST {code, kind: 'offer' | 'answer', sdp} · GET ?code=&kind= → {sdp} (404 while not there yet) · DELETE {code}.
+// GET ?waiting=1 → {codes: [...]}: desktops that posted an offer in the last 10 min and have no answer yet, newest first
+// (the headset at /vr connects to the newest one without typing a code).
 // Each message is a new blob (vr/<code>/<kind>-<ms>.json), so a CDN-cached copy never hides a newer one.
 // Old pairings (> 30 min) are removed when a new offer is posted.
 import { list, del, put } from '@vercel/blob';
@@ -10,6 +12,13 @@ const CODE_RE = /^\d{6}$/, KINDS = new Set(['offer', 'answer']);
 
 export default async function handler(req, res) {
   try {
+    if (req.method === 'GET' && req.query?.waiting) {
+      const { blobs } = await list({ prefix: 'vr/' }), by = {};
+      for (const b of blobs) { const [, code, file] = b.pathname.split('/'); if (!CODE_RE.test(code || '')) continue; const e = by[code] = by[code] || { code, at: 0, answered: false };
+        if (file.startsWith('answer-')) e.answered = true; else if (file.startsWith('offer-')) e.at = Math.max(e.at, new Date(b.uploadedAt).getTime()); }
+      const codes = Object.values(by).filter(e => e.at && !e.answered && Date.now() - e.at < 10 * 60 * 1000).sort((a, b) => b.at - a.at).map(e => e.code);
+      return sendJson(res, 200, { codes });
+    }
     if (req.method === 'GET') {
       const code = String(req.query?.code || ''), kind = String(req.query?.kind || '');
       if (!CODE_RE.test(code) || !KINDS.has(kind)) return sendJson(res, 400, { error: 'invalid code or kind' });

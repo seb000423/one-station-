@@ -19,7 +19,8 @@
   window.ONE_VR_SAY = say;
 
   const isHeadset = /OculusBrowser|Quest/i.test(navigator.userAgent);
-  if (!isHeadset && window.OneLink && !new URLSearchParams(location.search).has('vr')) {
+  const following = new URLSearchParams(location.search).has('vr') || location.pathname.replace(/\/$/, '') === '/vr';
+  if (!isHeadset && window.OneLink && !following) {
     let link = null;
     chip('VR 연결', b => {
       if (link) { link.close(); link = null; b.classList.remove('on'); say(''); return; }
@@ -27,8 +28,7 @@
     }).title = 'Quest 3에서 이 화면을 VR로 봅니다 (같은 Wi-Fi)';
   }
 
-  if (isHeadset && !new URLSearchParams(location.search).has('vr'))
-    chip('연결 코드', () => { const c = (prompt('데스크톱 화면의 6자리 코드') || '').trim(); if (/^\d{6}$/.test(c)) location.search = `?vr=${c}`; });
+  if (isHeadset && !following) chip('PC 연결', () => { location.href = '/vr'; });
 
   let session = null;
   if (navigator.xr) navigator.xr.isSessionSupported('immersive-vr').then(ok => {

@@ -39,7 +39,7 @@
       dc.onclose = () => { clearInterval(timer); if (!stopped) onStatus('closed', 'Quest 연결 끊김'); };
       await pc.setLocalDescription(await pc.createOffer()); await gathered(pc);
       await post(code, 'offer', pc.localDescription.sdp);
-      onStatus('wait', `Quest 브라우저에서 ${location.host}/sim?vr=${code} 열기`);
+      onStatus('wait', `Quest 브라우저에서 ${location.host}/vr 열기 (코드 ${code})`);
       const sdp = await wait(code, 'answer', 10, () => stopped);
       await pc.setRemoteDescription({ type: 'answer', sdp });
     })().catch(e => { if (!stopped) onStatus('error', `연결 실패: ${e.message}`); });
@@ -76,5 +76,12 @@
     })().catch(reject); });
   }
 
-  window.OneLink = { host, join };
+  // the headset without a code (/vr): the newest desktop waiting with 'VR 연결' (polled every 3 s, up to 5 min)
+  async function findDesktop(onStatus) { const end = Date.now() + 5 * 60000;
+    onStatus('wait', 'PC를 찾는 중… PC 화면에서 VR 연결을 누르세요');
+    while (Date.now() < end) { try { const r = await fetch(`${API}?waiting=1&t=${Date.now()}`, { cache: 'no-store' }); if (r.ok) { const { codes } = await r.json(); if (codes && codes.length) return codes[0]; } } catch (e) {}
+      await sleep(3000); }
+    throw new Error('연결을 기다리는 PC가 없습니다'); }
+
+  window.OneLink = { host, join, findDesktop };
 })();
