@@ -497,10 +497,37 @@
   }
   const modelListeners = new Set(); // called when a station GLB has arrived (the builder redraws its selection box)
   // joint chain of a rig: J1 and its first J child, then that one's, … (fingers and side bones stay as they are)
-  function jointChain(o) { const out = []; let j = null; o.traverse(x => { if (!j && /^J\d+(_\d+)?$/.test(x.name)) j = x; });
-    while (j && out.length < 6) { out.push(j); let nx = null; j.traverse(x => { if (!nx && x !== j && /^J\d+(_\d+)?$/.test(x.name)) nx = x; }); j = nx; } return out; }
-  function rigOf(c, kind) {
-    c.updateMatrixWorld(true); const ch = jointChain(c); if (!ch.length) return null; const up = new T.Vector3(0, 1, 0);
+  function jointChain(o, max = 6) { const out = []; let j = null; o.traverse(x => { if (!j && /^J\d+(_\d+)?$/.test(x.name)) j = x; });
+    while (j && out.length < max) { out.push(j); let nx = null; j.traverse(x => { if (!nx && x !== j && /^J\d+(_\d+)?$/.test(x.name)) nx = x; }); j = nx; } return out; }
+  /* Some robot models (the blue arm of the inspection cell) carry one J node more than the six axes: J1 is the fixed pedestal,
+     and the node origins are not on the real joint axes. For those the rig skips the pedestal and finds each axis from the
+     mesh: a bending joint turns about the middle of the surface where its two links touch, the forearm rolls about its own
+     long axis, the flange about the line from the wrist to the flange. rigSet then turns each link about that pivot. */
+  function linkPts(node, stop, cap = 40000) { const pts = [], v = new T.Vector3();
+    node.traverse(m => { if (!m.isMesh || !m.geometry?.attributes?.position) return; let q = m; while (q && q !== node) { if (q === stop) return; q = q.parent; }
+      const pa = m.geometry.attributes.position, st = Math.max(1, Math.floor(pa.count / cap)); for (let i = 0; i < pa.count; i += st) pts.push(v.fromBufferAttribute(pa, i).applyMatrix4(m.matrixWorld).clone()); }); return pts; }
+  function contactMid(a, b, th = 0.025) { const cs = 0.03, H = new Map(), key = (x, y, z) => x + ',' + y + ',' + z;
+    for (const q of a) { const k = key(Math.floor(q.x / cs), Math.floor(q.y / cs), Math.floor(q.z / cs)); if (!H.has(k)) H.set(k, []); H.get(k).push(q); }
+    const c = new T.Vector3(); let n = 0; for (const q of b) { const bx = Math.floor(q.x / cs), by = Math.floor(q.y / cs), bz = Math.floor(q.z / cs); let hit = false;
+      for (let i = -1; i <= 1 && !hit; i++) for (let j = -1; j <= 1 && !hit; j++) for (let k = -1; k <= 1 && !hit; k++) { const l = H.get(key(bx + i, by + j, bz + k)); if (l) for (const r of l) if (r.distanceToSquared(q) < th * th) { hit = true; break; } }
+      if (hit) { c.add(q); n++; } } return n ? c.divideScalar(n) : null; }
+  function mainAxis(pts) { const c = new T.Vector3(); pts.forEach(q => c.add(q)); c.divideScalar(pts.length); let d = new T.Vector3(1, 0, 0);
+    for (let it = 0; it < 30; it++) { const nd = new T.Vector3(); for (const q of pts) { const e = q.clone().sub(c); nd.addScaledVector(e, e.dot(d)); } if (nd.lengthSq() < 1e-12) break; d = nd.normalize(); } return { c, d }; }
+  function deepRig(c, ch) { c.updateWorldMatrix(true, true); const J = ch.slice(1, 7), links = [linkPts(ch[0], J[0])].concat(J.map((j, i) => linkPts(j, J[i + 1] || null)));
+    const wp = J.map(j => j.getWorldPosition(new T.Vector3())), up = new T.Vector3(0, 1, 0);
+    const mid = i => contactMid(links[i], links[i + 1]) || wp[i].clone();
+    const p1 = mid(1), p2 = mid(2), p4 = mid(4), fa = mainAxis(links[4]);
+    const reach = wp[5].clone().sub(wp[0]); reach.y = 0; if (reach.lengthSq() < 1e-8) reach.set(1, 0, 0); reach.normalize(); const pitch = new T.Vector3().crossVectors(up, reach).normalize();
+    const toWrist = p4.clone().sub(fa.c); if (fa.d.dot(toWrist) < 0) fa.d.negate();
+    const flange = wp[5].clone().sub(p4); if (flange.lengthSq() < 1e-8) flange.copy(fa.d); flange.normalize();
+    const W = [[wp[0], up], [p1, pitch], [p2, pitch], [fa.c, fa.d], [p4, pitch], [wp[5], flange]];
+    return J.map((j, i) => { const pq = new T.Quaternion(), inv = new T.Matrix4(); if (j.parent) { j.parent.getWorldQuaternion(pq); inv.copy(j.parent.matrixWorld).invert(); }
+      return { j, i, base: j.quaternion.clone(), p0: j.position.clone(), cp: W[i][0].clone().applyMatrix4(inv), axis: W[i][1].clone().transformDirection(inv) }; }); } // transformDirection: the full inverse (the stage world is mirrored, a quaternion alone would flip the axis)
+  // models whose J1 node is the fixed pedestal and whose node origins are off the axes (see deepRig)
+  const DEEP_RIG = /^P_OP\d+_robot$/;
+  function rigOf(c, kind, node) {
+    c.updateMatrixWorld(true); if (kind !== 'rotary' && DEEP_RIG.test(node || '')) { const deep = jointChain(c, 7); if (deep.length === 7) { const rig = deepRig(c, deep); rig.deep = true; toolOf(rig); return rig; } }
+    const ch = jointChain(c); if (!ch.length) return null; const up = new T.Vector3(0, 1, 0);
     const wp = ch.map(j => j.getWorldPosition(new T.Vector3())), reach = wp[wp.length - 1].clone().sub(wp[0]); reach.y = 0; if (reach.lengthSq() < 1e-6) reach.set(1, 0, 0); reach.normalize();
     const pitch = new T.Vector3().crossVectors(up, reach).normalize();
     const axisW = i => { if (kind === 'rotary') return up; if (i === 0) return up;
@@ -539,7 +566,7 @@
      No dynamics, no collision: a trajectory through an object is reported by the design check, not prevented. */
   const LIMITS6 = [[-170, 170], [-100, 135], [-150, 150], [-190, 190], [-120, 120], [-360, 360]];
   const limitsOf = rig => rig.limits || LIMITS6;
-  function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, a * Math.PI / 180)); } }
+  function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; qa.setFromAxisAngle(r.axis, a * Math.PI / 180); r.j.quaternion.copy(r.base).premultiply(qa); if (r.cp) r.j.position.copy(r.p0).sub(r.cp).applyQuaternion(qa).add(r.cp); } }
   function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
   /* rigIk: a stretched arm sits on a singular pose (pulling the hand in needs the elbow to bend first, the gradient alone
      never does it): when the first try stays short, retry from seeds with the elbow / shoulder bent and keep the best */
@@ -639,7 +666,7 @@
     c.traverse(m => { m.userData.pick = g.userData.pick; if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
     const ph = g.getObjectByName('placeholder'); if (ph) g.remove(ph);
     const fk = fxKind(p.node); if (fk) setupFx(g, c, fk, p.node);
-    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind) : null; if (g.userData.rig && p.toolPitch != null) g.userData.rig.pitch = +p.toolPitch; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
+    g.add(fit); g.userData.rig = p.kind === 'robot' || p.kind === 'rotary' ? rigOf(c, p.kind, p.node) : null; if (g.userData.rig && p.toolPitch != null) g.userData.rig.pitch = +p.toolPitch; g.userData.kind = p.kind; g.userData.cycle = +p.cycle || 6;
     for (const f of modelListeners) f(g);
   }
   bdef('model-part', { name: '모델 객체', cat: 'model', code: 'P', model: true,
