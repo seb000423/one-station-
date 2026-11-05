@@ -14,8 +14,8 @@
   /** what some parts of the 조립 셀 do in 동작 시험: P25 dispenser (도포: the pump and needle come down), P26 conveyor rail
       (carries a work to its front end), P27 / P23 inspection and P24 laser marking (timed jobs started by the switch),
       jigs P19–P22 (클램프 · 작업 끝 signals for the weld robots) */
-  const PART_RUN = { assembly: { P_Moho_dis_Solo: { proc: 'dispense', cycle: 5 }, P_Rail_blk: { convey: { speed: 300, dir: 1 } }, P_t04_FCT01: { proc: 'check', cycle: 5 }, P_EX: { proc: 'check', cycle: 5 },
-    P_Object192: { proc: 'mark', cycle: 6 }, P_OTC_fd_v8: { toolPitch: 12 }, P_OTC_fd_v8_2: { toolPitch: 12 }, P_JIG01: { jig: true }, P_JIG01_2: { jig: true }, P_JIG02: { jig: true }, P_JIG02_2: { jig: true } } };
+  const PART_RUN = { assembly: { P_Moho_dis_Solo: { proc: 'dispense', cycle: 5, stage: 1 }, P_Rail_blk: { convey: { speed: 300, dir: 1 } }, P_t04_FCT01: { proc: 'check', cycle: 5 }, P_EX: { proc: 'check', cycle: 5, stage: 5 },
+    P_Object192: { proc: 'mark', cycle: 6, stage: 6 }, P_OTC_fd_v8: { toolPitch: 12 }, P_OTC_fd_v8_2: { toolPitch: 12 }, P_JIG01: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG01_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } }, P_JIG02: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 4 } }, P_JIG02_2: { jig: true, seatStage: 2, stageAt: { on: 'FIN', stage: 3 } } } };
   /* The 조립 셀 process as the user described it (2026-11-04), on the cell as built (points = targets in mm, cell frame; the
      run solves the robot joints):
      RB3 takes a product from the P34 tray rows → P25 dispenser rest under the needle → 도포 → re-grips → P26 rail, which
@@ -26,7 +26,7 @@
      P24 runs down x −5400. */
   /* where the product sits in each jig: the products that came built into the partner's jig model (taken out of the mesh),
      their box centre / bottom in the cell frame — a work let go near it settles exactly there */
-  const NEST = { assembly: { P_JIG01: [-2439, 1619, 1616], P_JIG01_2: [1196, 1619, 1616], P_JIG02: [-935, 1619, 1616], P_JIG02_2: [2695, 1619, 1616] } };
+  const NEST = { assembly: { P_JIG01: [-2439, 1619, 1616], P_JIG01_2: [1196, 1619, 1616], P_JIG02: [-935, 1619, 1616], P_JIG02_2: [2695, 1619, 1616], P_Moho_dis_Solo: [5490, -1713, 1494] } };
   function assemblyRun(ids) { const pt = (id, name, tcp) => ({ id, name, j: [], tcp }), J = (point, speed = 50) => ({ op: 'MOVJ', point, speed }), Lm = (point, speed = 300) => ({ op: 'MOVL', point, speed });
     const G = on => ({ op: 'GRIP', on }), SET = (tag, value) => ({ op: 'SET', tag, value }), WAIT = (tag, value) => ({ op: 'WAIT', tag, value }), H = { id: 'H', name: '홈', j: [0, 0, 0, 0, 0, 0] };
     const rb3 = { node: ids.rb3, name: '트레이 → 도포 → 레일', points: [H, pt('TA1', '트레이 1줄 위', [7491, 863, 1850]), pt('TA2', '트레이 2줄 위', [7491, 1111, 1850]), pt('T1', '트레이 1줄 (손가락 사이)', [7491, 863, 1580]), pt('T2', '트레이 2줄 (손가락 사이)', [7491, 1111, 1580]),
@@ -52,7 +52,7 @@
       WAIT('P22_FIN', true), J('P22S'), Lm('P22'), G(true), SET('P22_CLAMP', false), J('BS'), Lm('B1'), G(false), SET('WK1_PASS', true),
       WAIT('P20_FIN', true), J('P20S'), Lm('P20'), G(true), SET('P20_CLAMP', false), J('BS'), WAIT('WK1_PASS', false), Lm('B2'), G(false), SET('WK1_PASS', true), J('P20B'));
     const wk2 = { node: ids.wk2, name: '적재함 → P21 / P19 → P23 검사 → P24 각인', points: [pt('W0', '적재함 옆', [-400, 2800, 0]), pt('B1', '초록 적재함 1', [250, 2600, 1495]), pt('B2', '초록 적재함 2', [250, 3000, 1495]), ...jig('P21', -935), ...jig('P19', -2439),
-        pt('ES', 'P23 앞', [-4290, 2300, 0]), pt('E', 'P23 최종 검사', [-4290, 1539, 1680]), pt('K1', '왼쪽 통로', [-5400, 2300, 0]), pt('K2', '왼쪽 통로 안', [-5400, 300, 0]), pt('MS', 'P24 앞', [-6150, 300, 0]), pt('M', 'P24 레이저 각인', [-7050, 300, 1650]),
+        pt('ES', 'P23 앞', [-4290, 2300, 0]), pt('E', 'P23 볼트 체결', [-4290, 1539, 1680]), pt('K1', '왼쪽 통로', [-5400, 2300, 0]), pt('K2', '왼쪽 통로 안', [-5400, 300, 0]), pt('MS', 'P24 앞', [-6150, 300, 0]), pt('M', 'P24 레이저 각인', [-7050, 300, 1650]),
         pt('OS', '완성품대 앞', [-5400, 1450, 0]), pt('O1', '완성품 1', [-5000, 1450, 1340]), pt('O2', '완성품 2', [-5000, 1750, 1340])],
       lines: [] };
     const finish = (P, O) => [WAIT(`${P}_FIN`, true), J('K1'), J(`${P}S`), Lm(P), G(true), SET(`${P}_CLAMP`, false), J('ES'), Lm('E'), G(false), SET('P23_START', true), WAIT('P23_DONE', true), SET('P23_START', false), Lm('E'), G(true),
