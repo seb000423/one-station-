@@ -1,8 +1,7 @@
 // ONE SIMULATION VR view (Meta Quest 3, WebXR): stand in the line at 1:1.
 // Left stick walks (1.4 m/s, relative to where you look, on the floor). Right stick left / right turns the view
-// smoothly (45°/s, around the head; no up / down tilt of the world, that makes people sick); right stick up / down
-// raises / lowers the eye height (0.5 m/s, 0.6–3.0 m). On entering, the eye height is set for a 175 cm person (1.63 m)
-// whatever the wearer's real height or posture. The head looks as usual. No teleport, no menu in VR. Machines, walls and columns (real surfaces, by short rays)
+// smoothly (45°/s, around the head; no up / down tilt of the world, that makes people sick). The eye height is fixed
+// for a 175 cm person (1.63 m) whatever the wearer's real height or posture (sitting or standing). The head looks as usual. No teleport, no menu in VR. Machines, walls and columns (real surfaces, by short rays)
 // stop you (you slide along them); nothing to walk through. You start at the line's infeed end looking down the line.
 // Plus the desktop pairing chip ("VR 연결", js/sim-link.js) and the "VR 보기" chip on a headset.
 (() => {
@@ -10,7 +9,7 @@
   const $ = id => document.getElementById(id), T = window.THREE, S = window.ONE_SIMB;
   if (!S) return;
   const { stage, SC, objs, rect: r } = S, rig = stage.xrRig, renderer = stage.renderer;
-  const WALK = 1.4, TURN = Math.PI / 4, DEAD = 0.2, BODY = 0.25, EYE0 = 1.63, LIFT = 0.5, UP = new T.Vector3(0, 1, 0);
+  const WALK = 1.4, TURN = Math.PI / 4, DEAD = 0.2, BODY = 0.25, EYE0 = 1.63, UP = new T.Vector3(0, 1, 0);
 
   /* ---------------------------------------------------------------- chips */
   const views = $('views');
@@ -114,8 +113,7 @@
     // view: right stick left / right turns smoothly around the head
     if (Math.abs(tx) > DEAD) { const a = -Math.sign(tx) * Math.min(1, (Math.abs(tx) - DEAD) / (1 - DEAD)) * TURN * dt; headPos(head);
       rig.position.sub(head).applyAxisAngle(UP, a).add(head); rig.rotation.y += a; }
-    // eye height: right stick up = higher
-    if (Math.abs(ty) > DEAD) eye = Math.max(0.6, Math.min(3.0, eye - Math.sign(ty) * Math.min(1, (Math.abs(ty) - DEAD) / (1 - DEAD)) * LIFT * dt));
+    // eye height: fixed at 1.63 m (a 175 cm person), set once on the first tracked frame
     if (head0 != null) rig.position.y = eye - head0;
     // walk: along where the head looks, flattened to the floor
     const m = Math.hypot(mx, my);
