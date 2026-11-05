@@ -55,7 +55,9 @@
   // not the slab, not roofs or anything overhead. Re-measured every 4 s while in VR (models load late).
   let boxes = [], measured = -1e9;
   const measure = () => { boxes = []; const b = new T.Box3();
-    for (const { o } of objs.values()) { b.setFromObject(o); if (b.isEmpty()) continue;
+    // placed objects + anything else the run says is solid (ONE_SIMB.solids: e.g. the cell groups of programmed cells)
+    const solids = [...[...objs.values()].map(v => v.o), ...(S.solids || [])];
+    for (const o of solids) { b.setFromObject(o); if (b.isEmpty()) continue;
       if (b.max.y < 0.15 || b.min.y > 1.9) continue;
       boxes.push({ o, x0: b.min.x - BODY, x1: b.max.x + BODY, z0: b.min.z - BODY, z1: b.max.z + BODY }); } };
   const blocked = (x, z) => boxes.some(q => x > q.x0 && x < q.x1 && z > q.z0 && z < q.z1);
