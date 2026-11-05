@@ -1,6 +1,6 @@
 // ONE SIMULATION VR view (Meta Quest 3, WebXR): stand in the line at 1:1.
 // Left stick walks (1.4 m/s, relative to where you look, on the floor). Right stick left / right turns the view
-// smoothly (90°/s, around the head; no up / down tilt of the world, that makes people sick). The head looks as usual. No teleport, no menu in VR. Machines, walls and columns
+// smoothly (45°/s, around the head; no up / down tilt of the world, that makes people sick). The head looks as usual. No teleport, no menu in VR. Machines, walls and columns
 // stop you (you slide along them); nothing to walk through. You start at the line's infeed end looking down the line.
 // Plus the desktop pairing chip ("VR 연결", js/sim-link.js) and the "VR 보기" chip on a headset.
 (() => {
@@ -8,7 +8,7 @@
   const $ = id => document.getElementById(id), T = window.THREE, S = window.ONE_SIMB;
   if (!S) return;
   const { stage, SC, objs, rect: r } = S, rig = stage.xrRig, renderer = stage.renderer;
-  const WALK = 1.4, TURN = Math.PI / 2, DEAD = 0.2, BODY = 0.25, UP = new T.Vector3(0, 1, 0);
+  const WALK = 1.4, TURN = Math.PI / 4, DEAD = 0.2, BODY = 0.25, UP = new T.Vector3(0, 1, 0);
 
   /* ---------------------------------------------------------------- chips */
   const views = $('views');
@@ -84,7 +84,10 @@
     let mx = 0, my = 0, tx = 0;
     for (const src of ses.inputSources) { const g = src.gamepad; if (!g) continue;
       const ax = g.axes.length >= 4 ? g.axes[2] : g.axes[0] || 0, ay = g.axes.length >= 4 ? g.axes[3] : g.axes[1] || 0;
-      if (src.handedness === 'right') tx = ax; else { mx = ax; my = ay; } }
+      // only the stick pushed furthest on each side counts: Quest can list more input sources (hands, a second pad)
+      // with idle sticks, and those must not reset the left stick to zero
+      if (src.handedness === 'right') { if (Math.abs(ax) > Math.abs(tx)) tx = ax; }
+      else if (Math.hypot(ax, ay) > Math.hypot(mx, my)) { mx = ax; my = ay; } }
     // view: right stick left / right turns smoothly around the head
     if (Math.abs(tx) > DEAD) { const a = -Math.sign(tx) * Math.min(1, (Math.abs(tx) - DEAD) / (1 - DEAD)) * TURN * dt; headPos(head);
       rig.position.sub(head).applyAxisAngle(UP, a).add(head); rig.rotation.y += a; }
