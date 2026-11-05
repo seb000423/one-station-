@@ -48,7 +48,7 @@
   const r = SC.slabRect(fdoc), w = (r.x1 - r.x0) / 1000, d = (r.y1 - r.y0) / 1000, c = SC.toS([(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 0]);
   const slab = new T.Group(); slab.add(new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x2a2b31, transparent: true, opacity: 0.3, depthWrite: false })));
   slab.add(new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), new T.LineBasicMaterial({ color: 0xe9e3d5, transparent: true, opacity: 0.55 })));
-  slab.position.set(c.x, 0.001, c.z); stage.overlay.add(slab); stage.mirrorPass.mirror = false;
+  slab.position.set(c.x, 0.001, c.z); stage.overlay.add(slab); stage.real();
   const m = Math.max(w, d) * 0.35 + 6; stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2 - m, 0, c.z - d / 2 - m), new T.Vector3(c.x + w / 2 + m, 6, c.z + d / 2 + m))); stage.setGrid(0.5, 5);
   const fitAll = () => stage.fit(new T.Box3().setFromPoints([SC.toS([r.x0, r.y0, 0]), SC.toS([r.x1, r.y1, 4000])]), 1.05);
   if (!again) fitAll();
@@ -262,14 +262,15 @@
   let xray = false;
   const chip = (txt, fn) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = txt; b.onclick = () => fn(b); $('views').insertBefore(b, mine.length ? mine[mine.length - 1].nextSibling : $('views').firstChild); mine.push(b); return b; };
   chip('전체', fitAll);
-  // 단색: charcoal · grey · ivory with one amber accent (stage.studio), on by default; status lamps and screens keep their colour
-  let mono = true;
-  { const b = chip('단색', () => { mono = !mono; b.classList.toggle('on', mono); stage.studio(stage.world, mono); }); b.classList.add('on'); b.title = '단색 (차콜 · 회색 · 아이보리) / 원래 색'; }
-  stage.studio(stage.world, mono);
+  // 단색: charcoal · grey · ivory with one amber accent (stage.studio), off by default (the realistic look is the default,
+  // user 2026-11-05); status lamps and screens keep their colour
+  let mono = !!NEXT.mono;
+  { const b = chip('단색', () => { mono = !mono; b.classList.toggle('on', mono); stage.studio(stage.world, mono); }); b.classList.toggle('on', mono); b.title = '단색 (차콜 · 회색 · 아이보리) / 원래 색'; }
+  stage.tune(stage.world); if (mono) stage.studio(stage.world, true);
   const xrayHot = o => machines.some(x => objs.get(x.it.id)?.o === o);
   chip('X-RAY', b => { xray = !xray; if (xray) stage.addTwin(root, xrayHot); stage.ghost(xray); b.classList.toggle('on', xray); });
   // a model that arrives while X-RAY is on gets its outline too (otherwise it would vanish in the ghost view)
-  L.onModel(g => { if (disposed) return; if (xray) stage.addTwin(g, xrayHot); if (mono) stage.studio(g, true); });
+  L.onModel(g => { if (disposed) return; stage.tune(g); if (xray) stage.addTwin(g, xrayHot); if (mono) stage.studio(g, true); });
 
   // machine labels (projected HTML) with a state dot
   const tags = $('tags'), v3 = new T.Vector3(), box = new T.Box3();
@@ -314,7 +315,7 @@
     if (t >= simT) { seekTo = t; return; }
     reset({ seekTo: t }); }
   let resetting = false;
-  function reset(o = {}) { if (resetting) return; resetting = true; window.ONE_SIMB_NEXT = { playing, speed, far: Math.max(far, simT), ...o };
+  function reset(o = {}) { if (resetting) return; resetting = true; window.ONE_SIMB_NEXT = { playing, speed, mono, far: Math.max(far, simT), ...o };
     const el = document.createElement('script'); el.src = 'js/sim-build.js'; document.body.appendChild(el); }
   if (live) { seek.hidden = false; seek.step = 1;
     seek.oninput = () => { dragging = true; $('clock').textContent = fmt(+seek.value); };

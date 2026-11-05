@@ -16,10 +16,10 @@
 
   // final pass: Khronos PBR Neutral tone mapping + exposure + sRGB (rendering into targets stays linear / HDR for the bloom)
   const OutputShader = {
-    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.0 } },
+    uniforms: { tDiffuse: { value: null }, exposure: { value: 1.0 }, aces: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
-      uniform sampler2D tDiffuse; uniform float exposure; varying vec2 vUv;
+      uniform sampler2D tDiffuse; uniform float exposure; uniform float aces; varying vec2 vUv;
       vec3 neutral(vec3 c){
         const float S = 0.76; const float D = 0.15;
         float x = min(c.r, min(c.g, c.b)); float off = x < 0.08 ? x - 6.25 * x * x : 0.04; c -= off;
@@ -27,8 +27,10 @@
         float d = 1.0 - S; float np = 1.0 - d * d / (peak + d - S); c *= np / peak;
         float g = 1.0 - 1.0 / (D * (peak - np) + 1.0); return mix(c, vec3(np), g);
       }
+      // ACES filmic (Narkowicz fit): film-like contrast and highlight roll-off, used by the realistic look
+      vec3 filmic(vec3 c){ c *= 0.6; return (c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14); }
       vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }
-      void main(){ vec4 t = texture2D(tDiffuse, vUv); gl_FragColor = vec4(toSRGB(clamp(neutral(max(t.rgb, 0.0) * exposure), 0.0, 1.0)), 1.0); }`,
+      void main(){ vec4 t = texture2D(tDiffuse, vUv); vec3 c = max(t.rgb, 0.0) * exposure; gl_FragColor = vec4(toSRGB(clamp(aces > 0.5 ? filmic(c) : neutral(c), 0.0, 1.0)), 1.0); }`,
   };
 
   function create(canvas, opt = {}) {
@@ -217,6 +219,31 @@
       try { renderer.xr.setFoveation(1); } catch (e) { /* not offered */ } });
     renderer.xr.addEventListener('sessionend', () => { renderer.toneMapping = T.NoToneMapping; renderer.shadowMap.autoUpdate = true; setTimeout(resize, 0); });
 
+    /* ---- realistic look (ONE SIMULATION): a room environment for reflections (metal needs something to mirror),
+       materials in the standard's range for equipment (metalness 0.5–0.8, roughness 0.2–0.4), a weak ambient + hemisphere +
+       key light as the standard asks, ACES filmic tone, the #1e1e24 epoxy floor with a soft reflection. Works in VR too
+       (environment and materials are not post passes; the mirror is desktop only). */
+    let realOn = false;
+    const NOT_METAL = /skin|person|worker|human|cloth|rubber|tire|glass|lamp|screen|led|light|label|sign|text|floor|wall|paint_mark/i;
+    const tune = root => { if (!realOn) return; root.traverse(o => { if (!o.isMesh || o.userData.noReal) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m || !m.isMeshStandardMaterial || m.userData.realDone || m.userData.noStudio) continue; m.userData.realDone = true;
+        const glowing = m.emissive && (m.emissive.r + m.emissive.g + m.emissive.b) > 0.25;
+        if (glowing || (m.transparent && m.opacity < 0.95) || NOT_METAL.test(m.name) || NOT_METAL.test(o.name)) { m.envMapIntensity = 0.6; continue; }
+        // near-white parts are painted steel (lower metalness, else the bright room washes them out); the rest is bare metal
+        const pale = m.color && (m.color.r + m.color.g + m.color.b) / 3 > 0.6 && !m.map;
+        m.metalness = pale ? 0.3 : Math.min(0.8, Math.max(0.5, m.metalness ?? 0)); m.roughness = Math.min(0.4, Math.max(0.2, m.roughness ?? 0.5));
+        if (pale) m.color.multiplyScalar(0.82);
+        m.envMapIntensity = 0.8; m.needsUpdate = true;
+      } }); };
+    const real = () => { if (realOn) return; realOn = true;
+      scene.environment = new T.PMREMGenerator(renderer).fromScene(new T.RoomEnvironment(), 0.04).texture;
+      const amb = new T.AmbientLight(0xffffff, 0.15); amb.layers.enableAll(); scene.add(amb);
+      hemi.intensity = 0.35; key.intensity = 1.6;
+      output.uniforms.aces.value = 1; output.uniforms.exposure.value = 0.95;
+      floorMat.uniforms.uFloor.value.set('#1e1e24'); floorMat.uniforms.uMirror.value = 0.86; mirrorPass.mirror = true;
+      tune(world); };
+
     let last = performance.now();
     const render = () => { const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; stepGhost(dt);
       for (const f of onFrame) f(dt);
@@ -230,7 +257,7 @@
     const setGrid = (minor, major) => { gridMat.uniforms.uS1.value = minor; gridMat.uniforms.uS2.value = major; };
 
     window.addEventListener('resize', resize); resize();
-    return { renderer, scene, world, overlay, camera, controls, xrRig, xrCam, onFrame, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, setGrid, floor, studio, addTwin, ghost, ring,
+    return { renderer, scene, world, overlay, camera, controls, xrRig, xrCam, onFrame, real, tune, key, rim, hemi, bloom, output, mirrorPass, PAL, render, resize, look, fit, setBounds, setDir, setGrid, floor, studio, addTwin, ghost, ring,
       get ghosting() { return ghostT > 0.5; } };
   }
 
