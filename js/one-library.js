@@ -23,6 +23,7 @@
     mark: { color: '#c9a24a', metalness: 0, roughness: 0.9 },
     markw: { color: '#d8d3c6', metalness: 0, roughness: 0.9 },
     work: { color: '#c8b48a', metalness: 0.2, roughness: 0.5 },
+    wood: { color: '#a8865a', metalness: 0, roughness: 0.85 },
     glowA: { color: '#2a1a05', emissive: '#ffae42', emissiveIntensity: 3 },
     glowG: { color: '#062a10', emissive: '#3ddc84', emissiveIntensity: 2.5 },
     glowR: { color: '#2a0606', emissive: '#ff4d4f', emissiveIntensity: 2.5 },
@@ -460,6 +461,10 @@
   bdef('pallet', { name: '지그 팔레트', cat: 'work', code: 'PAL', onTop: true, work: true, params: { w: 400, d: 400 }, fields: [num('w', '가로'), num('d', '세로')], top: () => 0.04,
     build: p => { const g = new T.Group(); bx(g, 'steel', mm(p.w), 0.03, mm(p.d)); for (const s of [-1, 1]) bx(g, 'accent', 0.04, 0.03, 0.04, s * mm(p.w) * 0.3, 0.03, 0); return g; } });
 
+  // 적재 파렛트: a wooden pallet (1200 × 1000, three runners and deck boards) on the floor that finished works are stacked on
+  bdef('wood-pallet', { name: '적재 파렛트 (목재)', cat: 'structure', code: 'WP', params: { w: 1200, d: 1000, h: 144 }, fields: [num('w', '가로'), num('d', '세로')], top: p => mm(p.h),
+    build: p => { const g = new T.Group(), w = mm(p.w), d = mm(p.d), h = mm(p.h); for (const z of [-0.45, 0, 0.45]) bx(g, 'wood', w, h * 0.7, 0.1, 0, 0, z * d);
+      for (let i = 0; i < 7; i++) bx(g, 'wood', 0.12 * w / 1.2, h * 0.3 - 0.002, d, (i - 3) * (w - 0.12) / 6, h * 0.7); return g; } });
   bdef('bowl-feeder', { name: '보울 피더', cat: 'feeder', code: 'FD', params: { d: 400 }, fields: [num('d', '보울 지름', 'mm', 10)],
     io: P => [out(`${P}_RUN`), inn(`${P}_READY`, 'bool', { kind: 'process', target: `${P}_RUN` })],
     build: p => { const g = new T.Group(), r = mm(p.d) / 2; legs(g, r * 2, r * 2, 0.7, 0.04, 0.04); bx(g, 'body', r * 2, 0.03, r * 2, 0, 0.7); cy(g, 'dark', r * 0.5, 0.15, 0, 0.73); const b = new T.Mesh(new T.CylinderGeometry(r, r * 0.6, 0.18, 32, 1, true), mat('steel')); b.position.y = 0.97; g.add(b); bx(g, 'steel', r * 1.4, 0.03, 0.06, r * 1.0, 0.95, 0); return g; } });
