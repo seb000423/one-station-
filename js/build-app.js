@@ -201,6 +201,7 @@
       if (k === 'reset' && ED.machine.doc.meta.id === id) { openDoc('machine', S.Machine.parse(JSON.parse(JSON.stringify(window.OnePlant.builtins()[id].versions[1])))); dirty.machine = false; }
       delete all[id]; LS.set(KEY.lib, all); toast(k === 'reset' ? '원래 설비로 되돌렸습니다' : '내 설비에서 지웠습니다'); drawPalette(); refresh(); return; } }
   /* ------------------------------------------------------------------ palette */
+  const SAMPLE_GLB = { 'sample-egr-cooler': { name: 'EGR 쿨러 조립품', url: 'assets/models/samples/egr_cooler_assy.glb' } };
   let openCats = LS.get('one.build.cats', { building: true, structure: true, transport: true });
   function drawPalette() {
     const q = $('search').value.trim(), box = $('pal'); let html = '';
@@ -218,7 +219,9 @@
     } else {
       $('palTitle').innerHTML = '블록 팔레트';
       // 내 설비 불러오기: open a saved machine (any version) to keep editing it
-      const mineM = Object.entries(lib()).map(([id, m]) => ({ key: 'o:' + id, mine: id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: '눌러서 불러오기 · ⋯ = 버전 고르기·이름·복제·삭제' }));
+      const mineM = [{ key: 'u:glb', name: 'GLB 파일로 새 설비 만들기', code: '＋ 파일', why: '내 컴퓨터의 .glb 모델을 불러옵니다 · 파일은 이 브라우저에만 저장되고 사이트에 올라가지 않습니다' },
+        ...Object.entries(SAMPLE_GLB).map(([id, x]) => ({ key: 'u:' + id, name: x.name, code: 'GLB 예시', why: '사이트에 있는 예시 모델 · 눌러서 내 설비로 만들고 Machine Builder에서 엽니다' }))]
+        .concat(Object.entries(lib()).map(([id, m]) => ({ key: 'o:' + id, mine: id, name: m.name, code: 'v' + Math.max(...Object.keys(m.versions).map(Number)), why: '눌러서 불러오기 · ⋯ = 버전 고르기·이름·복제·삭제' })));
       sec('open', '내 설비 불러오기 (저장한 설비 편집)', mineM);
       sec('parts', '기준 설비 부품 (협력사 4개 설비)', window.OnePlant.partsCatalog().map(e => ({ key: 'p:' + e.key, name: e.name, code: e.station.split('.')[0] + '번', why: `${e.station} · ${e.size.join('×')} mm · 자리 규칙대로 받침에 붙습니다` })));
       for (const c of L.MACHINE_CATS) { sec(c.id, c.name, Object.values(L.BLOCKS).filter(b => b.cat === c.id).map(b => ({ key: 'b:' + b.id, name: b.name, code: b.code, why: b.onTop ? '선택한 블록 위에 놓입니다' : '' })));
@@ -233,6 +236,7 @@
     const b = e.target.closest('[data-add]'); if (!b) return; if (mode === 'run') setMode('edit'); if (xray) setXray(false);
     const [k, id] = b.dataset.add.split(/:(.*)/s);
     if (k === 'o') { mineAct('open', id); return; }
+    if (k === 'u') { if (SAMPLE_GLB[id]) sampleGlb(id); else $('file').click(); return; }
     if (k === 'f' && ['slab', 'add_roof'].includes(L.FACTORY[id]?.kind.cmd)) { addFactory(id); return; }
     startPlace(k, id);
   });
@@ -387,7 +391,7 @@
     if (!keep) endPlace();
     ed().batch('add', () => { if (k === 'f') addFactory(id, at, yaw); else if (k === 'l') addLocal(id, at, yaw); else if (k === 's') addShape(id, at, yaw); else addBlock(id, at, onto, yaw); if (tab === 'factory' && sel) autoLink([sel]); }); }
   // drag straight from the palette onto the canvas works too
-  $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); if (k === 'o') { e.preventDefault(); return; } e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
+  $('pal').addEventListener('dragstart', e => { const b = e.target.closest('[data-add]'); if (!b) return; const [k, id] = b.dataset.add.split(/:(.*)/s); if (k === 'o' || k === 'u') { e.preventDefault(); return; } e.dataTransfer.setData('text/plain', b.dataset.add); e.dataTransfer.effectAllowed = 'copy'; startPlace(k, id); });
   $('pal').addEventListener('dragend', () => setTimeout(() => { if (placing && placing.dragging !== false) endPlace(); }, 0));
   renderer.domElement.addEventListener('dragover', e => { if (!placing) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; trackPlace(e); });
   renderer.domElement.addEventListener('dragleave', () => { if (placing) placing.obj.visible = false; });
@@ -1421,10 +1425,25 @@
   // several files at once: every machine.json goes into 내 설비 (as its next version), the last one opens in Machine Builder;
   // a factory.json opens in Factory Builder (if there are several, the last one wins)
   const openDoc = (scope, j) => { ED[scope] = new C.Editor(scope, j); ED[scope].subscribe(() => { dirty[scope] = true; LS.set(KEY[scope], ED[scope].doc); if (scope === tab) refresh(); }); LS.set(KEY[scope], ED[scope].doc); };
+  /* a .glb from the user's computer → a new machine in 내 설비 (v1): one 모델 객체 per top-level part of the file, each
+     movable and resizable on its own. The file itself stays in this browser (OneLibrary.importGlb, IndexedDB). */
+  async function glbMachine(f) {
+    if (dirty.machine && !confirm('Machine Builder에서 저장하지 않은 변경이 있습니다. 버리고 GLB로 새 설비를 만들까요?')) throw new Error('취소');
+    const r = await window.OneLibrary.importGlb(f), nodes = [], io = [];
+    r.parts.forEach((p, i) => { const tag = 'P' + (i + 1), params = { tag, src: r.src, node: p.node, kind: 'static', cls: '', w0: p.size[0], d0: p.size[1], h0: p.size[2], w: p.size[0], d: p.size[1], h: p.size[2] };
+      nodes.push({ id: S.uuidv7(), type: 'block', blockType: 'model-part', name: p.label, params, transform: { position: p.pos, rotation: [0, 0, 0] }, parent: null }); io.push(...L.BLOCKS['model-part'].io(tag, params)); });
+    const id = S.uuidv7(), doc = S.Machine.parse({ schema: S.MACHINE_SCHEMA, meta: { id, name: r.name || '불러온 모델', bbox: r.size.map(v => Math.max(100, v)), cellFixed: false, fidelity: 'L2', version: 1 }, nodes, io });
+    const all = LS.get(KEY.lib, {}), snap = JSON.parse(JSON.stringify(doc)); snap.card.footprint = [doc.meta.bbox[0], doc.meta.bbox[1]];
+    all[id] = { name: doc.meta.name, versions: { 1: snap } }; LS.set(KEY.lib, all); return doc; }
+  // example models kept on the site (assets/models/samples): the same path as a GLB from the user's computer
+  async function sampleGlb(id) { const x = SAMPLE_GLB[id]; try { const r = await fetch(x.url); if (!r.ok) throw new Error(r.status);
+      const doc = await glbMachine(new File([await r.blob()], x.name + '.glb')); openDoc('machine', doc); dirty.machine = false; switchTab('machine', true); drawPalette(); toast(`${x.name}: 부품 ${doc.nodes.length}개 · 내 설비에 v1로 저장했습니다`); }
+    catch (e) { if (String(e.message) !== '취소') toast('예시 모델을 불러오지 못했습니다: ' + (e.message || e), true); } }
   $('file').onchange = async () => {
     const files = [...$('file').files]; $('file').value = ''; if (!files.length) return;
     const ok = [], bad = []; let lastScope = null, lastMachine = null, factory = null;
     for (const f of files) {
+      if (/\.glb$/i.test(f.name)) { try { lastMachine = await glbMachine(f); lastScope = 'machine'; ok.push(lastMachine.meta.name); } catch (e) { bad.push(`${f.name} (${e.message || e})`); } continue; }
       try { const j = JSON.parse(await f.text()); const scope = j.schema === S.FACTORY_SCHEMA ? 'factory' : j.schema === S.MACHINE_SCHEMA ? 'machine' : null;
         if (!scope) throw new Error('factory.json / machine.json이 아님');
         if (scope === 'machine') { const doc = S.Machine.parse(j), all = lib(), m = all[doc.meta.id] || { name: doc.meta.name, versions: {} }, v = Object.keys(m.versions).length ? Math.max(...Object.keys(m.versions).map(Number)) + 1 : 1;

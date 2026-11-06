@@ -238,7 +238,7 @@ main.teach{grid-template-columns:290px minmax(0,1fr) 470px}main.teach aside.r>#p
     <span class="sp"></span>
     <div class="seg" id="mode" hidden><button data-m="edit" class="on">편집</button><button data-m="run">동작 시험</button></div>
     <button class="btn help" id="bHelp" title="도움말">?</button>
-    <button class="btn" id="bOpen" title="JSON 파일 불러오기 (여러 개 가능: 설비 파일은 내 설비에 들어갑니다)">불러오기</button>
+    <button class="btn" id="bOpen" title="JSON · GLB 파일 불러오기 (여러 개 가능: 설비 파일과 GLB 모델은 내 설비에 들어갑니다 · GLB는 이 브라우저에만 저장)">불러오기</button>
     <button class="btn" id="bExport" title="JSON 파일로 내보내기">내보내기</button>
     <button class="btn pri" id="bSave">저장</button>
     <a class="btn sim" id="bSim" href="/sim?src=build" title="저장하고 ONE SIMULATION에서 이 공장을 엽니다">▶ 시뮬레이션</a>
@@ -292,7 +292,7 @@ main.teach{grid-template-columns:290px minmax(0,1fr) 470px}main.teach aside.r>#p
     </div>
   </div>
 </div>
-<input type="file" id="file" accept=".json,application/json" multiple hidden>
+<input type="file" id="file" accept=".json,application/json,.glb,model/gltf-binary" multiple hidden>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>

@@ -502,12 +502,54 @@
      their joint chain and index tables turn while their process runs (동작 시험), over 사이클 seconds. */
   const GLB = {}, GLB_READY = {};
   let gltfLoader = null;
+  function loader() {
+    if (!gltfLoader) { gltfLoader = new T.GLTFLoader(); if (T.DRACOLoader) { const dl = new T.DRACOLoader(); dl.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/draco/gltf/'); gltfLoader.setDRACOLoader(dl); } }
+    return gltfLoader; }
   function plantGlb(src) {
     if (GLB[src]) return GLB[src];
     if (!T.GLTFLoader) return (GLB[src] = Promise.reject(new Error('GLTFLoader missing')));
-    if (!gltfLoader) { gltfLoader = new T.GLTFLoader(); if (T.DRACOLoader) { const dl = new T.DRACOLoader(); dl.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/libs/draco/gltf/'); gltfLoader.setDRACOLoader(dl); } }
-    return (GLB[src] = new Promise((ok, bad) => gltfLoader.load(`assets/models/plant/${src}.glb`, g => { g.scene.updateMatrixWorld(true); flatGlowOff(g.scene); GLB_READY[src] = g.scene; ok(g.scene); }, undefined, bad)));
+    if (String(src).startsWith('up:')) return (GLB[src] = uploadedGlb(src).then(r => r.scene));
+    return (GLB[src] = new Promise((ok, bad) => loader().load(`assets/models/plant/${src}.glb`, g => { g.scene.updateMatrixWorld(true); flatGlowOff(g.scene); GLB_READY[src] = g.scene; ok(g.scene); }, undefined, bad)));
   }
+  /* ---- 내 GLB: a model file the user loads from their own computer. The file stays in this browser (IndexedDB
+     'one-station-uploads'), it is never sent to the site, so a customer's product can be used without publishing it.
+     src 'up:<id>'. Each top-level part of the file becomes one node P_1…P_n, its mesh baked into model space and set on
+     its own bottom centre (like the plant stations), so every part is its own 모델 객체 block. */
+  const UPLOADS = (() => { let dbp = null;
+    const db = () => dbp || (dbp = new Promise((ok, bad) => { const r = indexedDB.open('one-station-uploads', 1); r.onupgradeneeded = () => r.result.createObjectStore('glb'); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); }));
+    const tx = (mode, f) => db().then(d => new Promise((ok, bad) => { const t = d.transaction('glb', mode), s = t.objectStore('glb'), q = f(s); t.oncomplete = () => ok(q && q.result); t.onerror = () => bad(t.error); }));
+    return { put: (id, rec) => tx('readwrite', s => s.put(rec, id)), get: id => tx('readonly', s => s.get(id)), del: id => tx('readwrite', s => s.delete(id)) }; })();
+  // a part's name without the file extension or the CAD assembly suffix
+  const cleanName = s => String(s || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_\s]*ASM\d*$/i, '').replace(/[_]+/g, ' ').trim();
+  function normalizeUpload(scene) {
+    scene.updateMatrixWorld(true);
+    let root = scene; while (root.children.length === 1 && !root.isMesh) root = root.children[0];
+    const groups = root.isMesh ? [root] : root.children.filter(c => { let m = false; c.traverse(x => { if (x.isMesh) m = true; }); return m; });
+    const all = new T.Box3().setFromObject(root); let k = 1; const sz0 = all.getSize(new T.Vector3());
+    if (Math.max(sz0.x, sz0.y, sz0.z) > 50) k = 0.001; // a file in mm (a 50 m part is not a thing on a bench)
+    const out = new T.Group(); out.name = 'upload'; const parts = [];
+    groups.forEach((gr, i) => { const node = new T.Group(); node.name = 'P_' + (i + 1); const meshes = [];
+      gr.traverse(m => { if (!m.isMesh || !m.geometry) return; const geo = m.geometry.clone(); geo.applyMatrix4(new T.Matrix4().makeScale(k, k, k).multiply(m.matrixWorld));
+        const mats = [].concat(m.material).map(x => { const c = x.clone(); if (c.isMeshStandardMaterial) { c.metalness = Math.min(0.8, Math.max(0.5, c.metalness)); c.roughness = Math.min(0.4, Math.max(0.2, c.roughness)); } return c; });
+        const mm_ = new T.Mesh(geo, Array.isArray(m.material) ? mats : mats[0]); mm_.name = node.name + '_' + (meshes.length + 1); meshes.push(mm_); });
+      const b = new T.Box3(); for (const m of meshes) { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox); }
+      if (b.isEmpty()) return; const c = b.getCenter(new T.Vector3()), s = b.getSize(new T.Vector3());
+      for (const m of meshes) { m.geometry.translate(-c.x, -b.min.y, -c.z); node.add(m); }
+      out.add(node); parts.push({ node: node.name, label: cleanName(gr.name) || `부품 ${i + 1}`, c: [c.x, b.min.y, c.z], size: [s.x, s.z, s.y] }); });
+    const all2 = all.clone(); all2.min.multiplyScalar(k); all2.max.multiplyScalar(k); const ctr = all2.getCenter(new T.Vector3()), floor = all2.min.y;
+    // stored mm, Z-up: model centred on the machine origin, its lowest point on the floor
+    for (const p of parts) { p.pos = [Math.round((p.c[0] - ctr.x) * 1000), Math.round(-(p.c[2] - ctr.z) * 1000), Math.round((p.c[1] - floor) * 1000)]; p.size = p.size.map(v => Math.max(1, Math.round(v * 1000))); delete p.c; }
+    const S2 = all2.getSize(new T.Vector3());
+    out.updateMatrixWorld(true); return { scene: out, parts, size: [S2.x, S2.z, S2.y].map(v => Math.max(1, Math.round(v * 1000))) }; }
+  const UP = {};
+  function uploadedGlb(src) {
+    if (UP[src]) return UP[src];
+    return (UP[src] = UPLOADS.get(src.slice(3)).then(rec => { if (!rec) throw new Error('이 브라우저에 그 모델 파일이 없습니다');
+      return new Promise((ok, bad) => loader().parse(rec.bytes, '', g => { const r = normalizeUpload(g.scene); flatGlowOff(r.scene); GLB_READY[src] = r.scene; ok(r); }, bad)); })); }
+  /** Keep a GLB file from the user's computer in this browser; resolves to { src, parts, size } (parts in stored mm). */
+  async function importGlb(file) { const id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), bytes = await file.arrayBuffer();
+    await UPLOADS.put(id, { name: file.name, bytes, at: Date.now() }); const src = 'up:' + id, r = await uploadedGlb(src);
+    if (!r.parts.length) { await UPLOADS.del(id); throw new Error('메시가 없는 파일입니다'); } return { src, parts: r.parts, size: r.size, name: cleanName(file.name) }; }
   const modelListeners = new Set(); // called when a station GLB has arrived (the builder redraws its selection box)
   // joint chain of a rig: J1 and its first J child, then that one's, … (fingers and side bones stay as they are)
   function jointChain(o, max = 6) { const out = []; let j = null; o.traverse(x => { if (!j && /^J\d+(_\d+)?$/.test(x.name)) j = x; });
@@ -729,5 +771,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { plantGlb, poseModel, setFx, unitOf: (rig, i) => rig?.[i]?.lin ? 'mm' : '°', rigSet, rigTcp, rigIk, rigReach, limitsOf, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, importGlb, uploads: UPLOADS, poseModel, setFx, unitOf: (rig, i) => rig?.[i]?.lin ? 'mm' : '°', rigSet, rigTcp, rigIk, rigReach, limitsOf, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();
