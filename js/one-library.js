@@ -30,7 +30,7 @@
     glowW: { color: '#333', emissive: '#fff2dc', emissiveIntensity: 2.2 },
     screen: { color: '#0b0d10', emissive: '#7fa7c9', emissiveIntensity: 0.35 },
   };
-  const mat = role => MAT[role] || (MAT[role] = new T.MeshStandardMaterial(ROLE[role] || ROLE.body));
+  const mat = role => MAT[role] || (MAT[role] = Object.assign(new T.MeshStandardMaterial(ROLE[role] || ROLE.body), { userData: { role } }));
   // lamp materials that switch on and off in run mode
   const lampMat = on => mat(on);
 

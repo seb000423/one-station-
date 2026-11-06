@@ -44,11 +44,13 @@
   for (const it of items) { if (it.path === 'blocks' && progIds.has(it.item.parent ?? it.item.params?.cell)) continue;
     let o; try { o = SC.buildFactoryObj(it, fdoc); } catch (e) { continue; } root.add(o); objs.set(it.id, { o, it }); }
 
-  // floor: the slab as a faint tint with an ivory edge, the stage grid underneath
+  // floor: the plant area edged by a painted yellow safety line (100 mm) on the concrete, the stage grid underneath
   const r = SC.slabRect(fdoc), w = (r.x1 - r.x0) / 1000, d = (r.y1 - r.y0) / 1000, c = SC.toS([(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 0]);
-  const slab = new T.Group(); slab.add(new T.Mesh(new T.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x2a2b31, transparent: true, opacity: 0.3, depthWrite: false })));
-  slab.add(new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, 0.001, d)), new T.LineBasicMaterial({ color: 0xe9e3d5, transparent: true, opacity: 0.55 })));
-  slab.position.set(c.x, 0.001, c.z); stage.overlay.add(slab); stage.real();
+  const slab = new T.Group(), lw = 0.1, paint = new T.MeshStandardMaterial({ color: 0x7a3a00, metalness: 0, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -2 });
+  paint.userData.noStudio = true;
+  for (const [sx, sz, px, pz] of [[w + lw, lw, 0, -d / 2], [w + lw, lw, 0, d / 2], [lw, d - lw, -w / 2, 0], [lw, d - lw, w / 2, 0]]) {
+    const s = new T.Mesh(new T.PlaneGeometry(sx, sz).rotateX(-Math.PI / 2), paint); s.position.set(px, 0, pz); s.receiveShadow = true; slab.add(s); }
+  slab.position.set(c.x, 0.003, c.z); stage.overlay.add(slab); stage.real();
   const m = Math.max(w, d) * 0.35 + 6; stage.setBounds(new T.Box3(new T.Vector3(c.x - w / 2 - m, 0, c.z - d / 2 - m), new T.Vector3(c.x + w / 2 + m, 6, c.z + d / 2 + m))); stage.setGrid(0.5, 5);
   const fitAll = () => stage.fit(new T.Box3().setFromPoints([SC.toS([r.x0, r.y0, 0]), SC.toS([r.x1, r.y1, 4000])]), 1.05);
   if (!again) fitAll();
