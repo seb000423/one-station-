@@ -838,6 +838,11 @@
   function toolAngle(id) { const o = robObj(id), rig = rigFor(id); if (!rig || rig.length < 6 || !rig.tcp) return null; const a = rig[4].j.getWorldPosition(new T.Vector3()), b = L.rigTcp(rig, o), dir = b.sub(a); if (dir.lengthSq() < 1e-8) return null;
     dir.normalize(); const fwd = new T.Vector3(1, 0, 0).applyQuaternion(rig[0].j.getWorldQuaternion(new T.Quaternion())); // + = tipped away from the robot, − = toward it
     return { tilt: Math.round(Math.acos(Math.max(-1, Math.min(1, -dir.y))) * 180 / Math.PI) * (dir.dot(fwd) < 0 ? -1 : 1), roll: Math.round(robState(id).deg[5] || 0) }; }
+    /* 선택한 줄: a line picked in the program (click its number). New lines (점 기록, 집기 / 놓기, + 줄) go in right after
+     it, and ▶ 실행 / ▷ 한 줄 start from it — a saved cell's program begins by waiting for a signal of the auto run (지그
+     클램프 …), so a point added at the end would never be reached by a run started from the pendant */
+  const curLine = id => { const v = ROB.cur?.[id], n = progOf(id)?.lines.length || 0; return v != null && v < n ? v : null; };
+  const putLines = (id, q, ls) => { const c = curLine(id), at = c == null ? q.lines.length : c + 1; q.lines.splice(at, 0, ...ls); (ROB.cur || (ROB.cur = {}))[id] = at + ls.length - 1; return at; };
   const prog = id => { const p = progOf(id); return p ? JSON.parse(JSON.stringify(p)) : { node: id, name: '프로그램 1', points: [], lines: [] }; };
   /* light: a name / speed / point field changed: the panel keeps its DOM (and the field being typed in), only the path redraws */
   let pendLight = false;
@@ -847,14 +852,14 @@
   /* ● 점 기록 = a point and the line to it: straight down / up over the last point (same X·Y) = 직선 이동, else 관절 이동 */
   function recordPoint(name) { const id = ROB.sel, r = robState(id); if (!r) return; const p = prog(id), pid = newPid(p), tcp = tcpOf(id), last = p.points[p.points.length - 1];
     p.points.push({ id: pid, ...(typeof name === 'string' && name ? { name } : {}), j: round1(r.deg), tcp, ...(railOf(id) ? { rail: Math.round(r.rail || 0) } : {}) }); const lin = last && last.tcp && Math.hypot(last.tcp[0] - tcp[0], last.tcp[1] - tcp[1]) <= 5;
-    p.lines.push(lin ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }); saveProg(p);
-    toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${p.lines.length}줄 ${lin ? '직선 이동' : '관절 이동'} 추가`); }
+    const at = putLines(id, p, [lin ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }]); saveProg(p);
+    toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${at + 1}번째 줄에 ${lin ? '직선 이동' : '관절 이동'} 추가`); }
   // 집기 / 놓기 block: above (150 mm up, 관절 이동) → down (직선) → gripper → back up (직선)
   const gripLines = (above, at, on) => [{ op: 'MOVJ', point: above, speed: 60 }, { op: 'MOVL', point: at, speed: 300 }, { op: 'GRIP', on }, { op: 'MOVL', point: above, speed: 300 }];
   function addGrip(on) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; const p = prog(id), t = tcpOf(id), up = [t[0], t[1], t[2] + 150];
     const ik = ikR(rig, o, toS(up), r.deg, { iters: 40 }); L.rigSet(rig, r.deg); if (!ik || ik.err > 30) { toast(`이 자리 150 mm 위에 손이 닿지 않습니다 (${Math.round(ik?.err ?? 0)} mm 못 미침) · 손끝을 조금 낮추거나 안쪽으로 옮기세요`, true); return; }
     const word = on ? '집기' : '놓기', a = newPid(p); p.points.push({ id: a, name: `${word} 위`, j: round1(ik.deg), tcp: up.map(Math.round) }); const b = newPid(p); p.points.push({ id: b, name: word, j: round1(r.deg), tcp: t });
-    p.lines.push(...gripLines(a, b, on)); saveProg(p); toast(`${word} 블록 · ${a} 위 → ${b} ${on ? '집고' : '놓고'} → ${a} 위 (4줄)`); }
+    const at = putLines(id, p, gripLines(a, b, on)); saveProg(p); toast(`${at + 1}번째 줄부터 ${word} 블록 · ${a} 위 → ${b} ${on ? '집고' : '놓고'} → ${a} 위 (4줄)`); }
   /* 픽 앤 플레이스 만들기: from the structure rules the robot's targets in reach are known; the nearest tray is the pick,
      the nearest jig / index table the place; approach points 150 mm above each; the program waits for START and sets DONE itself. */
   function genPickPlace() { const id = ROB.sel, n = ED.machine.doc.nodes.find(x => x.id === id), r = robState(id), rig = rigFor(id), o = robObj(id); if (!n) return;
@@ -881,7 +886,7 @@
   function holdJog(fn) { fn(); JOG_HOLD.t = setTimeout(() => { JOG_HOLD.iv = setInterval(fn, 50); }, 320); }
   function stopHold() { clearTimeout(JOG_HOLD.t); clearInterval(JOG_HOLD.iv); JOG_HOLD.t = JOG_HOLD.iv = null; }
   window.addEventListener('pointerup', stopHold); window.addEventListener('pointercancel', stopHold); window.addEventListener('blur', stopHold);
-  const stateTxt = r => r.on ? (r.pause ? `⏸ ${r.line + 1}줄 끝 · ▷ 한 줄로 다음` : `▶ ${r.line + 1}줄 실행 중`) : r.grip ? '워크 쥠' : '대기';
+  const stateTxt = r => r.on ? (r.pause ? `⏸ ${r.line + 1}줄 끝 · ▷ 한 줄로 다음` : r.seg?.kind === 'W' ? `⏳ ${r.line + 1}줄: ${r.seg.tag} 신호 기다림 (자동 운전에서 켜짐 · 줄 번호를 눌러 다른 줄부터 실행)` : `▶ ${r.line + 1}줄 실행 중`) : r.grip ? '워크 쥠' : '대기';
   const linesFromPoints = p => p.points.map(q => ({ op: 'MOVJ', point: q.id, speed: 50 }));
   function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = robotNodes(), show = mode === 'run' && rs.length > 0;
     const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; if (ROB.pick) setPick(false); return; }
@@ -900,7 +905,7 @@
       else if (l.op === 'ARC') body = `<select data-f="on"><option value="true"${l.on ? ' selected' : ''}>켜기 (용접 시작)</option><option value="false"${!l.on ? ' selected' : ''}>끄기</option></select>`;
       else if (l.op === 'WAIT' || l.op === 'SET') { const tg = io.find(x => x.tag === l.tag); body = `${tagSel(l.tag, l.op === 'SET')}${valSel(tg, l.value, l.op === 'SET' ? 'set' : 'wait')}`; }
       else if (l.op === 'DELAY') body = `<input data-f="s" type="number" min="0" step="0.1" value="${l.s ?? 1}"> s`;
-      return `<div class="pline${on ? ' on' : ''}" data-li="${i}"><b>${i + 1}</b><span class="op">${OPK[l.op]}</span>${body}<span class="sp"></span><button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
+      return `<div class="pline${on ? ' on' : ''}${curLine(id) === i ? ' sel' : ''}" data-li="${i}"><b data-lsel="${i}" title="이 줄 선택 · 새 줄은 이 줄 다음에 들어가고 ▶ 실행은 이 줄부터 · 다시 누르면 선택 해제">${i + 1}</b><span class="op">${OPK[l.op]}</span>${body}<span class="sp"></span><button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
     const tagsOut = io.filter(x => x.dir === 'out'), tagsAny = io;
     const jrow = (i) => { const u = L.unitOf(rig, i); return `<div class="jrow" title="범위 ${lim[i]?.[0] ?? -180}${u} ~ ${lim[i]?.[1] ?? 180}${u}${rig[i].lin ? ' · 아래로 내려가는 직선 축' : ''}"><span>J${i + 1}</span><button data-jog="${i}:-1">−</button><input type="range" data-js="${i}" min="${lim[i]?.[0] ?? -180}" max="${lim[i]?.[1] ?? 180}" step="0.5" value="${r.deg[i] || 0}"><button data-jog="${i}:1">+</button><b data-jv="${i}">${(r.deg[i] || 0).toFixed(1)}${u}</b></div>`; };
     const trow = (k, i) => `<div class="jrow"><span>${k}</span><button data-xyz="${i}:-1">−</button><b class="tv" data-tv="${i}">${t[i]}</b><button data-xyz="${i}:1">+</button><small>mm</small></div>`;
@@ -927,11 +932,11 @@
     drawPath();
     box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; drawPend(); };
     box.querySelector('#pStepJ').onchange = e => { ROB.deg = +e.target.value; }; box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
-    box.querySelector('#pRun').onclick = () => { const r = robState(id); ROB.step = false; if (r.on && r.pause) { r.pause = false; return; } if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, '티칭 패널')) toast('점을 기록하거나 줄을 더해 주세요', true); };
+    box.querySelector('#pRun').onclick = () => { const r = robState(id); ROB.step = false; if (r.on && r.pause) { r.pause = false; return; } if (r.on) { stopProg(id); return; } const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); toast(`기록한 점 ${q.points.length}개를 순서대로 이어 실행합니다`); } if (!startProg(id, curLine(id) != null ? `티칭 패널 · ${curLine(id) + 1}줄부터` : '티칭 패널', curLine(id) || 0)) toast('점을 기록하거나 줄을 더해 주세요', true); };
     box.querySelector('#pGen').onclick = genPickPlace; box.querySelector('#pView').onclick = () => viewPoints(id); box.querySelector('#pRec').onclick = () => recordPoint(); box.querySelector('#pPick').onclick = () => setPick(!ROB.pick); box.querySelector('#pOvr').onchange = e => { ROB.ovr = +e.target.value; };
     box.querySelector('#pHome').onclick = () => { const rr = robState(id); if (rr.on) stopProg(id); setDeg(id, rig.map(() => 0)); drawPend(true); };
     box.querySelector('#pFree').onchange = e => { ROB.free = e.target.checked; if (!ROB.free) { const lm = L.limitsOf(rig), d = robState(id).deg.map((v, i) => lm[i] ? Math.max(lm[i][0], Math.min(lm[i][1], v)) : v); setDeg(id, d); } drawPend(); toast(ROB.free ? '관절 한계를 풀었습니다 · 실제 로봇에서는 못 가는 자세가 나올 수 있습니다' : '관절 한계를 다시 켰습니다'); };
-    box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩')) toast('점을 기록하거나 줄을 더해 주세요', true); };
+    box.querySelector('#pNext').onclick = () => { ROB.step = true; const rr = robState(id); if (rr.on && rr.pause) { rr.pause = false; return; } if (rr.on) return; const q = prog(id); if (!q.lines.length && q.points.length) { q.lines = linesFromPoints(q); saveProg(q); } if (!startProg(id, '한 줄씩', curLine(id) || 0)) toast('점을 기록하거나 줄을 더해 주세요', true); };
     if (fk) { const el = fk.id ? box.querySelector('#' + fk.id) : box.querySelector(`${fh} [data-f="${fk.f}"]`); if (el) { el.focus(); try { if (fk.s != null) el.setSelectionRange(fk.s, fk.s); } catch {} } }
     box.onpointerdown = e => { const rj = e.target.closest('[data-railj]'); if (rj) { holdJog(() => { const rr = robState(id); rr.rail = setRail(id, (rr.rail || 0) + +rj.dataset.railj * ROB.mm); drawPend(true); }); e.preventDefault(); return; }
       const j = e.target.closest('[data-jog]'); if (j) { const [i, d] = j.dataset.jog.split(':'); const lin = rigFor(ROB.sel)?.[+i]?.lin ? 2 : 1; holdJog(() => jogJ(+i, +d * lin * (JOG_HOLD.iv ? Math.min(ROB.deg, 2) : ROB.deg))); /* a straight axis: 2 mm per step degree */ e.preventDefault(); return; }
@@ -939,14 +944,15 @@
       const x = e.target.closest('[data-xyz]'); if (x) { const [a, d] = x.dataset.xyz.split(':'); holdJog(() => jogXYZ(+a, +d * (JOG_HOLD.iv ? Math.min(ROB.mm, 10) : ROB.mm))); e.preventDefault(); } };
     box.oninput = e => { const rs2 = e.target.closest('[data-rs]'); if (rs2) { const rr = robState(id); rr.rail = setRail(id, +rs2.value); drawPend(true); return; } const sl = e.target.closest('[data-js]'); if (!sl) return; const deg = robState(id).deg.slice(); deg[+sl.dataset.js] = +sl.value; setDeg(id, deg); drawPend(true); };
     box.onclick = e => { if (e.target.closest('[data-jog],[data-xyz],[data-tool],[data-railj]')) return;
+      const ls = e.target.closest('[data-lsel]'); if (ls) { const i = +ls.dataset.lsel; (ROB.cur || (ROB.cur = {}))[id] = curLine(id) === i ? null : i; drawPend(); return; }
       const gp = e.target.closest('[data-grip]'); if (gp) { addGrip(gp.dataset.grip === '1'); return; }
       const ch = e.target.closest('[data-chain]'); if (ch) { const q = prog(id); if (q.lines.length && !confirm('지금 프로그램 줄을 지우고 점을 순서대로 이을까요? (실행 취소 가능)')) return; q.lines = linesFromPoints(q); saveProg(q); return; }
       const ad = e.target.closest('[data-add]'); if (ad) { const q = prog(id), op = ad.dataset.add, first = q.points[0]?.id; if ((op === 'MOVJ' || op === 'MOVL') && !first) { toast('먼저 점을 기록하세요', true); return; }
         if ((op === 'WAIT' && !tagsAny.length) || (op === 'SET' && !tagsOut.length)) { toast('신호가 없습니다', true); return; }
-        q.lines.push(op === 'MOVJ' ? { op, point: first, speed: 50 } : op === 'MOVL' ? { op, point: first, speed: 500 } : op === 'GRIP' || op === 'ARC' ? { op, on: true } : op === 'WAIT' ? { op, tag: tagsAny[0]?.tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0]?.tag, value: true } : { op, s: 1 }); saveProg(q); return; }
+        putLines(id, q, [op === 'MOVJ' ? { op, point: first, speed: 50 } : op === 'MOVL' ? { op, point: first, speed: 500 } : op === 'GRIP' || op === 'ARC' ? { op, on: true } : op === 'WAIT' ? { op, tag: tagsAny[0]?.tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0]?.tag, value: true } : { op, s: 1 }]); saveProg(q); return; }
       const pa = e.target.closest('[data-pa]'); if (pa) { const q = prog(id), pid = pa.closest('[data-pt]').dataset.pt, k = q.points.findIndex(z => z.id === pid), pt = q.points[k];
         if (pa.dataset.pa === 'go') { const sv = solvePoint(id, pt); r.rail = setRail(id, sv.rail || 0); setDeg(id, sv.deg); drawPend(true); } else if (pa.dataset.pa === 're') { pt.j = r.deg.map(v => Math.round(v * 10) / 10); pt.tcp = tcpOf(id); saveProg(q); } else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
-      const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') q.lines.splice(i, 1); else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); return; } };
+      const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') { q.lines.splice(i, 1); const c = curLine(id); if (c != null && c >= i) ROB.cur[id] = c > i ? c - 1 : null; } else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); return; } };
     box.onchange = e => { const f = e.target.dataset.f; if (!f) return; const q = prog(id);
       const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q, true); return; }
       const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 'speed' || f === 's') v = +v;

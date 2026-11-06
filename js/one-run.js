@@ -88,7 +88,7 @@
     function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
     function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
     const VJ = 150; // joint speed deg/s at 100 %
-    function startProg(id, why) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = -1; r.t = 0; r.seg = null; r.pause = false; r.hits = new Set(); log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
+    function startProg(id, why, from = 0) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = Math.max(0, Math.min(from, p.lines.length - 1)) - 1; r.t = 0; r.seg = null; r.pause = false; r.hits = new Set(); log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
     function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; r.pause = false; } drawPend(true); }
     function fkStored(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); L.rigSet(rig, deg); const t = fromS(L.rigTcp(rig, o)); L.rigSet(rig, r.deg); return t; }
     /* 충돌 검사: the arm's centre line, joint to joint and the flange to the tool tip, against every other part of the cell
