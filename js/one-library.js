@@ -438,9 +438,22 @@
     g.userData.shoulder = 1.36 * s; g.userData.armLen = 0.64 * s; return g; }
   bdef('operator', { name: '작업자', cat: 'robot', code: 'WK', operator: true, params: { h: 1750 }, fields: [num('h', '키', 'mm', 10)],
     io: workerIo, top: () => 0, build: p => { const g = new T.Group(); g.add(operatorFig(mm(p.h))); g.userData.kind = 'operator'; return g; } });
-  bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('cycle', '동작 시간', 's', 0.5)],
-    io: robotIo, build: p => { const g = new T.Group(), r = mm(p.reach); cy(g, 'light', 0.1, 0.5); const a1 = grp(g, 'j1', 0, 0.5); bx(a1, 'light', r * 0.55, 0.08, 0.12, r * 0.27); const a2 = grp(a1, 'j2', r * 0.52, 0.08); bx(a2, 'light', r * 0.5, 0.07, 0.1, r * 0.24); cy(a2, 'steel', 0.015, 0.3, r * 0.48, -0.3); return g; },
-    pose: (g, p, v) => { const k = v.RUN || 0, a1 = g.getObjectByName('j1'), a2 = g.getObjectByName('j2'); if (a1) a1.rotation.y = Math.sin(k * Math.PI) * 1.2; if (a2) a2.rotation.y = -Math.sin(k * Math.PI) * 1.6; } });
+  /* 스카라: J1 / J2 turn the two arms about vertical axes, J3 is the quill (a straight stroke down, mm), J4 turns the tool
+     on the quill. Teachable like the 6-axis arm (rigOfScara): the IK moves J1–J3, J4 stays as jogged. */
+  function scaraArm(g, r, stroke) { const L1 = r * 0.5, L2 = r * 0.5, col = grp(g, 'scara', 0, 0, 0);
+    cy(col, 'frame', 0.13, 0.06); cy(col, 'light', 0.1, 0.26, 0, 0.06);
+    // the tool tip comes down to 50 mm above the robot's foot at full stroke (200 mm)
+    const j1 = grp(col, 'j1', 0, 0.32); cy(j1, 'dark', 0.1, 0.09); bx(j1, 'light', L1, 0.08, 0.14, L1 / 2, 0.02); cy(j1, 'light', 0.07, 0.08, 0, 0.02); cy(j1, 'light', 0.07, 0.08, L1, 0.02);
+    const j2 = grp(j1, 'j2', L1, 0.1); cy(j2, 'dark', 0.06, 0.06); bx(j2, 'light', L2, 0.07, 0.12, L2 / 2, 0.01); cy(j2, 'light', 0.06, 0.13, L2, -0.02);
+    const q = mm(stroke), j3 = grp(j2, 'j3', L2, 0); cy(j3, 'steel', 0.012, q + 0.18, 0, -0.06); // the quill: its top shows above the housing, it slides down
+    const j4 = grp(j3, 'j4', 0, -0.07); cy(j4, 'dark', 0.03, 0.03, 0, -0.03); bx(j4, 'steel', 0.07, 0.025, 0.04, 0, -0.055); for (const k of [-1, 1]) bx(j4, 'dark', 0.012, 0.05, 0.03, k * 0.025, -0.105);
+    grp(j4, 'tip', 0, -0.1); return col; }
+  function rigOfScara(g, stroke) { const n = ['j1', 'j2', 'j3', 'j4'].map(k => g.getObjectByName(k)), tip = g.getObjectByName('tip'); if (n.some(x => !x)) return null; const up = new T.Vector3(0, 1, 0);
+    const rig = n.map((j, i) => i === 2 ? { j, i, lin: true, base: j.quaternion.clone(), p0: j.position.clone(), axis: new T.Vector3(0, -1, 0) } : { j, i, base: j.quaternion.clone(), axis: up.clone() });
+    rig.tcp = tip; rig.limits = [[-140, 140], [-145, 145], [0, Math.round(+stroke || 200)], [-360, 360]]; rig.ikN = 3; rig.scara = true; return rig; }
+  bdef('scara', { cls: 'robot', name: '스카라 로봇', cat: 'robot', code: 'SCR', onTop: true, params: { reach: 600, stroke: 200, cycle: 2 }, fields: [num('reach', '도달 거리', 'mm', 50), num('stroke', 'Z 스트로크', 'mm', 10), num('cycle', '동작 시간', 's', 0.5)],
+    io: robotIo, build: p => { const g = new T.Group(); scaraArm(g, mm(p.reach), +p.stroke || 200); g.userData.rig = rigOfScara(g, +p.stroke || 200); g.userData.kind = 'robot'; return g; },
+    pose: (g, p, v) => { if (g.userData.prog || !g.userData.rig) return; const k = Math.sin((v.RUN || 0) * Math.PI); rigSet(g.userData.rig, [k * 60, -k * 80, k * (+p.stroke || 200) * 0.6, k * 90]); } });
 
   const sensorBuild = (role) => () => { const g = new T.Group(); bx(g, 'frame', 0.02, 0.08, 0.02); bx(g, role, 0.03, 0.04, 0.02, 0, 0.08); return g; };
   bdef('photo-sensor', { cls: 'sensor', name: '광전 센서', cat: 'sensor', code: 'PS', onTop: true, params: { range: 500 }, fields: [num('range', '감지 거리', 'mm', 10)], sensor: true,
@@ -566,7 +579,7 @@
      No dynamics, no collision: a trajectory through an object is reported by the design check, not prevented. */
   const LIMITS6 = [[-170, 170], [-100, 135], [-150, 150], [-190, 190], [-120, 120], [-360, 360]];
   const limitsOf = rig => rig.limits || LIMITS6;
-  function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; qa.setFromAxisAngle(r.axis, a * Math.PI / 180); r.j.quaternion.copy(r.base).premultiply(qa); if (r.cp) r.j.position.copy(r.p0).sub(r.cp).applyQuaternion(qa).add(r.cp); } }
+  function rigSet(rig, deg) { if (!rig) return; for (const r of rig) { const a = deg[r.i] || 0; if (r.lin) { r.j.position.copy(r.p0).addScaledVector(r.axis, a / 1000); continue; } qa.setFromAxisAngle(r.axis, a * Math.PI / 180); r.j.quaternion.copy(r.base).premultiply(qa); if (r.cp) r.j.position.copy(r.p0).sub(r.cp).applyQuaternion(qa).add(r.cp); } }
   function rigTcp(rig, g) { if (!rig) return null; (g || rig[0].j).updateMatrixWorld(true); const t = rig.tcp || rig[rig.length - 1].j; return t.getWorldPosition(new T.Vector3()); }
   /* rigIk: a stretched arm sits on a singular pose (pulling the hand in needs the elbow to bend first, the gradient alone
      never does it): when the first try stays short, retry from seeds with the elbow / shoulder bent and keep the best */
@@ -583,14 +596,16 @@
     if (best !== r0) rigSet(rig, best.deg); return best; }
   function ikOnce(rig, g, target, deg0, opt = {}) { if (!rig) return null; const n = rig.length, a = (deg0 || []).slice(0, n); while (a.length < n) a.push(0); const lim = opt.lim || limitsOf(rig), it = opt.iters || 24, lam2 = 0.004, h = 0.5, R = 180 / Math.PI;
     const tmp = new T.Vector3(), m = opt.ikN || rig.ikN || n, a0 = (opt.a0 || a).slice(), clamp = (v, i) => Math.max(lim[i]?.[0] ?? -180, Math.min(lim[i]?.[1] ?? 180, v));
+    // a straight axis (the 스카라 quill) counts in mm: 1 rad of a turning joint ≈ 1 m of travel for the solver
+    const ks = rig.map(r => r.lin ? 1000 / R : 1); rig.forEach((r, i) => { if (r.lin) a[i] = clamp(a[i], i); });
     const fk = ang => { if (rig.hold) { rig.hold(ang, a0); ang[4] = clamp(ang[4], 4); } rigSet(rig, ang); return rigTcp(rig, g).clone(); };
     let cur = fk(a), err = target.clone().sub(cur);
     for (let k = 0; k < it && err.length() > 0.0008; k++) {
       // J in m per rad (numeric, h deg): (J Jᵀ + λ² I) y = err, 3×3; Δa = Jᵀ y (rad) → deg, at most 25° a step
-      const J = []; for (let i = 0; i < m; i++) { const b = a.slice(); b[i] += h; const q = fk(b); J.push([(q.x - cur.x) / h * R, (q.y - cur.y) / h * R, (q.z - cur.z) / h * R]); }
+      const J = []; for (let i = 0; i < m; i++) { const b = a.slice(); b[i] += h * ks[i]; const q = fk(b); J.push([(q.x - cur.x) / h * R, (q.y - cur.y) / h * R, (q.z - cur.z) / h * R]); }
       const A = [[lam2, 0, 0], [0, lam2, 0], [0, 0, lam2]]; for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let i = 0; i < m; i++) A[r][c] += J[i][r] * J[i][c];
       const e = [err.x, err.y, err.z], y = solve3(A, e); if (!y) break;
-      for (let i = 0; i < m; i++) { let d = (J[i][0] * y[0] + J[i][1] * y[1] + J[i][2] * y[2]) * R * 0.8; d = Math.max(-25, Math.min(25, d)); a[i] = clamp(a[i] + d, i); }
+      for (let i = 0; i < m; i++) { let d = (J[i][0] * y[0] + J[i][1] * y[1] + J[i][2] * y[2]) * R * 0.8; d = Math.max(-25, Math.min(25, d)); a[i] = clamp(a[i] + d * ks[i], i); }
       cur = fk(a); err = tmp.copy(target).sub(cur); }
     return { deg: a, err: err.length() * 1000, tcp: cur }; }
   /** Arm length along the joint chain (mm), the reach the pendant uses to look for pick / place targets. */
@@ -602,7 +617,7 @@
   const SWING = [55, 22, -28, 70, 35, 90];
   const qa = new T.Quaternion();
   function poseRig(rig, kind, k) { if (!rig) return; const s = Math.sin(Math.PI * k), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    for (const r of rig) { const deg = kind === 'rotary' ? 90 * e : SWING[r.i] * s * (r.i === 0 ? Math.sin(Math.PI * k * 2) : 1); r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, deg * Math.PI / 180)); } }
+    for (const r of rig) { if (r.lin) continue; const deg = kind === 'rotary' ? 90 * e : SWING[r.i] * s * (r.i === 0 ? Math.sin(Math.PI * k * 2) : 1); r.j.quaternion.copy(r.base).premultiply(qa.setFromAxisAngle(r.axis, deg * Math.PI / 180)); } }
   // the converter left a flat emissive colour on some materials (whole control boxes glowed green): only emissive maps
   // (sensor LEDs, buttons) keep glowing; tower lamps get their own lenses below
   function flatGlowOff(scene) { scene.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) if (m && m.emissive && !m.emissiveMap) m.emissive.setRGB(0, 0, 0); }); }
@@ -700,5 +715,5 @@
         return u < -0.02 || u > 1.02 ? null : { u: Math.max(0, Math.min(1, u)), off: r - p.r }; } }; }
   function buildBlock(id, p = {}) { const d = B[id]; if (!d) { const g = new T.Group(); bx(g, 'body', 0.2, 0.2, 0.2); return g; } return d.build(Object.assign({}, d.params, p)); }
 
-  window.OneLibrary = { plantGlb, poseModel, setFx, rigSet, rigTcp, rigIk, rigReach, limitsOf, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
+  window.OneLibrary = { plantGlb, poseModel, setFx, unitOf: (rig, i) => rig?.[i]?.lin ? 'mm' : '°', rigSet, rigTcp, rigIk, rigReach, limitsOf, onModel: f => modelListeners.add(f), curveGeom, mat, lampMat, FACTORY: F, FACTORY_GROUPS, buildFactory, special, BLOCKS: B, MACHINE_CATS, buildBlock, conveyorShape, workShape, arm, person };
 })();

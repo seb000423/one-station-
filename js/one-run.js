@@ -234,7 +234,7 @@
     // jogging: by joint (deg) or by TCP axis (mm, inverse kinematics)
     /* joint limits: each robot has its mechanical range (cables, end stops, its own body: there is no collision check, so the
        range is what keeps the arm out of its base). 관절 한계 해제 lifts them while trying things out. */
-    const limOf = rig => ROB.free ? rig.map(() => [-360, 360]) : L.limitsOf(rig);
+    const limOf = rig => ROB.free ? rig.map((r, i) => r.lin ? L.limitsOf(rig)[i] : [-360, 360]) : L.limitsOf(rig); // a straight axis (스카라 J3) keeps its stroke: there is no more quill
     const ikR = (rig, o, t, seed, opt = {}) => L.rigIk(rig, o, t, seed, { ...opt, lim: limOf(rig) });
     function panelButtons(doc, tags) { const pb = RUN.pb || (RUN.pb = {});
       for (const t of doc.io) { const m = /_(START_PB|STOP_PB|ESTOP)$/.exec(t.tag); if (!m) continue; const on = !!tags[t.tag], was = !!pb[t.tag]; pb[t.tag] = on; if (on === was) continue;
