@@ -526,20 +526,34 @@
       if (hit) { c.add(q); n++; } } return n ? c.divideScalar(n) : null; }
   function mainAxis(pts) { const c = new T.Vector3(); pts.forEach(q => c.add(q)); c.divideScalar(pts.length); let d = new T.Vector3(1, 0, 0);
     for (let it = 0; it < 30; it++) { const nd = new T.Vector3(); for (const q of pts) { const e = q.clone().sub(c); nd.addScaledVector(e, e.dot(d)); } if (nd.lengthSq() < 1e-12) break; d = nd.normalize(); } return { c, d }; }
-  function deepRig(c, ch) { c.updateWorldMatrix(true, true); const J = ch.slice(1, 7), links = [linkPts(ch[0], J[0])].concat(J.map((j, i) => linkPts(j, J[i + 1] || null)));
+  // opt.flange: J6 turns about the middle of the flange contact (wrist ↔ tool), not about the J node origin
+  // opt.roll: the model has no forearm-roll node — J4 is a node put in before the wrist (it turns the wrist and tool about the
+  // forearm's long axis), so its own link is empty and the forearm stands in for it
+  function deepRig(c, ch, opt = {}) { c.updateWorldMatrix(true, true); const J = ch.slice(1, 7), links = [linkPts(ch[0], J[0])].concat(J.map((j, i) => linkPts(j, J[i + 1] || null)));
+    if (opt.roll || links[4].length < 8) links[4] = links[3];
     const wp = J.map(j => j.getWorldPosition(new T.Vector3())), up = new T.Vector3(0, 1, 0);
     const mid = i => contactMid(links[i], links[i + 1]) || wp[i].clone();
     const p1 = mid(1), p2 = mid(2), p4 = mid(4), fa = mainAxis(links[4]);
     const reach = wp[5].clone().sub(wp[0]); reach.y = 0; if (reach.lengthSq() < 1e-8) reach.set(1, 0, 0); reach.normalize(); const pitch = new T.Vector3().crossVectors(up, reach).normalize();
     const toWrist = p4.clone().sub(fa.c); if (fa.d.dot(toWrist) < 0) fa.d.negate();
-    const flange = wp[5].clone().sub(p4); if (flange.lengthSq() < 1e-8) flange.copy(fa.d); flange.normalize();
-    const W = [[wp[0], up], [p1, pitch], [p2, pitch], [fa.c, fa.d], [p4, pitch], [wp[5], flange]];
+    const p5 = opt.flange ? (contactMid(links[5], links[6]) || wp[5].clone()) : wp[5];
+    const flange = p5.clone().sub(p4); if (flange.lengthSq() < 1e-8) flange.copy(fa.d); flange.normalize();
+    const W = [[wp[0], up], [p1, pitch], [p2, pitch], [fa.c, fa.d], [p4, pitch], [p5, flange]];
     return J.map((j, i) => { const pq = new T.Quaternion(), inv = new T.Matrix4(); if (j.parent) { j.parent.getWorldQuaternion(pq); inv.copy(j.parent.matrixWorld).invert(); }
       return { j, i, base: j.quaternion.clone(), p0: j.position.clone(), cp: W[i][0].clone().applyMatrix4(inv), axis: W[i][1].clone().transformDirection(inv) }; }); } // transformDirection: the full inverse (the stage world is mirrored, a quaternion alone would flip the axis)
   // models whose J1 node is the fixed pedestal and whose node origins are off the axes (see deepRig)
   const DEEP_RIG = /^P_OP\d+_robot$/;
+  // nothing but the first J node carries meshes: that node is the robot's fixed foot
+  function footOnly(c, j1) { let own = 0; c.traverse(m => { if (!m.isMesh) return; let q = m; while (q && q !== c) { if (q === j1) return; q = q.parent; } own++; }); return own === 0; }
   function rigOf(c, kind, node) {
     c.updateMatrixWorld(true); if (kind !== 'rotary' && DEEP_RIG.test(node || '')) { const deep = jointChain(c, 7); if (deep.length === 7) { const rig = deepRig(c, deep); rig.deep = true; toolOf(rig); return rig; } }
+    /* The other model robots (the welders, the Fanuc) are built the same way: the first J node is the fixed foot (nothing of
+       the robot hangs outside it) and the node origins are off the axes. Taking J1 for the base turn swung the whole robot,
+       foot and all, and every later joint turned the wrong link — the arm came apart. The welders carry seven J nodes
+       (foot + six axes); the Fanuc six (foot + five: its forearm has no roll node, so one is put in before the wrist). */
+    if (kind === 'robot') { const ch = jointChain(c, 7); if (ch.length >= 6 && footOnly(c, ch[0])) {
+      let roll = false; if (ch.length === 6) { const w = ch[4], v = new T.Group(); v.name = 'J4roll'; w.parent.add(v); v.add(w); ch.splice(4, 0, v); roll = true; c.updateMatrixWorld(true); }
+      const rig = deepRig(c, ch, { flange: true, roll }); rig.deep = true; toolOf(rig); return rig; } }
     const ch = jointChain(c); if (!ch.length) return null; const up = new T.Vector3(0, 1, 0);
     const wp = ch.map(j => j.getWorldPosition(new T.Vector3())), reach = wp[wp.length - 1].clone().sub(wp[0]); reach.y = 0; if (reach.lengthSq() < 1e-6) reach.set(1, 0, 0); reach.normalize();
     const pitch = new T.Vector3().crossVectors(up, reach).normalize();
