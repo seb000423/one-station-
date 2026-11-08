@@ -182,7 +182,7 @@
     const box = document.createElement('div'); box.className = 'mine-menu';
     box.innerHTML = `<b>${esc(m.name)}</b><small>버전 ${Object.keys(m.versions).join(', ')}${placed ? ` · 공장에 ${placed}대` : ''}</small>`
       + Object.keys(m.versions).map(Number).sort((a, b) => b - a).slice(0, 12).map(v => `<button data-mineact="open@${v}" data-id="${esc(id)}">v${v} 열기${v === Math.max(...Object.keys(m.versions).map(Number)) ? ' (최신)' : ''}</button>`).join('')
-      + [ ['rename', '이름 바꾸기'], ['dup', '복제'], m.builtin ? (raw[id] ? ['reset', '원래대로 (저장한 버전 지우기)'] : null) : ['del', '삭제']].filter(Boolean).map(([k, t]) => `<button data-mineact="${k}" data-id="${esc(id)}"${k === 'del' || k === 'reset' ? ' class="warn"' : ''}>${t}</button>`).join('');
+      + [ ['rename', '이름 바꾸기'], ['dup', '복제'], m.builtin ? (raw[id] ? ['reset', '원래대로 (저장한 버전 지우기)'] : null) : ['del', '삭제'], m.builtin ? ['nodel', '삭제 없음 · 기본 설비는 지울 수 없습니다 (복제해서 고치면 내 설비가 됩니다)'] : null].filter(Boolean).map(([k, t]) => `<button data-mineact="${k}" data-id="${esc(id)}"${k === 'del' || k === 'reset' ? ' class="warn"' : ''}${k === 'nodel' ? ' disabled style="opacity:.55;cursor:default;white-space:normal;text-align:left"' : ''}>${t}</button>`).join('');
     at.closest('.item').after(box); setTimeout(() => addEventListener('click', function off(ev) { if (!box.contains(ev.target)) { box.remove(); removeEventListener('click', off, true); } }, true), 0); }
   function mineAct(k, id) { document.querySelectorAll('.mine-menu').forEach(x => x.remove()); const all = LS.get(KEY.lib, {}), m = lib()[id]; if (!m) return;
     const latest = Math.max(...Object.keys(m.versions).map(Number)), placed = ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${id}@`));
@@ -250,7 +250,7 @@
     const params = JSON.parse(JSON.stringify(d.params || {}));
     let nid;
     switch (k.cmd) {
-      case 'slab': select(doc.building.slabs[0]?.id || null); return;
+      case 'slab': select(doc.building.slabs[0]?.id || null); setTimeout(() => toast('바닥 슬래브는 공장에 하나만 있습니다 · 이미 있는 슬래브를 골랐습니다 · 크기는 위 막대의 공장 크기에서 바꿉니다'), 0); return;
       case 'draw_wall': nid = exec('draw_wall', { from: [x - params.length / 2, y], to: [x + params.length / 2, y], thickness: 200 }); break;
       case 'add_column': nid = exec('add_column', { position: [x, y], size: [params.size, params.size] }); break;
       case 'add_roof': { if (doc.building.roofs.length) { toast('지붕은 이미 있습니다. 선택해서 형식을 바꿀 수 있습니다'); select(doc.building.roofs[0].id); return; }
@@ -361,7 +361,7 @@
      to the host, or refuses with the reason. */
   const partEntry = key => window.OnePlant.partsCatalog().find(e => e.key === key);
   const partParams = e => ({ src: e.src, node: e.node, kind: e.kind, cls: e.cls, w0: e.size[0], d0: e.size[1], h0: e.size[2], w: e.size[0], d: e.size[1], h: e.size[2], ...(e.kind === 'static' ? {} : { cycle: e.kind === 'robot' ? 6 : 4 }) });
-  const slotParts = (doc, skip = new Set()) => doc.nodes.filter(n => !skip.has(n.id) && (n.blockType === 'model-part' || nodeDef(n)?.cls)).map(toPart);
+  const slotParts = (doc, skip = new Set()) => doc.nodes.filter(n => !skip.has(n.id) && (n.blockType === 'model-part' || nodeDef(n)?.cls || nodeDef(n)?.conveyor)).map(toPart); // straight conveyors host sensors on their side rails
   const blockPart = (id, yaw) => { const d = L.BLOCKS[id], p = d.params, w = +(p.w || p.s || p.d || 400), dd = +(p.d || p.s || p.w || 400); return { id: 'new', name: d.name, cls: d.cls, size: [w, dd, Math.max(100, Math.round(d.top(p) * 1000)) || 300], pos: [0, 0, 0], yaw }; };
   const usesSlots = (k, id) => tab === 'machine' && (k === 'p' || (k === 'b' && !!L.BLOCKS[id].cls));
   function slotUnder(skip) {
@@ -426,7 +426,7 @@
     return `<span class="k">${esc(f.label)}</span><span class="unit"><input type="number" data-k="${esc(key)}" value="${val ?? ''}" step="${f.step || 1}" min="${f.min ?? ''}"><small>${esc(f.unit || '')}</small></span>`;
   };
   const howtoFactory = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 에셋을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요 (끌어다 놓아도 됩니다, Esc 취소).</li><li>놓은 것을 고르면 오른쪽에 <b>조작 패드</b>가 나옵니다: 화살표로 옮기고, 회전 버튼으로 돌립니다. 방향키도 됩니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>3D에서 직접 <b>끌어도</b> 옮겨집니다 (500 mm 단위, Alt = 10 mm). 빈 곳을 끌면 화면이 돌고, 휠은 확대입니다.</li><li><b>Machine Builder</b>에서 만든 설비를 저장하면 <b>내 설비</b>에서 공장에 놓을 수 있습니다.</li><li><b>▶ 시뮬레이션</b>을 누르면 저장하고 이 공장을 SIMULATION에서 엽니다.</li></ol>`;
-  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 센서·스토퍼·워크는 컨베이어 위에 대면 그 위에 올라갑니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·센서 같은 블록을 컨베이어·프레임·단상 위로 옮기면 윗면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 Control Panel이 열립니다. 객체마다 ON / OFF를 누르면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li>아래 <b>동작 순서</b>의 <b>블록으로 만들기</b>는 놓인 컨베이어·스토퍼·센서·공정·리프트를 보고 순서를 새로 만듭니다(지금 순서는 지워지고 실행 취소로 되돌림). <b>워크 다시 투입</b>은 워크를 처음 놓은 자리로 다시 올려 같은 시험을 반복합니다.</li><li>바닥의 <b>원 + 화살표</b>는 설비 원점과 X 방향(투입 → 배출)을 나타내는 기준 표시입니다. 객체가 아니라 지워지지 않습니다.</li><li>위 막대의 <b>객체 선택</b> 목록으로 이름을 골라 선택하고, <b>전체 지우기</b>로 지금 탭의 객체를 한 번에 지웁니다(Ctrl+Z로 복구).</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
+  const howtoMachine = `<ol class="howto"><li><b>왼쪽 팔레트</b>에서 블록을 고르면 커서를 따라다닙니다. 놓을 곳을 누르세요. 스토퍼·워크는 컨베이어 위에 대면 그 위에 올라가고, 센서는 컨베이어 옆면(레일)에 붙습니다.</li><li>블록을 고르면 오른쪽에 길이·속도 같은 값과 <b>조작 패드</b>(이동·회전·높이)가 나옵니다. 방향키도 됩니다.</li><li>로봇·램프 같은 블록을 프레임·단상 위로 옮기면 윗면에, 센서는 옆면에 붙습니다. 받침 높이를 바꾸면 같이 움직입니다.</li><li><b>Shift+클릭</b>, 빈 곳 <b>Shift+드래그</b>, <b>Ctrl+A</b>로 여러 개를 골라 한꺼번에 다룹니다.</li><li>위의 <b>동작 시험</b>을 누르면 아래에 Control Panel이 열립니다. 객체마다 ON / OFF를 누르면 설비가 움직이고, 센서·끝 위치 같은 상태는 자동으로 바뀝니다.</li><li>아래 <b>동작 순서</b>의 <b>블록으로 만들기</b>는 놓인 컨베이어·스토퍼·센서·공정·리프트를 보고 순서를 새로 만듭니다(지금 순서는 지워지고 실행 취소로 되돌림). <b>워크 다시 투입</b>은 워크를 처음 놓은 자리로 다시 올려 같은 시험을 반복합니다.</li><li>바닥의 <b>원 + 화살표</b>는 설비 원점과 X 방향(투입 → 배출)을 나타내는 기준 표시입니다. 객체가 아니라 지워지지 않습니다.</li><li>위 막대의 <b>객체 선택</b> 목록으로 이름을 골라 선택하고, <b>전체 지우기</b>로 지금 탭의 객체를 한 번에 지웁니다(Ctrl+Z로 복구).</li><li><b>저장</b>하면 설비 카드가 만들어지고 Factory Builder의 <b>내 설비</b>에 나옵니다.</li></ol>`;
   function drawProps() {
     const doc = ed().doc, box = $('props'); let html = '';
     const many = selIds(), cp = cellParts(sel), wholeCell = cp.length && many.every(id => id === sel || cp.includes(id)); // a split cell picked as a whole shows the cell
@@ -645,7 +645,8 @@
       for (const it of C.checkStructure(mp.map(toPart), { ref: ref && ref.map(toPart), area: doc.meta.cellFixed ? doc.meta.bbox.slice(0, 2) : null }))
         out.push({ lv: it.lv, ids: it.ids, at: it.at, txt: `${it.rule} ${RN[it.rule]} · ${it.txt}`, fix: it.fix ? { label: it.fix.label, run: () => it.fix.moves.forEach(m => moveNode(m.id, m.by)) } : null }); }
     return out; }
-  const toPart = n => ({ id: n.id, name: n.name, kind: n.params.kind, cls: n.params.cls || nodeDef(n)?.cls || undefined, size: [+n.params.w || 1, +n.params.d || 1, +n.params.h || 1], pos: n.transform.position.slice(), yaw: n.transform.rotation[2] || 0 });
+  const toPart = n => { const d = nodeDef(n), cv = !n.params.cls && !d?.cls && d?.conveyor, p = cv ? Object.assign({}, d.params, n.params) : n.params;
+    return { id: n.id, name: n.name, kind: n.params.kind, cls: n.params.cls || d?.cls || (cv ? 'conveyor' : undefined), size: cv ? [+p.length || 1, +p.w || 1, +p.h || 1] : [+n.params.w || 1, +n.params.d || 1, +n.params.h || 1], pos: n.transform.position.slice(), yaw: n.transform.rotation[2] || 0 }; };
   /** The reference the structure rules compare with: the built-in station v1, else the first saved version of this machine. */
   function structRef(doc) { const id = doc.meta.id, b = window.OnePlant?.builtins()[id], m = b || lib()[id], v = m && (m.versions[1] || m.versions[Object.keys(m.versions).sort((a, c) => a - c)[0]]);
     return v ? v.nodes.filter(n => n.blockType === 'model-part') : null; }
@@ -662,8 +663,15 @@
       cells.push({ id: it.id, name: itemCode(it) || itemName(it), c: [t.position[0] + A.x * cs - A.y * sn, t.position[1] + A.x * sn + A.y * cs], size: [A.w, A.d], yaw: t.rotation[2] || 0, inlet: P && P.inlet, outlet: P && P.outlet, dir: P && P.dir }); }
     const aisles = doc.markings.filter(m => m.kind === 'aisle' && m.polygon && m.polygon.length >= 3).map(m => ({ id: m.id, name: m.name || '', poly: m.polygon }));
     const slab = doc.building.slabs[0] && doc.building.slabs[0].polygon && doc.building.slabs[0].polygon.length >= 3 ? doc.building.slabs[0].polygon : null;
-    return C.checkLayout(cells, doc.flows, { gap: 600, aisles, slab }).map(it => { if (!it.fix) return it; const moves = it.fix.moves;
-      return Object.assign(it, { fix: { label: it.fix.label, run: () => { for (const m of moves) exec('move', { id: m.id, by: [m.by[0], m.by[1]] }, true); autoLink(moves.map(m => m.id)); } } }); }); }
+    const out = C.checkLayout(cells, doc.flows, { gap: 600, aisles, slab }).map(it => { if (!it.fix) return it; const moves = it.fix.moves;
+      return Object.assign(it, { fix: { label: it.fix.label, run: () => { for (const m of moves) exec('move', { id: m.id, by: [m.by[0], m.by[1]] }, true); autoLink(moves.map(m => m.id)); } } }); });
+    // an object of a split cell dragged (객체 이동) out of its cell's area: the checks above only see the area, so say so
+    const byId = new Map(cells.map(c => [c.id, c])), far = new Map();
+    for (const b of doc.blocks) { const c = byId.get(b.parent || (b.params && b.params.cell)); if (!c) continue; const r = -(c.yaw || 0) * Math.PI / 180, dx = b.transform.position[0] - c.c[0], dy = b.transform.position[1] - c.c[1];
+      const lx = dx * Math.cos(r) - dy * Math.sin(r), ly = dx * Math.sin(r) + dy * Math.cos(r), o = Math.max(Math.abs(lx) - c.size[0] / 2, Math.abs(ly) - c.size[1] / 2);
+      if (o > 100 && (!far.has(c.id) || far.get(c.id).o < o)) far.set(c.id, { b, o }); }
+    for (const [cid, { b, o }] of far) { const c = byId.get(cid); out.push({ rule: 'F1', lv: 'warn', ids: [b.id, cid], at: [b.transform.position[0], b.transform.position[1], 0], txt: `${b.name || '객체'}이(가) ${c.name} 셀 영역 밖으로 ${Math.round(o)} mm 나가 있습니다 · 셀 전체 이동으로 옮기거나 셀 영역을 넓히세요` }); }
+    return out; }
   const chkG = new T.Group(); ov.add(chkG); let issues = [];
   const chkMat = { err: new T.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }), warn: new T.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }) }, chkGeo = new T.RingGeometry(0.07, 0.11, 28).rotateX(-Math.PI / 2);
   function updateCheck() { const on = mode !== 'run'; issues = !on ? [] : tab === 'machine' ? designIssues(ED.machine.doc) : factoryIssues(ED.factory.doc); chkG.clear();
@@ -1067,7 +1075,7 @@
     else if (x === 'del' && line) s0[line.dataset.k].splice(+line.dataset.j, 1);
     else if (x === 'up' && i > 0) { [steps[i - 1], steps[i]] = [steps[i], steps[i - 1]]; AUTO.open = i - 1; }
     else if (x === 'down' && i < steps.length - 1) { [steps[i + 1], steps[i]] = [steps[i], steps[i + 1]]; AUTO.open = i + 1; }
-    else if (x === 'dup') { let n = steps.length + 1; while (steps.some(q => q.id === `s${n}`)) n++; steps.splice(i + 1, 0, Object.assign(JSON.parse(JSON.stringify(s0)), { id: `s${n}`, next: undefined })); AUTO.open = i + 1; }
+    else if (x === 'dup') { let n = steps.length + 1; while (steps.some(q => q.id === `s${n}`)) n++; steps.splice(i + 1, 0, Object.assign(JSON.parse(JSON.stringify(s0)), { id: `s${n}`, next: undefined, name: `${s0.name || `${i + 1}단계`} 복사` })); AUTO.open = i + 1; }
     else if (x === 'rm') { steps.splice(i, 1); for (const q of steps) if (q.next && q.next[0] === s0.id) delete q.next; AUTO.open = -1; if (AUTO.i >= steps.length) AUTO.i = 0; }
     else return;
     saveSeq(steps); });
@@ -1198,7 +1206,7 @@
   $('olQ').addEventListener('keydown', e => { if (e.key === 'Escape') toggleObjList(false); if (e.key === 'Enter') { const b = $('olList').querySelector('[data-oid]'); if (b) b.click(); } e.stopPropagation(); });
   $('olList').addEventListener('click', e => { const b = e.target.closest('[data-oid]'); if (!b) return; if (e.shiftKey || e.ctrlKey || e.metaKey) toggleSel(b.dataset.oid); else select(b.dataset.oid); drawObjList(); focusSel(); });
   renderer.domElement.addEventListener('pointerdown', e => {
-    if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } return; }
+    if (placing) { if (e.button === 0) { trackPlace(e); commitPlace(e.shiftKey); } else if (e.button === 2) { e.preventDefault(); endPlace(); toast('놓기를 취소했습니다'); } return; }
     if (e.button === 0 && ROB.pick && mode === 'run' && tab === 'machine') { pickPoint(e); return; }
     if (e.button === 0 && teleopStart(e)) return;
     if (e.button === 0 && !xray && tab === 'factory' && mode === 'edit') { const port = pickPort(e); if (port && port.kind === 'outlet' && startLink(e, port)) return; }
@@ -1289,9 +1297,13 @@
   const ownIds = ids => { if (tab !== 'factory') return ids; const set = new Set(ids), doc = ED.factory.doc; return ids.filter(id => { const b = doc.blocks.find(x => x.id === id); return !(b && blockCell(b) && set.has(blockCell(b))); }); };
   function select(id, focus) { const kids = cellParts(id); if (kids.length) { selectMany([id, ...kids]); if (focus) focusSel(); return; } multi = new Set(); sel = id || null; drawTree(); drawObjSel(); drawProps(); updateSelMark(); if (tab === 'machine') drawIo(); if (focus && sel) focusSel(); }
   // 이동 대상 (객체 이동 / 셀 전체 이동), remembered per browser; G switches
-  const MOVE = { mode: LS.get('one.build.move', 'obj') };
-  function setMove(m) { MOVE.mode = m; LS.set('one.build.move', m); for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.classList.toggle('on', b.dataset.mv === m); }
-  for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.onclick = () => { setMove(b.dataset.mv); toast(b.dataset.mv === 'cell' ? '셀 전체 이동: 어디를 눌러 끌어도 셀 전체가 움직입니다' : '객체 이동: 누른 객체(와 그 위에 놓인 것)만 움직입니다 · 셀 베이스를 끌면 베이스만'); }; setMove(MOVE.mode);
+  /* 이동 대상 per tab: Factory Builder starts on 셀 전체 이동 (dragging a cell moves its area with it, so the layout checks
+     F1–F6 see the move), Machine Builder on 객체 이동 (building a machine piece by piece) */
+  const MV = { factory: LS.get('one.build.move.factory', 'cell'), machine: LS.get('one.build.move.machine', LS.get('one.build.move', 'obj')) };
+  const MOVE = { get mode() { return MV[tab] || 'obj'; } };
+  function markMove() { for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.classList.toggle('on', b.dataset.mv === MOVE.mode); }
+  function setMove(m) { MV[tab] = m; LS.set('one.build.move.' + tab, m); markMove(); }
+  for (const b of document.querySelectorAll('#mvSeg [data-mv]')) b.onclick = () => { setMove(b.dataset.mv); toast(b.dataset.mv === 'cell' ? '셀 전체 이동: 어디를 눌러 끌어도 셀 전체가 움직입니다' : '객체 이동: 누른 객체(와 그 위에 놓인 것)만 움직입니다 · 셀 베이스를 끌면 베이스만'); }; markMove();
   const topOf = id => { const doc = ED.machine.doc; let n = doc.nodes.find(x => x.id === id); while (n && n.parent) { const p = doc.nodes.find(x => x.id === n.parent); if (!p) break; n = p; } return n ? n.id : id; };
   // a cell's base plate: a top-level block carrying most of the machine (half of the blocks or more)
   const isCellRoot = id => { const doc = ED.machine.doc, n = doc.nodes.find(x => x.id === id); if (!n || n.parent) return false; const k = descendants(doc, id).length; return k >= 3 && k >= (doc.nodes.length - 1) / 2; };
@@ -1321,7 +1333,7 @@
     else if (mod && k === 'd') { e.preventDefault(); dupSel(); }
     else if (mod && k === 's') { e.preventDefault(); save(); }
     else if (mod && k === 'a') { e.preventDefault(); if (mode === 'edit' && !xray) selectAll(); }
-    else if (k === 'r' && !mod) { if (placing) { placing.yaw = (placing.yaw + 90) % 360; if (placing.at) placeObj(placing.obj, [placing.at[0], placing.at[1], placing.obj.position.y * 1000], placing.yaw); } else rotateSel(); }
+    else if (k === 'r' && !mod) { if (placing) { placing.yaw = (placing.yaw + 90) % 360; if (placing.at) placeObj(placing.obj, [placing.at[0], placing.at[1], placing.obj.position.y * 1000], placing.yaw); } else { if (drag) endDrag({}); rotateSel(); } } // R while dragging: drop where it is now, then turn it there
     else if (k === 'delete' || k === 'backspace') deleteSel();
     else if (k.startsWith('arrow') && sel) { e.preventDefault(); nudge(k.slice(5), e.shiftKey); }
     else if (k === 'escape') { if (ROB.pick) setPick(false); else if (placing) endPlace(); else select(null); }
@@ -1408,7 +1420,7 @@
       // the same machine already placed in the factory now uses this version (unless unticked in the dialog)
       const placed = opt.follow === false ? [] : ED.factory.doc.machines.filter(x => x.ref.startsWith(`local:${doc.meta.id}@`) && x.ref !== `local:${doc.meta.id}@${v}`);
       if (placed.length) ED.factory.batch('set_machine_ref', () => { for (const x of placed) ED.factory.exec('set_machine_ref', { id: x.id, ref: `local:${doc.meta.id}@${v}` }); });
-      dirty.machine = false; toast(`설비 카드 저장: ${doc.meta.name} v${v} · ${placed.length ? `공장에 놓인 ${placed.length}대도 v${v}로 바뀌었습니다` : "Factory Builder의 '내 설비'에 나옵니다"}`); log(`저장 v${v}`);
+      dirty.machine = false; drawPalette(); toast(`설비 카드 저장: ${doc.meta.name} v${v} · ${placed.length ? `공장에 놓인 ${placed.length}대도 v${v}로 바뀌었습니다` : "Factory Builder의 '내 설비'에 나옵니다"}`); log(`저장 v${v}`);
     } else { LS.set(KEY.factory, ED.factory.doc); dirty.factory = false; toast('공장을 이 브라우저에 저장했습니다 · 파일로 받으려면 내보내기'); }
     drawCrumb();
   }
@@ -1462,10 +1474,13 @@
     const doc = ed().doc;
     if (tab === 'factory') $('crumb').innerHTML = `<b>${esc(doc.meta.name)}</b><span class="ver">${dirty.factory ? '수정됨' : ''}</span>`;
     else { const m = lib()[doc.meta.id], v = m ? Math.max(...Object.keys(m.versions).map(Number)) : 0;
-      $('crumb').innerHTML = `<b>${esc(doc.meta.name)}</b><span class="pill">${doc.meta.fidelity}</span><span class="ver">v0.1.${v}${dirty.machine ? ' · 수정됨' : ''}</span>`; }
+      const inF = ED.factory.doc.machines.some(x => x.ref.startsWith(`local:${doc.meta.id}@`));
+      $('crumb').innerHTML = `${inF ? '<button class="btn" data-back="factory" title="이 설비가 놓인 Factory Builder로 돌아갑니다" style="padding:3px 9px;font-size:11.5px;margin-right:6px">← 공장으로</button>' : ''}<b>${esc(doc.meta.name)}</b><span class="pill">${doc.meta.fidelity}</span><span class="ver">v0.1.${v}${dirty.machine ? ' · 수정됨' : ''}</span>`; }
   }
+  $('crumb').addEventListener('click', e => { if (e.target.closest('[data-back]') && tab === 'machine') switchTab('factory'); });
   function drawBar() {
     const doc = ed().doc;
+    for (const i of ['sW', 'sD', 'sH']) $(i).step = tab === 'factory' ? '0.5' : '50'; // 공장 0.5 m (그리드), 설비 50 mm
     if (tab === 'factory') { const r = slabRect(doc); for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = false; $('sizeLab').textContent = '공장 크기'; $('sW').value = (r.x1 - r.x0) / 1000; $('sD').value = (r.y1 - r.y0) / 1000; $('sH').hidden = $('sHx').hidden = true; $('cellSeg').hidden = true; $('cellFit').hidden = true; $('sizeUnit').textContent = 'm'; $('units').textContent = 'm · deg · Z-up · 스냅 500 mm · 원점 = 왼쪽 아래(입고)'; }
     else { const fx = !!doc.meta.cellFixed; $('sizeLab').textContent = '작업 칸'; for (const i of ['sW', 'sD', 'sH']) $(i).readOnly = !fx; [$('sW').value, $('sD').value, $('sH').value] = fx ? doc.meta.bbox : contentSize() || doc.meta.bbox; document.querySelectorAll('#cellSeg button').forEach(b => b.classList.toggle('on', b.dataset.c !== 'factory' && (b.dataset.c === 'fixed') === fx)); $('sH').hidden = $('sHx').hidden = false; $('cellSeg').hidden = false; $('cellFit').hidden = !fx; $('sizeUnit').textContent = 'mm'; $('units').textContent = 'mm · deg · Z-up · 스냅 50 mm (Alt 5 mm)'; }
     $('bUndo').disabled = !ed().canUndo || mode === 'run'; $('bRedo').disabled = !ed().canRedo || mode === 'run';
@@ -1545,7 +1560,7 @@
     tab = t; LS.set(KEY.tab, t); originChip(); sel = null; multi = new Set(); if (!$('helpBox').hidden) setTimeout(drawHelp, 0); document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     for (const v of objs.values()) root.remove(v.obj); objs = new Map(); floorKey = '';
     $('mode').hidden = t !== 'machine'; $('bottom').hidden = true; $('bSave').textContent = t === 'machine' ? '설비 카드 저장' : '저장';
-    $('search').value = ''; drawPalette(); refresh(); updateHint(); drawLog(); setTimeout(() => { stage.resize(); fitAll(); }, 0);
+    $('search').value = ''; $('chkList').hidden = true; markMove(); drawPalette(); refresh(); updateHint(); drawLog(); setTimeout(() => { stage.resize(); fitAll(); }, 0);
   }
 
   /* ------------------------------------------------------------------ labels (projected HTML) */
