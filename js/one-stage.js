@@ -34,7 +34,7 @@
   };
 
   function create(canvas, opt = {}) {
-    const BG = new T.Color(opt.bg || PAL.bg);
+    const BG = new T.Color(opt.bg || PAL.bg), BG0 = BG.clone();
     const renderer = new T.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.outputEncoding = T.sRGBEncoding;
@@ -268,7 +268,11 @@
       if (ghostT > 0.5) camera.layers.disable(0); else camera.layers.enable(0);
       aoPass.enabled = realOn && ghostT < 0.5;
       if (ghostT > 0) camera.layers.enable(GHOST_LAYER); else camera.layers.disable(GHOST_LAYER);
+      // the realistic look has a bright concrete floor: the pale X-ray lines vanish on it, so X-ray goes back to the dark floor
+      if (realFloor) { const dark = ghostT > 0.5; if (dark !== xrDark) { xrDark = dark; realFloor.visible = !dark; floorMesh.visible = dark;
+        BG.copy(dark ? BG0 : REAL_BG); renderer.setClearColor(BG, 1); fu.uBg.value.copy(BG); } }
     };
+    let xrDark = false;
 
     /* ---- amber ring on the floor (blooms) */
     const ring = (r = 1) => {
