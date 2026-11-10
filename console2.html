@@ -461,7 +461,7 @@ main{display:block;position:absolute;inset:0}
     GLB = t.glb; TIMELINE = t.timeline; // ?glb= needs an absolute URL
     URL_RV = new URL('realvirtual/?mode=viewer&glb=' + encodeURIComponent(GLB), location.href).href;
     $('#rvLink').href = URL_RV; $('#rvLink').textContent = '스테이션 뷰어';
-    ROOT = null; TL = null; lastF = -1; lastRes = null; viewer = null;
+    ROOT = null; TL = null; lastF = -1; lastRes = null; viewer = null; VP.on = false;
   }
 
   /* ---------- realvirtual skin ----------
@@ -655,6 +655,7 @@ main{display:block;position:absolute;inset:0}
   function currentFrame() {
     if (!viewer || !viewer.playback) { viewer = findViewer(); tuneLights(viewer); }
     if (viewer && viewer.playback) return viewer.playback.frame;
+    if (VP.on) return Math.floor(VP.frame);
     try {
       const t = frame.contentDocument.querySelector('[data-testid="sim-clock"]').textContent.split(':').map(Number);
       const sec = t.reduce((a, v) => a * 60 + v, 0);
@@ -717,7 +718,8 @@ main{display:block;position:absolute;inset:0}
       $('#ngNote').textContent = notes.length ? 'NOK 원인 (시뮬레이션): ' + notes.join(' · ') : '';
     }
   }
-  setInterval(() => { if (TL || ROOT) render(currentFrame()); panelTick(); }, 100);
+  let vpLast = performance.now();
+  setInterval(() => { const now = performance.now(); if (VP.on) VP.tick(Math.min(0.5, (now - vpLast) / 1000)); vpLast = now; if (TL || ROOT) render(currentFrame()); panelTick(); }, 100);
   // objects a recording parks out of sight (moved under the floor while 'hidden') are never drawn, in any save (older ones parked them
   // 50 m down) and from any camera: a mesh whose whole bounding sphere is below the floor is switched off until it comes back up
   setInterval(() => { try { if (!viewer || !viewer.scene) return; const V = new viewer.camera.position.constructor();
@@ -731,8 +733,16 @@ main{display:block;position:absolute;inset:0}
      realvirtual's whole fixed loop with our own pause reason; speed scales the playback's frame advance. */
   const REC_SPEED = 4, SIM_BASE = 2.5;   // recorded at SIM 4×; the panel's ×1 plays it at 2.5×
   let rate = SIM_BASE / REC_SPEED;
+  /* a 3D file without a recorded drive playback (the example line, exported as layout only): the line's recorded timeline
+     (cards, states, OEE, alarms, tags) still plays on a clock of its own, so the panels run; the 3D stays as laid out.
+     Same controls as a recording: ▶ / ❚❚, seek, steps, speed (×1 = 25 × real time). TC-001 #166~170. */
+  const VP = { on: false, frame: 0, isPlaying: false, get totalFrames() { return FRAMES(); }, play() { this.isPlaying = true; },
+    seekToPercent(x) { this.frame = Math.max(0, Math.min(1, x)) * (FRAMES() - 1); },
+    tick(dt) { if (!this.isPlaying || (viewer && viewer.isSimulationPaused)) return; const spf = (ROOT && ROOT.simPerFrame) || (TL && TL.simPerFrame) || 0.16;
+      this.frame = (this.frame + dt * rate * REC_SPEED * 10 / spf) % FRAMES(); } };   // ×10: nothing moves in 3D, so one line cycle (≈ 2.8 h) plays in about 7 min at ×1
   function playback() {
     if (!viewer || !viewer.playback) { viewer = findViewer(); tuneLights(viewer); }
+    if (viewer && !viewer.playback && ROOT) { if (!VP.on) { VP.on = true; VP.frame = 0; VP.isPlaying = true; } return VP; }
     const p = viewer && viewer.playback;
     if (p && !p.__oneRate) { const up = p.update.bind(p); p.update = dt => up(dt * rate); p.__oneRate = true; }
     return p;
