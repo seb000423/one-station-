@@ -137,6 +137,13 @@
   const links = [];
   const VIA = { conveyor: '컨베이어', amr: 'AMR', forklift: '지게차', worker: '작업자' };
   const movers = items.filter(it => it.path === 'movers'), usedMover = new Set();
+  /* a cell with its own program feeds the line (TC-001 #158): a flow drawn from it (예시: 1 조립 → 2 도포) gets a conveyor,
+     and every part the cell finishes (laser-marked, or each round) goes onto it at the cell's outlet while the belt has room; the next machine takes its parts from that
+     conveyor instead of a raw-material pallet. */
+  const cellLinks = [];
+  for (const f of flows) { const fid = f.from.split('.')[0]; if (!progIds.has(fid)) continue; const c = cells.find(x => x.id === fid), b = station(f.to.split('.')[0]), P = SC.instancePorts(objs.get(fid).it);
+    if (!c || !b || !P) continue; const mc = machines.find(x => x.it.id === fid); const k = { f, from: { P, code: mc?.code || 'CELL' }, to: b, via: 'conveyor', cell: c, q: [] };
+    buildConveyor(k); b.cellIn = k; c.out = k; c.sent = 0; cellLinks.push(k); }
   for (const f of flows) {
     const a = station(f.from.split('.')[0]), b = station(f.to.split('.')[0]); if (!a || !b || a === b) continue;
     const gap = dist(a.P.outlet, b.P.inlet); let via = f.via || 'auto'; if (via === 'auto') via = gap <= 3000 ? 'conveyor' : 'amr';
@@ -144,7 +151,7 @@
     if (gap < 150) { k.kind = 'direct'; continue; }
     if (via === 'conveyor') buildConveyor(k); else buildCarrier(k);
   }
-  for (const s of st.values()) { s.src = !s.ins.length; s.sink = !s.outs.length;
+  for (const s of st.values()) { s.src = !s.ins.length && !s.cellIn; s.sink = !s.outs.length;
     if (s.src) { const P = s.P, at = s.kind === 'store' ? [P.outlet[0] + P.dir[0] * 900, P.outlet[1] + P.dir[1] * 900, 0] : [P.inlet[0] - P.dir[0] * 1100, P.inlet[1] - P.dir[1] * 1100, 0]; s.raw = pallet(at, s.it.item.transform.rotation[2] || 0, true); }
     if (s.sink) { const P = s.P, at = s.kind === 'store' ? [P.inlet[0] - P.dir[0] * 900, P.inlet[1] - P.dir[1] * 900, 0] : [P.outlet[0] + P.dir[0] * 1100, P.outlet[1] + P.dir[1] * 1100, 0]; s.fin = pallet(at, s.it.item.transform.rotation[2] || 0, false); }
     if (s.kind === 'mach') { const P = s.P, sd = [-P.dir[1], P.dir[0]]; s.ngBin = { at: [P.outlet[0] - P.dir[0] * 300 + sd[0] * 900, P.outlet[1] - P.dir[1] * 300 + sd[1] * 900, 0], n: 0 };
@@ -188,6 +195,10 @@
   let simT = 0;
   function step(dt) {
     simT += dt; for (const c of cells) cellStep(c, dt);
+    // a cell's finished round: one part out at its outlet, along the conveyor to the next machine (queued at its inlet)
+    for (const k of cellLinks) { const c = k.cell; while (c.sent < (c.made || c.rounds) && (k.q.length + 1) * k.pitch < k.len) { c.sent++; const pt = newPart(k.pts[0]), n = k.q.length, u = Math.max(0, 1 - n * k.pitch / k.len); k.q.push(pt);
+        animate(pt, [k.pts[0], ...k.pts.slice(1, -1), along(k.pts, u)], Math.max(1, k.len * u / k.v), () => { pt.ready = true; }); }
+      const b = k.to; if (k.q.length && k.q[0].ready && !b.inQ && !b.inRes) { b.inQ = k.q.shift(); k.q.forEach((q, i) => { if (q.ready) { const u = Math.max(0, 1 - i * k.pitch / k.len); q.ready = false; animate(q, [q.p, along(k.pts, u)], 1.2, () => { q.ready = true; }); } }); } }
     for (const pt of parts) if (pt.anim) { const a = pt.anim; a.t += dt; setPos(pt, along(a.pts, a.t / a.d)); if (a.t >= a.d) { pt.anim = null; a.done && a.done(); } }
     for (const s of st.values()) {
       // sources pull the next part off the raw-material pallet
@@ -238,7 +249,7 @@
   const fmt = t => [t / 3600, t / 60 % 60, t % 60].map(v => String(Math.floor(v)).padStart(2, '0')).join(':');
   document.querySelector('aside').innerHTML = `
     <section><h2>결과 <span id="kNote">${esc(fdoc.meta.name || '공장')}</span></h2>
-      <div class="kpis"><div class="kpi"><b id="kOk">0</b><span>완성 (양품)</span></div><div class="kpi"><b id="kUph">–</b><span>시간당 생산 (실측)</span></div>
+      <div class="kpis"><div class="kpi"><b id="kOk">0</b><span>완성 (양품)</span><small id="kEta" style="display:block;color:var(--mute);font-size:11px;margin-top:2px"></small></div><div class="kpi"><b id="kUph">–</b><span>시간당 생산 (실측)</span></div>
       <div class="kpi"><b id="kWip">0</b><span>재공 (라인 위 부품)</span></div><div class="kpi"><b id="kNg">0</b><span>불량</span></div></div></section>
     <section><h2>병목 <span>가동률 기준</span></h2><div class="bn-box"><b id="bnNow">–</b><span id="bnWhy">돌려 보면 가장 바쁜 설비가 나옵니다. 카드로 계산한 병목은 ${bn ? esc(`${bn.code} (${bn.uph.toFixed(1)}/h)`) : '없음'}입니다.</span></div></section>
     ${cells.length ? `<section><h2>셀 <span>설비 프로그램대로</span></h2><div id="cells" style="display:grid;gap:4px;font-size:12px"></div><p class="note">로봇·작업자가 Machine Builder에서 만든 프로그램과 동작 순서 그대로 움직이고, 제품은 공정마다 모양이 바뀝니다. 한 바퀴가 끝나면 워크를 다시 트레이에 놓고 다음 바퀴를 돕니다.</p></section>` : ''}
@@ -247,14 +258,19 @@
       <p class="note">${flows.length ? '부품은 원자재 파렛트에서 나와 각 설비의 경로를 따라 가공되고, 흐름에 정한 수단으로 다음 설비 입구까지 옮겨집니다. 불량은 설비 옆 빨간 통으로 갑니다. 원자재 파렛트가 비거나 완성품 파렛트가 차면 새 파렛트로 바뀝니다.' : '아직 설비끼리 공정 흐름이 연결되지 않았습니다. Factory Builder에서 설비의 주황 출구 화살표를 끌어 다음 설비에 놓으면 여기서 부품이 흐릅니다.'}</p>
       <div style="display:flex;gap:8px;margin-top:10px"><a class="btn" href="/build" style="text-decoration:none">ONE BUILDER에서 고치기</a></div></section>`;
   $('rows').innerHTML = mstations.map(s => `<div class="row" data-id="${s.id}"><span class="id"><i></i>${esc(s.code)}</span><span><span class="nm">${esc(s.name)}${s.assumed ? ' (사이클 가정 30 s)' : ''}</span><span class="util"><u style="background:var(--busy)"></u><u style="background:var(--blocked)"></u></span></span><span class="pc"></span></div>`).join('') || '<p class="note">흐름에 연결된 설비가 없습니다</p>';
-  $('links').innerHTML = links.map(k => `<div><b style="font-family:var(--mono)">${esc(k.from.code)} → ${esc(k.to.code)}</b> <span style="color:var(--mute)">${k.kind === 'direct' ? '바로 넘김' : VIA[k.via]}${k.ratio < 1 ? ` · ${Math.round(k.ratio * 100)}%` : ''}</span></div>`).join('') || '';
+  $('links').innerHTML = [...cellLinks, ...links].map(k => `<div><b style="font-family:var(--mono)">${esc(k.from.code)} → ${esc(k.to.code)}</b> <span style="color:var(--mute)">${k.kind === 'direct' ? '바로 넘김' : VIA[k.via]}${k.ratio < 1 ? ` · ${Math.round(k.ratio * 100)}%` : ''}</span></div>`).join('') || '';
   const rowEls = mstations.map(s => ({ s, el: $('rows').querySelector(`[data-id="${s.id}"]`) }));
   $('rows').addEventListener('click', e => { const r_ = e.target.closest('[data-id]'); if (!r_) return; const s = st.get(r_.dataset.id); stage.fit(new T.Box3().setFromObject(s.o).expandByScalar(1.5), 1.2); });
   let bnRing = bn0, bnId = bn ? bn.it.id : null;
+  // when the first finished part can be expected: the longest route from a source to a sink, machine cycles + conveyor time
+  // (+ one round of a feeding cell); shown under 완성 until the first part is in, so a slow line does not look stuck
+  const eta = (() => { const memo = new Map(); const walk = (s, seen) => { if (memo.has(s)) return memo.get(s); if (seen.has(s)) return 0; seen.add(s);
+      let best = 0; for (const k of s.outs) best = Math.max(best, (k.len ? k.len / (k.v || 300) : 30) + walk(k.to, seen)); const v = (s.kind === 'mach' ? s.ct : 0) + best; memo.set(s, v); return v; };
+    let e = 0; for (const s of st.values()) if (s.src || s.cellIn) e = Math.max(e, walk(s, new Set()) + (s.cellIn ? (s.cellIn.len / s.cellIn.v + 240) : 10)); return e ? Math.round(e) : 0; })();
   function drawPanel() { const made = stations.filter(s => s.sink).reduce((a, s) => a + s.made, 0), ng = mstations.reduce((a, s) => a + s.ng, 0), wip = parts.filter(p => !p.ng && !stations.some(s => (s.fin && s.fin.parts.includes(p)) || (s.raw && s.raw.parts.includes(p)))).length;
     if (cells.length) $('cells').innerHTML = cells.map(c => { const on = [...Object.entries(c.eng.ROB.run).filter(([, r]) => r.on), ...Object.entries(c.eng.WK.run).filter(([, w]) => w.on)].length;
       return `<div><b>${esc(c.name)}</b> <span style="color:var(--mute)">${c.rounds + 1}바퀴째 · 완성 ${c.made || 0}개 · ${on ? `움직이는 로봇·작업자 ${on}` : '대기'}</span></div>`; }).join('');
-    $('kOk').textContent = made; $('kNg').textContent = ng; $('kWip').textContent = wip; $('kUph').textContent = simT > 600 ? (made / simT * 3600).toFixed(1) : '–'; $('clock').textContent = fmt(simT);
+    $('kOk').textContent = made; $('kEta').textContent = made ? '' : eta ? `첫 완성 예상 ${fmt(eta)} 무렵${speed < 30 && eta > 1200 ? ' · ×60으로 빨리 보기' : ''}` : ''; $('kNg').textContent = ng; $('kWip').textContent = wip; $('kUph').textContent = simT > 600 ? (made / simT * 3600).toFixed(1) : '–'; $('clock').textContent = fmt(simT);
     let top = null; for (const { s, el } of rowEls) { const T_ = s.busy + s.blocked + s.idle || 1, b = s.busy / T_, k = s.blocked / T_; const u = el.querySelectorAll('u'); u[0].style.width = b * 100 + '%'; u[1].style.width = k * 100 + '%';
       el.querySelector('.pc').textContent = Math.round(b * 100) + '%'; el.querySelector('i').style.background = `var(--${s.state === 'busy' ? 'busy' : s.state === 'blocked' ? 'blocked' : 'idle'})`; if (!top || b > top.b) top = { s, b }; }
     if (top && simT > 120) { $('bnNow').textContent = `${top.s.name} · 가동 ${Math.round(top.b * 100)}%`; $('bnWhy').textContent = `흐르는 동안 가장 오래 일한 설비입니다. 이 설비 앞에 부품이 쌓이고, 뒤 설비는 기다립니다.${bn ? ` 카드 기준 병목은 ${bn.code}입니다.` : ''}`;
