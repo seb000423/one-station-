@@ -537,7 +537,7 @@ main{display:block;position:absolute;inset:0}
     $('#saveList').innerHTML = (saves.length ? saves.map(s => {
       const m = s.summary || {}, f = m.layout && m.layout.factory, d = s.created ? new Date(s.created).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '';
       return card(s.id, s.name, [d, s.kind === 'factory' ? '팩토리 · ' + (m.cells ? '원스테이션 셀 ' + m.cells + ' · ' : '') + '객체 ' + m.objects : VARIANT_KO[m.variant] || m.variant, s.kind !== 'factory' && m.slots && '지그 ' + m.slots, m.cycleTotal && 'C/T ' + (m.cycleTotal / m.parts).toFixed(1) + 's', m.ok != null && 'OK ' + m.ok + '/NOK ' + m.ng, s.builtin ? '예시 공정' : '', f && f.width + '×' + f.depth + 'm'].filter(Boolean).join(' · '), s.builtin, s.note);
-    }).join('') : '<p class="empty">아직 저장본이 없습니다. ONE BUILDER에서 "저장 · ONE MONITOR로 보내기"로 저장하면 여기에 나타납니다.</p>');
+    }).join('') : '<p class="empty">서버에 올린 저장본이 아직 없습니다. 저장본마다 ✎(이름·설명 수정)와 ×(삭제) 버튼이 붙습니다. 위의 예시 공정은 기본 항목이라 고치거나 지울 수 없습니다. 지금 ONE BUILDER의 저장은 이 브라우저에만 남고, ONE MONITOR로 보내는 기능은 아직 없습니다.</p>');
     $('#saveList').querySelectorAll('[data-id]').forEach(b => b.addEventListener('click', () => choose(b.dataset.id)));
     $('#saveList').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); delSave(b.dataset.del); }));
     $('#saveList').querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); const s = saves.find(x => x.id === b.dataset.edit);
