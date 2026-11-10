@@ -88,7 +88,7 @@
     function setDeg(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); if (!rig) return; r.deg = deg.slice(); o.userData.deg = r.deg; o.userData.prog = true; L.rigSet(rig, r.deg); }
     function tcpOf(id) { const o = robObj(id), rig = rigFor(id); if (!rig) return null; return fromS(L.rigTcp(rig, o)).map(Math.round); }
     const VJ = 150; // joint speed deg/s at 100 %
-    function startProg(id, why, from = 0) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.line = Math.max(0, Math.min(from, p.lines.length - 1)) - 1; r.t = 0; r.seg = null; r.pause = false; r.hits = new Set(); log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
+    function startProg(id, why, from = 0) { const p = progOf(id), r = robState(id); if (!p || !p.lines.length || !r) return false; r.on = true; r.manual = /^(티칭 패널|한 줄씩)/.test(why || ''); r.line = Math.max(0, Math.min(from, p.lines.length - 1)) - 1; r.t = 0; r.seg = null; r.pause = false; r.hits = new Set(); log(`${nodeCode(ED.machine.doc.nodes.find(n => n.id === id))} 프로그램 시작${why ? ` · ${why}` : ''}`); drawPend(true); return true; }
     function stopProg(id) { const r = robState(id); if (r) { r.on = false; r.seg = null; r.pause = false; } drawPend(true); }
     function fkStored(id, deg) { const o = robObj(id), rig = rigFor(id), r = robState(id); L.rigSet(rig, deg); const t = fromS(L.rigTcp(rig, o)); L.rigSet(rig, r.deg); return t; }
     /* 충돌 검사: the arm's centre line, joint to joint and the flange to the tool tip, against every other part of the cell
@@ -131,7 +131,7 @@
           else if (r.grip) { const w = RUN.works[r.grip]; if (w) { delete w.held; w.z = landZ(w.p, w.z, r.grip, n.id); seatAt(w); } log(`${P} 그리퍼 열림 · 워크 놓음`); r.grip = null; }
           r.seg = { kind: 'D', t: 0, dur: 0.3 }; }
         else if (l.op === 'ARC') { r.arc = !!l.on; log(`${P} 아크 ${l.on ? '켬 · 용접 시작' : '끔 · 용접 끝'}`); r.seg = { kind: 'D', t: 0, dur: 0.2 }; }
-        else if (l.op === 'WAIT') r.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
+        else if (l.op === 'WAIT') r.seg = r.manual ? { kind: 'D', t: 0, dur: 0 } : { kind: 'W', tag: l.tag, value: l.value, t: 0 }; // a run from the teach panel skips the auto run's signal waits
         else if (l.op === 'SET') { tags[l.tag] = l.value; r.seg = { kind: 'D', t: 0, dur: 0 }; }
         else if (l.op === 'DELAY') r.seg = { kind: 'D', t: 0, dur: l.s || 0 };
         drawPend(true); }
@@ -169,7 +169,7 @@
         if (`${P}_PRESENT` in tags) tags[`${P}_PRESENT`] = present; } }
     function stepWorkers(dt) { const tags = RUN.tags; stepConveyRails(dt);
       for (const n of workerNodes()) { const P = nodeCode(n), w = wkState(n), p = progOf(n.id), o = objs.get(n.id)?.obj; if (!o) continue;
-        const st = !!tags[`${P}_START`]; if (st && !w.prev && p && p.lines.length && !w.on) { w.on = true; w.line = -1; w.seg = null; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; log(`${P} 작업 시작 · ${P}_START`); }
+        const st = !!tags[`${P}_START`]; if (st && !w.prev && p && p.lines.length && !w.on) { w.on = true; w.manual = false; w.line = -1; w.seg = null; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = false; log(`${P} 작업 시작 · ${P}_START`); }
         if (!st && w.prev && !w.on && `${P}_DONE` in tags) tags[`${P}_DONE`] = false; w.prev = st;
         if (w.on && p) { let budget = dt; for (let g = 0; g < 8 && budget > 0 && w.on; g++) budget = wkStep(n, P, w, p, budget, tags); }
         if (`${P}_BUSY` in tags) tags[`${P}_BUSY`] = w.on;
@@ -182,7 +182,7 @@
       } }
     function wkStep(n, P, w, p, dt, tags) {
       if (!w.seg) { w.line++; const l = p.lines[w.line];
-        if (!l) { w.on = false; w.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 작업 끝 · DONE`); return 0; }
+        if (!l) { w.on = false; w.manual = false; w.line = -1; if (`${P}_DONE` in tags) tags[`${P}_DONE`] = true; log(`${P} 작업 끝 · DONE`); return 0; }
         const pt = l.point && p.points.find(q => q.id === l.point), to = pt && (pt.tcp || [0, 0, 0]);
         if (l.op === 'MOVJ') { const d = Math.hypot(to[0] - w.pos[0], to[1] - w.pos[1]), head = d > 5 ? Math.atan2(to[1] - w.pos[1], to[0] - w.pos[0]) * 180 / Math.PI : w.yaw, turn = angTo(w.yaw, head);
           w.seg = { kind: 'walk', from: w.pos.slice(), to: [to[0], to[1]], y0: w.yaw, turn, tTurn: Math.abs(turn) / 240, t: 0, dur: Math.abs(turn) / 240 + d / (WALK * (l.speed || 50) / 50) }; }
@@ -195,7 +195,7 @@
             w.carry = best; w.gdz = RUN.works[best].z - hand[2]; log(`${P} 워크 집음`); }
           else if (w.carry) { const q = RUN.works[w.carry]; if (q) { delete q.held; q.z = landZ(q.p, Math.max(q.z, hand[2]), w.carry); seatAt(q); } log(`${P} 워크 놓음`); w.carry = null; }
           w.seg = { kind: 'back', k0: w.k, t: 0, dur: 0.6, wait: 0.25 }; }
-        else if (l.op === 'WAIT') w.seg = { kind: 'W', tag: l.tag, value: l.value, t: 0 };
+        else if (l.op === 'WAIT') w.seg = w.manual ? { kind: 'D', t: 0, dur: 0 } : { kind: 'W', tag: l.tag, value: l.value, t: 0 }; // a run from the teach panel does not wait for the auto run's signals
         else if (l.op === 'SET') { tags[l.tag] = l.value; w.seg = { kind: 'D', t: 0, dur: 0 }; }
         else if (l.op === 'DELAY') w.seg = { kind: 'D', t: 0, dur: l.s || 0 };
         else w.seg = { kind: 'D', t: 0, dur: 0 }; }

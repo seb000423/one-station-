@@ -900,9 +900,9 @@
   window.addEventListener('pointerup', stopHold); window.addEventListener('pointercancel', stopHold); window.addEventListener('blur', stopHold);
   const stateTxt = r => r.on ? (r.pause ? `⏸ ${r.line + 1}줄 끝 · ▷ 한 줄로 다음` : r.seg?.kind === 'W' ? `⏳ ${r.line + 1}줄: ${r.seg.tag} 신호 기다림 (자동 운전에서 켜짐 · 줄 번호를 눌러 다른 줄부터 실행)` : `▶ ${r.line + 1}줄 실행 중`) : r.grip ? '워크 쥠' : '대기';
   const linesFromPoints = p => p.points.map(q => ({ op: 'MOVJ', point: q.id, speed: 50 }));
-  function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = robotNodes(), show = mode === 'run' && rs.length > 0;
-    const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show; if (!show) { pathGrp.visible = false; if (ROB.pick) setPick(false); return; }
-    if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) ROB.sel = rs[0].id; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = limOf(rig);
+  function drawPend(light) { const box = $('pend'), col = $('pendb'); if (!box || !col) return; const rs = [...robotNodes(), ...workerNodes()], show = mode === 'run' && rs.length > 0;
+    const mn = document.querySelector('main'); if (mn.classList.contains('teach') !== show) { mn.classList.toggle('teach', show); setTimeout(stage.resize, 0); } col.hidden = !show; tcpBall.visible = show && !!ROB.sel && !!rigFor(ROB.sel); if (!show) { pathGrp.visible = false; if (ROB.pick) setPick(false); return; }
+    if (!ROB.sel || !rs.some(n => n.id === ROB.sel)) { ROB.sel = rs[0].id; tcpBall.visible = !!rigFor(ROB.sel); } if (!rigFor(ROB.sel)) { drawWorkPend(box, rs, light); return; } if (![10, 50, 200].includes(ROB.mm)) ROB.mm = 50; const id = ROB.sel, n = rs.find(x => x.id === id), r = robState(id), rig = rigFor(id), p = prog(id), t = tcpOf(id) || [0, 0, 0], lim = limOf(rig);
     placeTcpBall();
     if (light) { for (let i = 0; i < rig.length; i++) { const e = box.querySelector(`[data-jv="${i}"]`); if (e) e.textContent = `${(r.deg[i] || 0).toFixed(1)}${L.unitOf(rig, i)}`; const sl = box.querySelector(`[data-js="${i}"]`); if (sl && document.activeElement !== sl) sl.value = r.deg[i] || 0; const lm = lim[i]; if (e) e.classList.toggle('lim', !!lm && ((r.deg[i] || 0) <= lm[0] + 0.5 || (r.deg[i] || 0) >= lm[1] - 0.5)); }
       ['x', 'y', 'z'].forEach((k, i) => { const e = box.querySelector(`[data-tv="${i}"]`); if (e) e.textContent = t[i]; }); { const rv = box.querySelector('[data-rv]'), rsl = box.querySelector('[data-rs]'); if (rv) rv.textContent = Math.round(r.rail || 0); if (rsl && document.activeElement !== rsl) rsl.value = Math.round(r.rail || 0); } const ta = toolAngle(id); if (ta) for (const k of ['p', 'r']) { const e = box.querySelector(`[data-tl="${k}"]`); if (e) e.textContent = `${k === 'p' ? ta.tilt : ta.roll}°`; } const st = box.querySelector('#pState'); if (st) st.textContent = stateTxt(r);
@@ -969,6 +969,66 @@
       const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q, true); return; }
       const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 'speed' || f === 's') v = +v;
       l[f] = v; saveProg(q, ['speed', 's', 'point', 'on'].includes(f)); }; }
+  /* 작업자 티칭 패널 (TC-001 #144): a worker runs a program like a robot (js/one-run.js): 걷기 (MOVJ) walks to a point on the
+     floor, 손 뻗기 (MOVL) reaches the hand to it, 집기 / 놓기 (GRIP), 신호 대기 / 출력, 기다림. Points: ● 지금 자리 기록 (where the
+     worker stands, moved with the X·Y jog) or ◎ 3D에서 찍기 (floor = a walk point, an object = a reach point on its top).
+     ▶ 실행 from the panel skips 신호 대기 lines (they are for 자동 운전), so a saved cell's worker moves at once. */
+  const WOPK = { MOVJ: '걷기', MOVL: '손 뻗기', GRIP: '집기·놓기', WAIT: '신호 대기', SET: '신호 출력', DELAY: '기다림' };
+  const wkStateTxt = w => w.on ? (w.seg?.kind === 'W' ? `⏳ ${w.line + 1}줄: ${w.seg.tag} 신호 기다림` : `▶ ${w.line + 1}줄 실행 중`) : w.carry ? '워크 들고 있음' : '대기';
+  function wkStart(id, from) { const n = workerNodes().find(x => x.id === id), p = progOf(id); if (!n || !p || !p.lines.length) return false; const w = wkState(n);
+    w.on = true; w.manual = true; w.line = Math.max(0, Math.min(from || 0, p.lines.length - 1)) - 1; w.seg = null; log(`${nodeCode(n)} 작업 시작 · 티칭 패널${from ? ` · ${from + 1}줄부터` : ''} (신호 대기 줄은 건너뜀)`); return true; }
+  function wkRecord(name, at) { const id = ROB.sel, n = workerNodes().find(x => x.id === id); if (!n) return; const w = wkState(n), p = prog(id), pid = newPid(p);
+    const tcp = at ? at.map(Math.round) : [Math.round(w.pos[0]), Math.round(w.pos[1]), 0], reach = tcp[2] > 50;
+    p.points.push({ id: pid, ...(name ? { name } : {}), j: [], tcp }); const ln = putLines(id, p, [reach ? { op: 'MOVL', point: pid, speed: 300 } : { op: 'MOVJ', point: pid, speed: 50 }]); saveProg(p);
+    toast(`${pid} 기록 · ${tcp.join(', ')} mm · ${ln + 1}번째 줄에 ${reach ? '손 뻗기' : '걷기'} 추가`); }
+  function wkPickPoint(e) { const id = ROB.sel, o = objs.get(id)?.obj; setNdc(e); const me = new Set(); if (o) o.traverse(x => me.add(x));
+    const hits = ray.intersectObjects([...objs.values()].map(v => v.obj), true).filter(h => !me.has(h.object) && h.object.visible !== false && !h.object.isSprite); const h = hits[0];
+    if (h) { let n = h.object; while (n && !n.userData.node) n = n.parent; const bb = new T.Box3().setFromObject(n || h.object), sz = bb.getSize(new T.Vector3()), nm = n?.userData.node?.name || '';
+      const v = !e.altKey && Math.max(sz.x, sz.z) <= 0.8 ? new T.Vector3((bb.min.x + bb.max.x) / 2, bb.max.y, (bb.min.z + bb.max.z) / 2) : h.point.clone();
+      if (v.y > 0.05) { wkRecord(nm ? `${nm} 위` : '', fromS(v)); return; } }
+    plane.constant = 0; const p0 = new T.Vector3(); if (!ray.ray.intersectPlane(plane, p0)) return; const at = fromS(p0); at[2] = 0; wkRecord('바닥', at); }
+  function drawWorkPend(box, rs, light) { if (![100, 250, 500].includes(ROB.mm)) ROB.mm = 250; const id = ROB.sel, n = rs.find(x => x.id === id), w = wkState(n), p = prog(id), P = nodeCode(n);
+    if (light) { const st = box.querySelector('#pState'); if (st) st.textContent = wkStateTxt(w); const rb = box.querySelector('#pRun'); if (rb) { rb.textContent = w.on ? '■ 정지' : '▶ 실행'; rb.classList.toggle('pri', w.on); }
+      const pv = box.querySelector('[data-wpos]'); if (pv) pv.textContent = `${Math.round(w.pos[0])}, ${Math.round(w.pos[1])}`; box.querySelectorAll('.pline').forEach((el, i) => el.classList.toggle('on', w.on && w.line === i)); return; }
+    const io = ED.machine.doc.io, tagsOut = io.filter(x => x.dir === 'out'), pSel = cur => `<select data-f="point">${p.points.map(q => `<option value="${q.id}"${q.id === cur ? ' selected' : ''}>${q.id}${q.name ? ' ' + esc(q.name) : ''}</option>`).join('')}</select>`;
+    const line = (l, i) => { let body = '';
+      if (l.op === 'MOVJ' || l.op === 'MOVL') body = pSel(l.point);
+      else if (l.op === 'GRIP') body = `<select data-f="on"><option value="true"${l.on ? ' selected' : ''}>집기</option><option value="false"${!l.on ? ' selected' : ''}>놓기</option></select>`;
+      else if (l.op === 'WAIT' || l.op === 'SET') { const tg = io.find(x => x.tag === l.tag); body = `${tagSel(l.tag, l.op === 'SET')}${valSel(tg, l.value, l.op === 'SET' ? 'set' : 'wait')}`; }
+      else if (l.op === 'DELAY') body = `<input data-f="s" type="number" min="0" step="0.1" value="${l.s ?? 1}"> s`;
+      return `<div class="pline${w.on && w.line === i ? ' on' : ''}${curLine(id) === i ? ' sel' : ''}" data-li="${i}"><b data-lsel="${i}" title="이 줄 선택 · 새 줄은 이 줄 다음에 · ▶ 실행은 이 줄부터">${i + 1}</b><span class="op">${WOPK[l.op] || l.op}</span>${body}<span class="sp"></span><button data-px="up" title="위로">↑</button><button data-px="del" title="지우기">×</button></div>`; };
+    const xy = (k, i) => `<div class="jrow"><span>${k}</span><button data-wxy="${i}:-1">−</button><b class="tv">${Math.round(w.pos[i])}</b><button data-wxy="${i}:1">+</button><small>mm</small></div>`;
+    box.innerHTML = `<div class="bhead"><h3>티칭 패널</h3><select id="pRobot">${rs.map(x => `<option value="${x.id}"${x.id === id ? ' selected' : ''}>${esc(nodeCode(x))} ${esc(x.name)}</option>`).join('')}</select><small id="pState">${wkStateTxt(w)}</small>
+        <div class="pbtns"><button class="btn pri" id="pRec" title="작업자가 지금 서 있는 자리를 걷기 점으로 기록">● 지금 자리 기록</button><button class="btn${ROB.pick ? ' pri' : ''}" id="pPick" title="3D에서 바닥을 누르면 걷기 점, 물체를 누르면 그 위로 손 뻗는 점이 기록됩니다 · Esc로 끝">◎ 3D에서 찍기</button><button class="btn${w.on ? ' pri' : ''}" id="pRun" title="프로그램 실행 (선택한 줄부터) · 신호 대기 줄은 건너뜁니다 · 자동 운전에서는 ${P}_START 신호로 시작">${w.on ? '■ 정지' : '▶ 실행'}</button><button class="btn" id="pHome" title="작업을 멈추고 처음 서 있던 자리로">⌂ 처음 자리</button></div></div>
+      <div class="pbody">
+        <div class="pjog"><h5>서 있는 자리 <select id="pStepM">${[100, 250, 500].map(v => `<option${ROB.mm === v ? ' selected' : ''}>${v}</option>`).join('')}</select> mm <em>설비 원점 기준</em></h5>${['X', 'Y'].map(xy).join('')}
+          <p class="tcp">작업자 프로그램: 걷기 = 그 점까지 걸어감 · 손 뻗기 = 그 점으로 손을 뻗음 (1 m 안) · 집기 = 손 가까이(450 mm)의 워크를 듦 · 놓기 = 손 아래 면에 내려놓음. 자리를 옮기고 ● 지금 자리 기록, 또는 ◎ 3D에서 찍기로 점을 만드세요.</p></div>
+        <div class="pprog">
+          <h5>점 <em>${p.points.length}</em></h5>
+          <div class="ppts">${p.points.map(q => `<div class="ppt" data-pt="${q.id}"><b>${q.id}</b><input data-f="pname" value="${esc(q.name || '')}" placeholder="이름"><small>${(q.tcp || []).join(', ')}</small><button data-pa="go" title="이 자리로 (손 뻗는 점이면 그 앞에 섬)">↷</button><button data-pa="del" title="지우기">×</button></div>`).join('') || '<p class="why">● 지금 자리 기록이나 ◎ 3D에서 찍기로 점을 만드세요</p>'}</div>
+          <h5>프로그램 <em>${p.lines.length}줄 · 끝나면 ${esc(P)}_DONE 자동 켜짐</em></h5>
+          <div class="padd"><button data-wadd="MOVJ">걷기</button><button data-wadd="MOVL">손 뻗기</button><button data-wadd="GRIP1">집기</button><button data-wadd="GRIP0">놓기</button><button data-wadd="WAIT">신호 대기</button><button data-wadd="SET">신호 출력</button><button data-wadd="DELAY">기다림</button></div>
+          <div class="plines">${p.lines.map(line).join('') || '<p class="why">점을 만든 뒤 줄을 더하고 ▶ 실행을 누르세요</p>'}</div></div></div>`;
+    drawPath();
+    box.querySelector('#pRobot').onchange = e => { ROB.sel = e.target.value; if (ROB.pick) setPick(false); tcpBall.visible = !!rigFor(ROB.sel); drawPend(); };
+    box.querySelector('#pStepM').onchange = e => { ROB.mm = +e.target.value; };
+    box.querySelector('#pRec').onclick = () => wkRecord(''); box.querySelector('#pPick').onclick = () => setPick(!ROB.pick);
+    box.querySelector('#pRun').onclick = () => { if (w.on) { w.on = false; w.seg = null; w.manual = false; drawPend(true); return; } if (!wkStart(id, curLine(id) || 0)) toast('점을 만들고 줄을 더해 주세요', true); drawPend(true); };
+    box.querySelector('#pHome').onclick = () => { w.on = false; w.seg = null; w.manual = false; w.k = 0; w.tgt = null; w.pos = [n.transform.position[0], n.transform.position[1]]; w.yaw = n.transform.rotation[2] || 0; drawPend(); };
+    box.onpointerdown = box.oninput = null;
+    box.onclick = e => { const ls = e.target.closest('[data-lsel]'); if (ls) { const i = +ls.dataset.lsel; (ROB.cur || (ROB.cur = {}))[id] = curLine(id) === i ? null : i; drawPend(); return; }
+      const xb = e.target.closest('[data-wxy]'); if (xb) { if (w.on) { toast('실행 중에는 옮길 수 없습니다', true); return; } const [a, d] = xb.dataset.wxy.split(':'); w.pos[+a] += +d * (ROB.mm || 250); drawPend(); return; }
+      const ad = e.target.closest('[data-wadd]'); if (ad) { const q = prog(id), op = ad.dataset.wadd, last = q.points[q.points.length - 1]?.id;
+        if ((op === 'MOVJ' || op === 'MOVL') && !last) { toast('먼저 점을 만드세요', true); return; } if (op === 'WAIT' && !io.length || op === 'SET' && !tagsOut.length) { toast('신호가 없습니다', true); return; }
+        putLines(id, q, [op === 'MOVJ' ? { op, point: last, speed: 50 } : op === 'MOVL' ? { op, point: last, speed: 300 } : op === 'GRIP1' ? { op: 'GRIP', on: true } : op === 'GRIP0' ? { op: 'GRIP', on: false } : op === 'WAIT' ? { op, tag: io[0].tag, value: true } : op === 'SET' ? { op, tag: tagsOut[0].tag, value: true } : { op, s: 1 }]); saveProg(q); return; }
+      const pa = e.target.closest('[data-pa]'); if (pa) { const q = prog(id), pid = pa.closest('[data-pt]').dataset.pt, k = q.points.findIndex(z => z.id === pid), pt = q.points[k];
+        if (pa.dataset.pa === 'go') { if (w.on) return; const t = pt.tcp || [0, 0, 0]; if (t[2] > 50) { const f = fwdOf(w), d = Math.hypot(t[0] - w.pos[0], t[1] - w.pos[1]) || 1, u = [(t[0] - w.pos[0]) / d, (t[1] - w.pos[1]) / d]; w.pos = [t[0] - u[0] * 500, t[1] - u[1] * 500]; w.yaw = Math.atan2(u[1], u[0]) * 180 / Math.PI; } else w.pos = [t[0], t[1]]; drawPend(); }
+        else { q.points.splice(k, 1); q.lines = q.lines.filter(l => l.point !== pid); saveProg(q); } return; }
+      const px = e.target.closest('[data-px]'); if (px) { const q = prog(id), i = +px.closest('[data-li]').dataset.li; if (px.dataset.px === 'del') { q.lines.splice(i, 1); const c = curLine(id); if (c != null && c >= i) ROB.cur[id] = c > i ? c - 1 : null; } else if (i > 0) { const [l] = q.lines.splice(i, 1); q.lines.splice(i - 1, 0, l); } saveProg(q); } };
+    box.onchange = e => { const f = e.target.dataset.f; if (!f) return; const q = prog(id);
+      const pt = e.target.closest('[data-pt]'); if (pt) { const z = q.points.find(x => x.id === pt.dataset.pt); if (f === 'pname') z.name = e.target.value.trim(); saveProg(q, true); return; }
+      const li = e.target.closest('[data-li]'); if (!li) return; const l = q.lines[+li.dataset.li]; let v = e.target.value; if (f === 'value' || f === 'on') v = v === 'true' ? true : v === 'false' ? false : +v; else if (f === 's') v = +v;
+      l[f] = v; saveProg(q, ['s', 'point', 'on'].includes(f)); }; }
   // TELEOP: the TCP ball of the selected robot; dragging it moves the TCP on the plane at its height (Shift: a vertical plane facing the camera)
   const tcpBall = new T.Mesh(new T.SphereGeometry(0.045, 20, 14), new T.MeshBasicMaterial({ color: 0xff9a1f, transparent: true, opacity: 0.6, depthTest: false, depthWrite: false })); tcpBall.visible = false; tcpBall.renderOrder = 20; ov.add(tcpBall);
   { const dot = new T.Mesh(new T.SphereGeometry(0.009, 12, 8), new T.MeshBasicMaterial({ color: 0xffae42, depthTest: false })); dot.renderOrder = 22; dot.raycast = () => {}; tcpBall.add(dot); } // the exact TCP
@@ -988,7 +1048,7 @@
     for (const c of pathGrp.children) if (c.userData.pt) tmpBox.expandByPoint(c.getWorldPosition(new T.Vector3()));
     if (tmpBox.isEmpty()) tmpBox.setFromObject(o); stage.fit(tmpBox.clone().expandByScalar(0.35), 1.0); if (!p || !p.points.length) toast('이 로봇에는 아직 기록한 점이 없습니다 · 자세를 잡고 ● 점 기록을 누르세요'); }
   function drawPath() { for (const c of [...pathGrp.children]) { pathGrp.remove(c); if (c.geometry && c.geometry !== beadGeo) c.geometry.dispose(); for (const k of c.children) if (k.geometry && k.geometry !== dotGeo) k.geometry.dispose(); if (c.material?.map) { c.material.map.dispose(); c.material.dispose(); } }
-    pathGrp.visible = tcpBall.visible && !!ROB.sel; if (!pathGrp.visible) return; const id = ROB.sel, p = progOf(id); if (!p || !p.points.length) return;
+    pathGrp.visible = mode === 'run' && !!ROB.sel && (tcpBall.visible || !!workerNodes().find(w => w.id === ROB.sel)); if (!pathGrp.visible) return; const id = ROB.sel, p = progOf(id); if (!p || !p.points.length) return;
     const at = q => toS(q.tcp || fkStored(id, q.j)), pos = new Map(p.points.map(q => [q.id, at(q)]));
     for (const q of p.points) { const b = new T.Mesh(beadGeo, beadMat); b.position.copy(pos.get(q.id)); b.renderOrder = 20; b.userData.pt = q.id; pathGrp.add(b);
       const dot = new T.Mesh(dotGeo, dotMat); dot.renderOrder = 22; dot.raycast = () => {}; b.add(dot);
@@ -1000,7 +1060,7 @@
      the object. A small object (work, tray, jig … up to 800 mm) snaps to its top centre (the grip point); a larger one or Alt+click
      takes the exact surface point. Stays on until pressed again or Esc. */
   function setPick(on) { ROB.pick = !!on && mode === 'run'; const b = $('pPick'); if (b) b.classList.toggle('pri', ROB.pick); renderer.domElement.style.cursor = ROB.pick ? 'crosshair' : ''; if (ROB.pick) $('hint').textContent = '점 찍기 · 3D에서 물체를 누르면 손끝이 그 자리로 가고 점이 기록됩니다 (Esc: 끝)'; else updateHint(); }
-  function pickPoint(e) { const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; setNdc(e);
+  function pickPoint(e) { if (!rigFor(ROB.sel)) { wkPickPoint(e); return; } const id = ROB.sel, r = robState(id), rig = rigFor(id), o = robObj(id); if (!r) return; setNdc(e);
     const me = new Set(); o.traverse(x => me.add(x)); const hits = ray.intersectObjects([...objs.values()].map(v => v.obj), true).filter(h => !me.has(h.object) && h.object.visible !== false && !h.object.isSprite);
     let tgt = null, name = '', h = hits[0];
     if (h) { let n = h.object; while (n && !n.userData.node) n = n.parent; const node = n?.userData.node, bb = new T.Box3().setFromObject(n || h.object), sz = bb.getSize(new T.Vector3());
@@ -1619,7 +1679,7 @@
     for (const o of moving) if (!next.has(o)) L.poseModel(o, 0); moving = next; }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); placeTcpBall(); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) drawIo(); }
+    if (mode === 'run' && tab === 'machine') { stepAuto(dt); stepRun(dt); stepRobots(dt); stepWorkers(dt); placeTcpBall(); if ((RUN.frame = (RUN.frame || 0) + 1) % 6 === 0) { drawIo(); if (ROB.sel && !rigFor(ROB.sel)) drawPend(true); } }
     animateSelected(now); stage.render(); drawLabels(); drawPortLabels(); drawFlowLabels(); requestAnimationFrame(loop);
   }
 
